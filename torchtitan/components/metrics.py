@@ -17,12 +17,14 @@ from torchtitan.components.optimizer import OptimizersContainer
 from torchtitan.config import JobConfig
 from torchtitan.distributed import ParallelDims
 from torchtitan.tools import utils
-from torchtitan.tools.logging import logger
+from torchtitan.tools.logging import get_logger
 from torchtitan.tools.utils import Color, device_module, device_type
 
 if TYPE_CHECKING:
     from torchtitan.protocols import BaseModelArgs
 
+
+logger = get_logger(__name__)
 
 # named tuple for passing device memory stats for logging
 DeviceMemStats = namedtuple(

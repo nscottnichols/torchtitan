@@ -14,7 +14,9 @@ from typing import Generator, Optional
 import torch
 from torch._utils import _get_available_device_type, _get_device_module
 
-from torchtitan.tools.logging import logger
+from torchtitan.tools.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 def has_cuda_capability(major: int, minor: int) -> bool:

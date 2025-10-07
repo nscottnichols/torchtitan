@@ -6,16 +6,22 @@
 
 import logging
 import os
-import sys
+
+import ezpz
 
 
-logger = logging.getLogger()
+logger = ezpz.get_logger(__name__)
 
 
-def init_logger():
-    logger.setLevel(logging.INFO)
-    logger.handlers.clear()
-    ch = logging.StreamHandler(sys.stdout)
+def get_logger(name: str) -> logging.Logger:
+    return ezpz.get_logger(name)
+
+
+def init_logger(name: str | None = None):
+    level = logging.INFO if ezpz.get_rank() == 0 else logging.CRITICAL
+    logger = ezpz.get_logger(name or __name__)
+    logger.setLevel(level)
+    ch = logging.StreamHandler()
     ch.setLevel(logging.INFO)
     formatter = logging.Formatter(
         "[titan] %(asctime)s - %(name)s - %(levelname)s - %(message)s"
