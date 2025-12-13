@@ -23,10 +23,12 @@ from torch.distributed.checkpoint import (
     HuggingFaceStorageReader,
     HuggingFaceStorageWriter,
 )
-from torch.distributed.checkpoint._consolidate_hf_safetensors import (
-    consolidate_safetensors_files_on_every_rank,
-)
-from torch.distributed.checkpoint.staging import DefaultStager, StagingOptions
+try:
+    from torch.distributed.checkpoint.staging import DefaultStager, StagingOptions
+except:
+    from torch.distributed.checkpoint.staging import BlockingAsyncStager as DefaultStager
+    def StagingOptions(a, b, c, d):
+        return True
 from torch.distributed.checkpoint.state_dict import (
     get_model_state_dict,
     set_model_state_dict,
@@ -248,6 +250,9 @@ class CheckpointManager:
         self.initial_load_model_only = checkpoint_config.initial_load_model_only
         self.initial_load_in_hf = checkpoint_config.initial_load_in_hf
         self.initial_load_path = checkpoint_config.initial_load_path
+        self.initial_load_in_hf_quantized = (
+            checkpoint_config.initial_load_in_hf_quantized
+        )
         self.last_save_model_only = checkpoint_config.last_save_model_only
         self.last_save_in_hf = checkpoint_config.last_save_in_hf
         if self.last_save_in_hf:
@@ -344,7 +349,9 @@ class CheckpointManager:
             Future: The future object if the checkpoint is async, otherwise None.
         """
 
+
         ret: Future | None = None
+
 
         storage_writer: HuggingFaceStorageWriter | None = None
         checkpoint_save_id: str | None = None
@@ -353,6 +360,7 @@ class CheckpointManager:
                 self.sd_adapter is not None
             ), "trying to save checkpoint in HF safetensors format, but sd_adapter is not provided."
             state_dict = self.sd_adapter.to_hf(state_dict)
+
 
             fqn_to_index_mapping = self.sd_adapter.fqn_to_index_mapping
             if fqn_to_index_mapping:
@@ -373,8 +381,10 @@ class CheckpointManager:
                     enable_consolidation=True,
                 )
 
+
         else:
             checkpoint_save_id = checkpoint_id
+
 
         if async_mode == AsyncMode.ASYNC:
             ret = dcp.async_save(
@@ -399,7 +409,15 @@ class CheckpointManager:
                 checkpoint_id=checkpoint_save_id,
             )
 
+
         if to_hf and self.sd_adapter.fqn_to_index_mapping:
+            try:
+                from torch.distributed.checkpoint._consolidate_hf_safetensors import (
+                    consolidate_safetensors_files_on_every_rank,
+                )
+            except Exception as e:
+                raise e
+
             consolidate_safetensors_files_on_every_rank(
                 input_dir=os.path.join(checkpoint_id, "sharded"),
                 output_dir=checkpoint_id,
@@ -407,8 +425,10 @@ class CheckpointManager:
                 num_threads=5,
             )
 
+
         if enable_garbage_collection:
             GarbageCollection.collect("GC collection invoked by checkpointer.")
+
 
         return ret
 
@@ -417,6 +437,7 @@ class CheckpointManager:
         state_dict: dict[str, Any],
         checkpoint_id: str,
         from_hf: bool,
+        from_quantized: bool,
     ) -> None:
         """Load the checkpoint with dcp.
         Args:
@@ -431,10 +452,13 @@ class CheckpointManager:
                 self.sd_adapter is not None
             ), "trying to load checkpoint in HF safetensors format, but sd_adapter is not provided."
             hf_state_dict = self.sd_adapter.to_hf(state_dict)
+            hf_storage_reader = self.sd_adapter.get_hf_storage_reader(
+                checkpoint_id, from_quantized
+            )
 
             dcp.load(
                 hf_state_dict,
-                storage_reader=HuggingFaceStorageReader(path=checkpoint_id),
+                storage_reader=hf_storage_reader,
             )
 
             state_dict = self.sd_adapter.from_hf(hf_state_dict)
@@ -542,13 +566,21 @@ class CheckpointManager:
 
         model_only = False
         from_hf = False
+        from_quantized = False
         if not os.path.exists(self.folder):
             model_only = self.initial_load_model_only
             from_hf = self.initial_load_in_hf
+            from_quantized = self.initial_load_in_hf_quantized
             if from_hf:
                 assert (
                     model_only
                 ), "Only model can be loaded when loading from HF's safetensors checkpoint."
+
+            if from_quantized:
+                assert (
+                    from_hf
+                ), "Quantized checkpoint can only be loaded from HuggingFace format."
+
             if self.initial_load_path:
                 checkpoint_id = self.initial_load_path
                 if not os.path.isdir(checkpoint_id):
@@ -600,6 +632,7 @@ class CheckpointManager:
             states,
             checkpoint_id=checkpoint_id,
             from_hf=from_hf,
+            from_quantized=from_quantized,
         )
         GarbageCollection.collect("GC collection for checkpoint loading.")
         logger.info(
@@ -676,6 +709,7 @@ class CheckpointManager:
             checkpoint_id=checkpoint_id,
             # FT checkpoints are always DCP because FT checkpoint currently only save/load dataloader.
             from_hf=False,
+            from_quantized=False,
         )
         GarbageCollection.collect("GC collection for checkpoint loading.")
         logger.info(
