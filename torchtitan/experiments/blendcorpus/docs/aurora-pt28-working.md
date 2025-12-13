@@ -28,7 +28,7 @@ hfp="assets/hf/llama-2-7b-hf"  # hf assets path   (for saving)
 cfg="torchtitan/experiments/blendcorpus/train_configs/auroraGPT_7B.toml"
 ```
 
-## 📦 Download Repo and HF Assets
+## 📦 Clone Repo
 
 - ⬇️ Clone repository: [saforem2/torchtitan](https://github.com/saforem2/torchtitan)
 
@@ -43,14 +43,7 @@ cfg="torchtitan/experiments/blendcorpus/train_configs/auroraGPT_7B.toml"
     git checkout saforem2/blendcorpus
     ```
 
-- 📦 Download HF assets:
-
-  ```bash
-  python3 scripts/download_hf_assets.py --repo_id "${rn}" --assets tokenizer
-  ```
-
 ## 🐍 Setup Python and Install Dependencies
-
 
 1. Setup Python:
 
@@ -75,6 +68,12 @@ cfg="torchtitan/experiments/blendcorpus/train_configs/auroraGPT_7B.toml"
       ```
 
 ## 🚀 Launch Training
+
+- 📦 Download HF assets:
+
+  ```bash
+  python3 scripts/download_hf_assets.py --repo_id "${rn}" --assets tokenizer
+  ```
 
 - Launch:
 
