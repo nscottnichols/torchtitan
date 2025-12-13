@@ -24,7 +24,7 @@ alias uvi="uv pip install --no-cache --link-mode=copy"
 ```bash
 rn="meta-llama/llama-2-7b-hf"  # repository name  (for downloading)
 hfp="assets/hf/llama-2-7b-hf"  # hf assets path   (for saving)
-#                              #  job.config_file  (for training)
+#                              # job.config_file  (for training)
 cfg="torchtitan/experiments/blendcorpus/train_configs/auroraGPT_7B.toml"
 ```
 
