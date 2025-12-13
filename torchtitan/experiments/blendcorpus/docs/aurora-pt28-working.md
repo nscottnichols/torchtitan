@@ -56,7 +56,7 @@ cfg="torchtitan/experiments/blendcorpus/train_configs/auroraGPT_7B.toml"
    - [saforem2/ezpz](https://github.com/saforem2/ezpz):
 
       ```bash
-      uvi "git+https://github.com/saforem2/ezpz@distributed-metrics"
+      uvi "git+https://github.com/saforem2/ezpz"
       ```
 
    - [zhenghh04/blendcorpus](https://github.com/zhenghh04/blendcorpus):
