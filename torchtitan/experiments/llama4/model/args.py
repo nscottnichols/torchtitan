@@ -12,9 +12,18 @@ from torch import nn
 from torchtitan.config import JobConfig
 
 from torchtitan.models.moe import MoEArgs
+from torchtitan.models.utils import get_moe_model_nparams_and_flops
 from torchtitan.protocols import BaseModelArgs
 from torchtitan.tools.logging import logger
 from torchtitan.tools.utils import has_cuda_capability
+
+
+@dataclass
+class RoPEScalingArgs:
+    scaling_factor: float = 16.0
+    low_freq_factor: float = 1.0
+    high_freq_factor: float = 1.0
+    original_max_position_embeddings: int = 8192
 
 
 @dataclass
@@ -28,6 +37,7 @@ class TransformerModelArgs(BaseModelArgs):
     ffn_dim_multiplier: float | None = None
     norm_eps: float = 1e-5
     rope_theta: float = 10000
+    rope_scaling_args: RoPEScalingArgs | None = None
 
     max_seq_len: int = 1048576
     # If `True`, then each transformer block init uses its layer ID, and if
@@ -71,56 +81,11 @@ class TransformerModelArgs(BaseModelArgs):
                 "CP support for FlexAttention is still in progress."
             )
 
+        self.moe_args._debug_force_load_balance = (
+            job_config.training.debug_moe_force_load_balance
+        )
+
     def get_nparams_and_flops(
         self, model: nn.Module, seq_len: int
     ) -> tuple[int, float]:
-        nparams_embedding = 0
-        nparams_moe_router = 0
-        nparams_shared_experts = 0
-        nparams_experts = 0
-        nparams_dense = 0
-
-        for name, p in model.named_parameters():
-            if "embedding" in name:
-                nparams_embedding += p.numel()
-                nparams_dense += p.numel()
-            elif "moe.shared_experts" in name:
-                nparams_shared_experts += p.numel()
-            elif "moe.router" in name:
-                nparams_moe_router += p.numel()
-            elif "moe.experts" in name:
-                nparams_experts += p.numel()
-            else:
-                nparams_dense += p.numel()
-
-        nparams_sparse = nparams_moe_router + nparams_shared_experts + nparams_experts
-        nparams = nparams_dense + nparams_sparse
-        nparams_sparse_active = (
-            nparams_moe_router
-            + nparams_shared_experts
-            + nparams_experts * self.moe_args.top_k // self.moe_args.num_experts
-        )
-
-        logger.info(
-            f"Total parameter count: dense {nparams_dense:,}, "
-            f"sparse {nparams_sparse:,}, active {nparams_dense + nparams_sparse_active:,}"
-        )
-
-        l, h, q, t = (
-            self.n_layers,
-            self.n_heads,
-            self.dim // self.n_heads,
-            seq_len,
-        )
-        # Reasoning behind the factor of 12 for the self-attention part of the formula:
-        # 1. each self-attention has 2 matmul in the forward and 4 in the backward (6)
-        # 2. the flash attention does 1 more matmul recomputation in the backward
-        #    but recomputation should not be counted in calculating MFU           (+0)
-        # 3. each matmul performs 1 multiplication and 1 addition                 (*2)
-        # 4. we follow the convention and do not account for sparsity in causal attention
-        num_flops_per_token = (
-            6 * (nparams_dense - nparams_embedding + nparams_sparse_active)
-            + 12 * l * h * q * t
-        )
-
-        return nparams, num_flops_per_token
+        return get_moe_model_nparams_and_flops(self, model, seq_len)

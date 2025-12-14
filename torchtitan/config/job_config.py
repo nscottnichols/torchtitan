@@ -34,6 +34,20 @@ class Profiling:
     profile_freq: int = 10
     """How often to collect profile traces, in iterations"""
 
+    profiler_active: int = 1
+    """
+    The steps profiler is active for.
+
+    This is used to configure torch.profile.schedule.
+    """
+
+    profiler_warmup: int = 3
+    """
+    The number of warmup steps before the active step in each profiling cycle.
+
+    This is used to configure torch.profile.schedule.
+    """
+
     enable_memory_snapshot: bool = False
     """Whether to dump memory snapshot"""
 
@@ -238,6 +252,9 @@ class Training:
 
     deterministic: bool = False
     """Use deterministic algorithms wherever possible, may be slower"""
+
+    debug_moe_force_load_balance: bool = False
+    """If True, we force each experts to get the same amount of tokens via round-robin. This option is for debugging usage only."""
 
 
 @dataclass
@@ -450,6 +467,14 @@ class Checkpoint:
     non-tensors. The default value is False.
     """
 
+    initial_load_in_hf_quantized: bool = False
+    """
+    Enable loading of HuggingFace's safetensors format with quantized state dict keys. The option
+    is only used when `initial_load_path` and `initial_load_path_in_hf` is specified. This will load
+    checkpoints in HF's model definition and dequantize on model weights if necessary. To support
+    this parameter, the model need to define proper HuggingFaceStorageReader to perform dequantize.
+    """
+
     last_save_model_only: bool = True
     """
     When last_save_model_only=True, only the model will be saved at the end of training,
@@ -524,6 +549,14 @@ class Checkpoint:
     Could be implemented as a separate script, but this way shares more code.
     """
 
+    load_only: bool = False
+    """
+    In certain scenarios, you may only need to load checkpoints for verification or debugging
+    purposes, without saving any new checkpoints. For example, you might use seed checkpoints
+    to validate model correctness. Enabling this option allows checkpoints to be loaded
+    without saving any during the training.
+    """
+
 
 @dataclass
 class ActivationCheckpoint:
@@ -566,10 +599,11 @@ class Compile:
         default_factory=lambda: ["model", "loss"]
     )
     """Which components to compile"""
+    backend: str = "inductor"
 
 
 @dataclass
-class Float8:
+class Float8Linear:
     enable_fsdp_float8_all_gather: bool = False
     """Whether enable float8 all-gather in FSDP, recommended for tensorwise scaling"""
 
@@ -583,9 +617,8 @@ class Float8:
     """
     Comma-separated list of fully qualified names of modules to skip applying float8 training to.
     nn.Linear modules with any dim size not divisible by 16 are always skipped due to hardware requirements.
-    Example: --float8.filter_fqns "attention.wq,attention.wk,attention.wv,output"
+    Example: --quantize.linear.float8.filter_fqns "attention.wq,attention.wk,attention.wv,output"
     """
-
     emulate: bool = False
     """
     If True, emulation is used instead of hardware accelerated gemm. This is for test purpose only,
@@ -593,23 +626,34 @@ class Float8:
     Not compatible with torch.compile.
     """
 
-    moe_fqns_prototype: list[str] | str = field(default_factory=list)
+
+@dataclass
+class Float8GroupedMM:
+    fqns: list[str] | str = field(default_factory=list)
     """
-    Comma-separated list of fully qualified names of MoE modules to apply float8 rowwise training to.
+    *Prototype feature, performance optimization still in progress*
+    Comma-separated list of fully qualified names of MoE Layers to apply FP8 dynamic quantization on grouped GEMM operations.
     This is a prototype feature that requires the torchao nightly build.
-    Example: --float8.moe_fqns_prototype="experts"
+    Example: --quantize.grouped_mm.float8.fqns="experts"
     """
 
 
 @dataclass
-class MX:
+class MXLinear:
     mxfp8_dim1_cast_kernel_choice: Literal["triton", "cuda", "torch"] = "triton"
-    """Temp work around for inductor performance gap"""
+    """
+    Temp work around for inductor performance gap.
+
+    CUDA is recommended for best performance.
+
+    Example: --quantize.linear.mx.mxfp8_dim1_cast_kernel_choice="cuda"
+    """
 
     recipe_name: str = "mxfp8_cublas"
     """
     If specified, creates MX config from recipe name. See
     https://github.com/pytorch/ao/tree/main/torchao/prototype/mx_formats for more information.
+    Example: --quantize.linear.mx.recipe_name="mxfp8_cublas"
     """
 
     filter_fqns: list[str] = field(default_factory=lambda: ["output"])
@@ -617,15 +661,53 @@ class MX:
     Comma-separated list of fully qualified names of modules to skip applying mxfp8 training to.
     nn.Linear modules with any dim size not divisible by 16 are also always skipped due to hardware requirements.
     By default we always skip the output layer.
-    Example: --mx.filter_fqns "attention.wq,attention.wk,attention.wv,output"
+    Example: --quantize.linear.mx.filter_fqns="attention.wq,attention.wk,attention.wv,output"
     """
 
-    moe_fqns_prototype: list[str] | str = field(default_factory=list)
+
+@dataclass
+class MXGroupedMM:
+    recipe_name: Literal["mxfp8"] = "mxfp8"
     """
-    Comma-separated list of fully qualified names of MoE modules to apply mxfp8 training to.
+    Quantization recipe name for grouped GEMMs. Options: ["mxfp8"]
+
+    Example: --quantize.grouped_mm.mx.recipe_name="mxfp8"
+    """
+
+    fqns: list[str] | str = field(default_factory=list)
+    """
+    *Prototype feature, performance optimization still in progress*
+    Comma-separated list of fully qualified names of MoE modules to apply MXFP8 dynamic quantization on grouped GEMM operations.
     This is a prototype feature that requires the torchao nightly build.
-    Example: --mx.moe_fqns_prototype="experts"
+    Example: --quantize.grouped_mm.mx.fqns="experts"
     """
+
+
+@dataclass
+class QuantizedLinear:
+    float8: Float8Linear = field(default_factory=Float8Linear)
+    """FP8 training config for nn.Linear layers"""
+
+    mx: MXLinear = field(default_factory=MXLinear)
+    """MX training config for nn.Linear layers"""
+
+
+@dataclass
+class QuantizedGroupedMM:
+    float8: Float8GroupedMM = field(default_factory=Float8GroupedMM)
+    """FP8 training config for grouped GEMMs"""
+
+    mx: MXGroupedMM = field(default_factory=MXGroupedMM)
+    """MX training config for grouped GEMMs"""
+
+
+@dataclass
+class Quantize:
+    linear: QuantizedLinear = field(default_factory=QuantizedLinear)
+    """Quantized training config for nn.Linear layers"""
+
+    grouped_mm: QuantizedGroupedMM = field(default_factory=QuantizedGroupedMM)
+    """Quantized training config for grouped GEMMs"""
 
 
 @dataclass
@@ -772,8 +854,7 @@ class JobConfig:
         default_factory=ActivationCheckpoint
     )
     compile: Compile = field(default_factory=Compile)
-    float8: Float8 = field(default_factory=Float8)
-    mx: MX = field(default_factory=MX)
+    quantize: Quantize = field(default_factory=Quantize)
     comm: Comm = field(default_factory=Comm)
     memory_estimation: MemoryEstimation = field(default_factory=MemoryEstimation)
     fault_tolerance: FaultTolerance = field(default_factory=FaultTolerance)

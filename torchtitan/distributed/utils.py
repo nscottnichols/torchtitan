@@ -106,6 +106,14 @@ def set_determinism(
         # https://pytorch.org/docs/stable/generated/torch.use_deterministic_algorithms.html
         os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
 
+        # Ensure flex_attention is compiled without max-autotune. This is needed to ensure
+        # reproducibility, since the autotune results may not be deterministic.
+        from torch.nn.attention.flex_attention import flex_attention
+
+        from torchtitan.models.attention import FlexAttention
+
+        FlexAttention.flex_attn = torch.compile(flex_attention)
+
     if not world_mesh:
         if seed is not None:
             torch.manual_seed(seed)
@@ -449,9 +457,3 @@ def _clip_grad_norm_with_ep(
     torch.nn.utils.clip_grads_with_norm_(non_ep_params, max_norm, total_norm, foreach)
 
     return total_norm
-
-
-def _round_up(x: int, y: int) -> int:
-    """Round up x to the nearest multiple of y."""
-    x_ceil_div_y = (x + y - 1) // y
-    return x_ceil_div_y * y
