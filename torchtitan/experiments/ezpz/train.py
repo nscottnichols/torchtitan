@@ -15,6 +15,7 @@ import ezpz
 
 
 import torch
+import torch.distributed
 import torch.distributed.checkpoint.stateful
 from torch.distributed.elastic.multiprocessing.errors import record
 
@@ -50,6 +51,28 @@ from torchtitan.tools.profiling import (
 # except Exception:
 #     # [titan] 2026-02-05 15:06:48,624 - root - INFO - step: 10  loss:  4.0555  grad_norm:  1.8027  memory:  8.25GiB(12.89%)  tps: 96,544  tflops: 6.91  mfu: 2.32%
 #     pass
+
+def disable_fsdp_gradient_division(model: torch.nn.Module) -> None:
+    """
+    Disable FSDP's automatic gradient division for all FSDP modules.
+
+    Set gradient_divide_factor=1.0 to disable FSDP's automatic gradient division.
+    We handle gradient scaling ourselves in the training loop with global token count.
+
+    Args:
+        model: The model containing FSDP-wrapped modules
+    """
+    force_sum_reduction = False
+    if torch.distributed.is_available() and torch.distributed.is_initialized():
+        backend = torch.distributed.get_backend()
+        # backend = ezpz.get_backend()
+        if backend and backend.lower() != "nccl":
+            force_sum_reduction = True
+    for module in model.modules():
+        if isinstance(module, FSDPModule):
+            module.set_gradient_divide_factor(1.0)
+            if force_sum_reduction:
+                module.set_force_sum_reduction_for_comms(True)
 
 
 class Trainer(torch.distributed.checkpoint.stateful.Stateful):
@@ -270,6 +293,10 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
         else:
             # apply PT-D Tensor Parallel, activation checkpointing, torch.compile, Data Parallel
             model = self.train_spec.parallelize_fn(model, parallel_dims, job_config)
+            try:
+                model = disable_fsdp_gradient_division(model)
+            except Exception:
+                logger.warning("Unable to disable_fsdp_gradient_division")
 
             model.to_empty(device=init_device)
             with torch.no_grad():
