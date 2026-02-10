@@ -7,9 +7,7 @@
 # This file applies the PT-D parallelisms (except pipeline parallelism) and various
 # training techniques (e.g. activation checkpointing and compile) to the Llama model.
 
-import ezpz
 import torch
-import torch.distributed
 import torch.nn as nn
 from torch.distributed._composable.fsdp import FSDPModule
 from torch.distributed._composable.replicate import replicate
@@ -281,17 +279,9 @@ def disable_fsdp_gradient_division(model: nn.Module) -> None:
     Args:
         model: The model containing FSDP-wrapped modules
     """
-    force_sum_reduction = False
-    if torch.distributed.is_available() and torch.distributed.is_initialized():
-        backend = torch.distributed.get_backend()
-        # backend = ezpz.get_backend()
-        if backend and backend.lower() != "nccl":
-            force_sum_reduction = True
     for module in model.modules():
         if isinstance(module, FSDPModule):
             module.set_gradient_divide_factor(1.0)
-            if force_sum_reduction:
-                module.set_force_sum_reduction_for_comms(True)
 
 
 def apply_fsdp(
