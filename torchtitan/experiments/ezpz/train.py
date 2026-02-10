@@ -45,6 +45,12 @@ from torchtitan.tools.profiling import (
     maybe_enable_profiling,
 )
 
+# try:
+#     import intel_extension_for_pytorch as ipex
+# except Exception:
+#     # [titan] 2026-02-05 15:06:48,624 - root - INFO - step: 10  loss:  4.0555  grad_norm:  1.8027  memory:  8.25GiB(12.89%)  tps: 96,544  tflops: 6.91  mfu: 2.32%
+#     pass
+
 
 class Trainer(torch.distributed.checkpoint.stateful.Stateful):
     # core configs
