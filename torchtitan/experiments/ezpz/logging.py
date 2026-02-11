@@ -13,9 +13,20 @@ import ezpz
 logger = logging.getLogger()
 
 
+def reset_logger(logger: logging.Logger) -> None:
+    for handler in logger.handlers[:]:
+        logger.removeHandler(handler)
+        try:
+            handler.flush()
+        finally:
+            handler.close()
+
+
 def init_logger() -> None:
     # logger.setLevel(logging.INFO)
-    logger.handlers.clear()
+    # logger.handlers.clear()
+    reset_logger(logger)
+
     ch = logging.StreamHandler(sys.stdout)
     ch.setLevel(logging.INFO) if ezpz.get_rank() == 0 else ch.setLevel(logging.CRITICAL)
     formatter = logging.Formatter(
