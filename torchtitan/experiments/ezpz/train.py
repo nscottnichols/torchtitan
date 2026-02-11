@@ -5,20 +5,22 @@
 # LICENSE file in the root directory of this source tree.
 
 import dataclasses
+from datetime import timedelta
 import importlib
+import warnings
 import json
+import sys
+import logging
 import os
 import time
-from datetime import timedelta
-from typing import Any, cast, Iterable, Iterator
+from typing import Any, Iterable, Iterator, cast
+
 import ezpz
-
-
 import torch
+import torch.distributed
 import torch.distributed.checkpoint.stateful
 from torch.distributed.elastic.multiprocessing.errors import record
 
-import torchtitan.protocols.train_spec as train_spec_module
 from torchtitan.components.checkpoint import CheckpointManager
 from torchtitan.components.dataloader import DataloaderExhaustedError
 from torchtitan.components.ft import FTManager, maybe_semi_sync_training
@@ -28,28 +30,94 @@ from torchtitan.components.metrics import (
     ensure_pp_loss_visible,
 )
 from torchtitan.config import ConfigManager, JobConfig, TORCH_DTYPE_MAP
-from torchtitan.distributed import ParallelDims  # , utils as dist_utils
-
-from torchtitan.experiments.ezpz.distributed import utils as dist_utils
-
+from torchtitan.config import Comm as CommConfig
+from torchtitan.distributed import ParallelDims, utils as dist_utils
 from torchtitan.distributed.context_parallel import prepare_context_parallel_input
 from torchtitan.protocols import ModelProtocol
 from torchtitan.protocols.model_converter import build_model_converters
+import torchtitan.protocols.train_spec as train_spec_module
 from torchtitan.tools import utils
 
-from torchtitan.experiments.ezpz.tools.logging import init_logger, logger
+from torchtitan.experiments.ezpz.logging import init_logger
 
-# from torchtitan.tools.logging import init_logger, logger
 from torchtitan.tools.profiling import (
     maybe_enable_memory_snapshot,
     maybe_enable_profiling,
 )
 
-# try:
-#     import intel_extension_for_pytorch as ipex
-# except Exception:
-#     # [titan] 2026-02-05 15:06:48,624 - root - INFO - step: 10  loss:  4.0555  grad_norm:  1.8027  memory:  8.25GiB(12.89%)  tps: 96,544  tflops: 6.91  mfu: 2.32%
-#     pass
+warnings.filterwarnings("once")
+logger = ezpz.get_logger(__name__)
+
+
+def init_distributed(
+    comm_config: CommConfig,
+    enable_cpu_backend: bool = False,
+    base_folder: str = "",
+    ranks: list[int] | None = None,
+) -> int:
+    if comm_config.mode in ("fake_backend", "local_tensor"):
+        ngpu_str = os.environ.get("NGPU")
+        if ngpu_str is None:
+            raise ValueError(
+                f"NGPU environment variable must be set when using comm_mode={comm_config.mode}"
+            )
+        try:
+            world_size = int(ngpu_str)
+        except ValueError as e:
+            raise ValueError(
+                f"NGPU environment variable must be a valid integer, got: {ngpu_str}"
+            ) from e
+        dist_utils.init_fake_mode(world_size, comm_config.mode)
+        return world_size
+
+    def _warn_overwrite_env(env, val):
+        if env in os.environ:
+            logger.warning(
+                f"ENV[{env}] = {os.environ[env]} will be overridden to {val} based on job config"
+            )
+        os.environ[env] = val
+
+    device_type = ezpz.get_torch_device_type()
+    def _get_distributed_backend(enable_cpu_backend):
+        backend = "nccl"
+        if device_type in torch.distributed.Backend.default_device_backend_map:
+            backend = torch.distributed.Backend.default_device_backend_map.get(
+                device_type
+            )
+        if enable_cpu_backend:
+            backend = f"{device_type}:{backend},cpu:gloo"
+        return backend
+
+    TRACE_BUFFER_SIZE = "TORCH_FR_BUFFER_SIZE"
+    TRACE_FILE = "TORCH_FR_DUMP_TEMP_FILE"
+    DUMP_ON_TIMEOUT = "TORCH_NCCL_DUMP_ON_TIMEOUT"
+    ASYNC_ERROR_HANDLING = "TORCH_NCCL_ASYNC_ERROR_HANDLING"
+    SKIP_CLEANUP = "3"
+
+    # FlightRecorder is incompatible with =1 mode where watchdog aborts work, must use =3 (skipcleanup)
+    # to get flight recorder dumps. See https://github.com/pytorch/pytorch/issues/121055
+    # This could be done only when flight recorder is enabled, but its nice to be consistent to avoid subtle
+    # behavior differences
+    _warn_overwrite_env(ASYNC_ERROR_HANDLING, SKIP_CLEANUP)
+
+    # enable torch nccl flight recorder in the mode that would dump files if timeout is detected
+    _warn_overwrite_env(TRACE_BUFFER_SIZE, str(comm_config.trace_buf_size))
+    if comm_config.trace_buf_size > 0:
+        # dump on timeout by default if trace buffer is enabled
+        _warn_overwrite_env(DUMP_ON_TIMEOUT, "1")
+        dump_dir = os.path.join(base_folder, comm_config.save_traces_folder)
+        prefix = comm_config.save_traces_file_prefix
+        os.makedirs(dump_dir, exist_ok=True)
+        _warn_overwrite_env(TRACE_FILE, f"{dump_dir}/{prefix}")
+
+    if not torch.distributed.is_initialized():
+        torch.distributed.init_process_group(
+            backend=_get_distributed_backend(enable_cpu_backend),
+            timeout=timedelta(seconds=comm_config.init_timeout_seconds),
+            _ranks=ranks if ranks is not None else [],
+        )
+
+    return torch.distributed.get_world_size()
 
 
 class Trainer(torch.distributed.checkpoint.stateful.Stateful):
@@ -385,7 +453,7 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
 
     def init_distributed(self) -> ParallelDims:
         job_config = self.job_config
-        world_size = dist_utils.init_distributed(
+        world_size = init_distributed(
             job_config.comm,
             enable_cpu_backend=job_config.training.enable_cpu_offload,
             base_folder=job_config.job.dump_folder,
@@ -780,6 +848,9 @@ def main(trainer_class: type[Trainer]) -> None:
         trainer_class: The trainer class to instantiate (e.g., Trainer, FluxTrainer, TorchCommsTrainer)
     """
     init_logger()
+    logger.setLevel(logging.INFO) if ezpz.get_rank() == 0 else logger.setLevel(logging.CRITICAL)
+    # suppress verbose torch.profiler logging
+    os.environ["KINETO_LOG_LEVEL"] = "5"
 
     import torchtitan
 
