@@ -63,7 +63,7 @@
      ezpz launch python3 -m torchtitan.experiments.ezpz.train \
           --model.name ezpz.agpt \
           --model.flavor 2b \
-          --training.seq_len 4096 \
+          --training.seq_len 8192 \
           --training.local_batch_size=1 \
           --model.hf_assets_path assets/hf/gemma-7b \
           --job.print_config \
