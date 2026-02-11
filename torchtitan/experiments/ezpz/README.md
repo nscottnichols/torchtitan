@@ -1,11 +1,6 @@
 # Experiments: 🍋 `ezpz`
 
-References:
-
-- 🍋 [`ezpz`](https://ezpz.cool)
-  - [GitHub](https://github.com/saforem2/ezpz)
-
-## Environment Setup
+## Setup
 
 > [!NOTE]
 > These instructions assume we are using the fork `saforem2/torchtitan`, on
@@ -19,30 +14,32 @@ References:
    cd torchtitan
    ```
 
-1. <details closed><summary>Manual Python Setup:</summary>
+1. Setup Python Environment:
 
-   - Already have an environment with `pytorch>=2.10` and `mpi4py`?
-
-     ```bash
-     uv venv --python=$(which python3) --system-site-packages
-     source .venv/bin/activate
-     ```
-
-     - Otherwise:
-
+   - <details closed><summary>Manual Python Setup:</summary>
+    
+     - Already have an environment with `pytorch>=2.10` and `mpi4py`?
+    
        ```bash
-       uv venv --python=3.12
+       uv venv --python=$(which python3) --system-site-packages
        source .venv/bin/activate
        ```
-
-</details>
-
-1. Automatic environment setup:
-
-   ```bash
-   source <(curl -fsSL https://bit.ly/ezpz-utils)
-   ezpz_setup_env
-   ```
+    
+       - Otherwise:
+    
+         ```bash
+         uv venv --python=3.12
+         source .venv/bin/activate
+         ```
+    
+     </details>
+    
+    - Automatic environment setup:
+    
+      ```bash
+      source <(curl -fsSL https://bit.ly/ezpz-utils)
+      ezpz_setup_env
+      ```
 
 
 1. Install `ezpz`:
@@ -73,3 +70,18 @@ References:
           --compile.enable \
           --training.global_batch_size=48
      ```
+
+
+## References
+
+
+- 🍋 `ezpz`:
+  - Documentation: [ezpz.cool](https://ezpz.cool)
+  - GitHub: [saforem2/ezpz](https://github.com/saforem2/ezpz)
+
+
+
+
+
+
+
