@@ -9,10 +9,10 @@ from datetime import timedelta
 import importlib
 import warnings
 import json
-import sys
 import logging
 import os
 import time
+from pathlib import Path
 from typing import Any, Iterable, Iterator, cast
 
 import ezpz
@@ -47,6 +47,9 @@ from torchtitan.tools.profiling import (
 
 warnings.filterwarnings("once")
 logger = ezpz.get_logger(__name__)
+
+fp = Path(__file__)
+WBPROJ_NAME = f"torchtitan.{fp.parent.stem}.{fp.stem}"
 
 
 def init_distributed(
@@ -897,5 +900,8 @@ def main(trainer_class: type[Trainer]) -> None:
 
 if __name__ == "__main__":
     import ezpz
-    _ = ezpz.setup_torch()
+    rank = ezpz.setup_torch()
+    if rank == 0:
+        _ = ezpz.setup_wandb(project_name=WBPROJ_NAME)
+
     main(Trainer)
