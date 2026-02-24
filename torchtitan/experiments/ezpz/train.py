@@ -5,14 +5,14 @@
 # LICENSE file in the root directory of this source tree.
 
 import dataclasses
-from datetime import timedelta
+from datetime import timedelta, datetime
 import importlib
 import warnings
 import json
-import sys
 import logging
 import os
 import time
+from pathlib import Path
 from typing import Any, Iterable, Iterator, cast
 
 import ezpz
@@ -47,6 +47,9 @@ from torchtitan.tools.profiling import (
 
 warnings.filterwarnings("once")
 logger = ezpz.get_logger(__name__)
+
+fp = Path(__file__)
+WBPROJ_NAME = f"torchtitan.{fp.parent.stem}.{fp.stem}"
 
 
 def init_distributed(
@@ -227,6 +230,41 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
         model_args.update_from_config(job_config)
         self.model_args = model_args
 
+        metrics_config = job_config.metrics
+        # Setup logging directory
+        dump_dir = job_config.job.dump_folder
+        base_log_dir = os.path.join(
+            dump_dir, metrics_config.save_tb_folder, datetime.now().strftime("%Y%m%d-%H%M")
+        )
+
+        if job_config.fault_tolerance.enable:
+            base_log_dir = os.path.join(
+                base_log_dir,
+                f"replica_{job_config.fault_tolerance.replica_id}",
+            )
+
+        if metrics_config.save_for_all_ranks:
+            base_log_dir = os.path.join(
+                base_log_dir, f"rank_{ezpz.get_rank()}"
+            )
+
+        if rank == 0:
+            _ = ezpz.setup_wandb(
+                project_name=WBPROJ_NAME,
+                entity=os.getenv("WANDB_TEAM", None),
+                # project=os.getenv("WANDB_PROJECT", "torchtitan"),
+                name=os.getenv("WANDB_RUN_NAME", None),
+                id=os.getenv("WANDB_RUN_ID", None),
+                notes=os.getenv("WANDB_RUN_NOTES", None),
+                tags=os.getenv("WANDB_RUN_TAGS", None),
+                group=os.getenv("WANDB_RUN_GROUP", None),
+                job_type=os.getenv("WANDB_RUN_JOB_TYPE", None),
+                resume_from=os.getenv("WANDB_RESUME_FROM", None),
+                fork_from=os.getenv("WANDB_FORK_FROM", None),
+                dir=base_log_dir,
+                config=job_config.to_dict(),
+            )
+
         logger.info(
             f"Building {job_config.model.name} {job_config.model.flavor}"
             f"with {json.dumps(dataclasses.asdict(model_args), indent=2, ensure_ascii=False)}"
@@ -251,7 +289,6 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
             job_config, parallel_dims, model_args
         )
         color = self.metrics_processor.color
-
         # calculate model size and flops per token
         (
             model_param_count,
@@ -897,5 +934,5 @@ def main(trainer_class: type[Trainer]) -> None:
 
 if __name__ == "__main__":
     import ezpz
-    _ = ezpz.setup_torch()
+    rank = ezpz.setup_torch()
     main(Trainer)
