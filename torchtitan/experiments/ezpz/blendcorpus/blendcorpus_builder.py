@@ -117,13 +117,26 @@ class BlendCorpusDataLoader(BaseDataLoader):
         train_iters = config.train_iters
         if train_iters is None:
             train_iters = kwargs.get("training_steps")
-        if train_iters is None or int(train_iters) <= 0:
-            train_iters = int(1e12)
+        if train_iters is None:
+            train_iters = 1
+            logger.warning(
+                "BlendCorpus train_iters was not provided; defaulting to 1. "
+                "Set --training.steps or --dataloader.train-iters explicitly."
+            )
+        else:
+            train_iters = int(train_iters)
+            if train_iters <= 0:
+                logger.warning(
+                    "BlendCorpus got non-positive train_iters=%s; defaulting to 1 "
+                    "to avoid oversized index allocation.",
+                    train_iters,
+                )
+                train_iters = 1
 
         bc_cfg = SimpleNamespace(
             data_file_list=config.dataset_path,
             seq_length=seq_len,
-            train_iters=int(train_iters),
+            train_iters=train_iters,
             micro_batch_size=int(local_batch_size),
             global_batch_size=int(requested_global_batch_size),
             tensor_model_parallel_size=int(tp_degree),
