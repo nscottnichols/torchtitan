@@ -46,9 +46,9 @@ class FaultTolerantTrainer(Trainer):
         torch._C._log_api_usage_once("torchtitan.train")
 
         self.config = config
-        assert (
-            config.model_spec is not None
-        ), "model_spec must be set before creating Trainer"
+        assert config.model_spec is not None, (
+            "model_spec must be set before creating Trainer"
+        )
         model_spec = config.model_spec
 
         device_module, device_type = utils.device_module, utils.device_type
@@ -100,6 +100,9 @@ class FaultTolerantTrainer(Trainer):
             tokenizer=self.tokenizer,
             seq_len=config.training.seq_len,
             local_batch_size=config.training.local_batch_size,
+            training_steps=config.training.steps,
+            global_batch_size=config.training.global_batch_size,
+            parallel_dims=parallel_dims,
         )
 
         # build model (using meta init)
