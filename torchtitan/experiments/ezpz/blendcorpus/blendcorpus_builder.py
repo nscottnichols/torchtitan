@@ -44,19 +44,19 @@ class BlendCorpusDataLoader(BaseDataLoader):
     class Config(BaseDataLoader.Config):
         num_workers: int = 0
         persistent_workers: bool = False
-        pin_memory: bool = False
+        pin_memory: bool = True
         prefetch_factor: int | None = None
         infinite: bool = True
 
-        split: str = "98,1,1"
+        split: str = "95,5,0"
         dataloader_type: str = "single"
         shuffle: bool = True
         shuffle_sample_in_corpus: bool = True
-        blend_sample_in_corpus: bool = True
+        blend_sample_in_corpus: bool = False
         append_eod: bool = True
         provide_attention_mask: bool = False
         eod_token_id: int | None = None
-        data_cache_path: str | None = None
+        data_cache_path: str = ".cache/blendcorpus"
 
         train_iters: int | None = None
         global_batch_size: int | None = None

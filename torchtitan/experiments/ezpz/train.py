@@ -1,9 +1,14 @@
 import os
 import sys
+import datetime
+
 from typing import Any
 
 import ezpz
+import ezpz.dist
+import ezpz.utils
 import torch
+import torch.distributed
 
 from torchtitan.config import ConfigManager
 from torchtitan.experiments.ezpz.logging import init_logger
@@ -42,6 +47,36 @@ _FLAVOR_TO_CONFIG = {
     "auroragpt7b": "ezpz_agpt_7b",
     "llama3-8b": "ezpz_agpt_8b",
 }
+
+
+def _update_env() -> None:
+    os.environ.setdefault("WANDB_PROJECT", "torchtitan.ezpz.train")
+    now = datetime.datetime.now()
+    dstr = now.strftime("%Y-%m-%d-%H%M%S")
+    env_dict = {
+        f"env.{k}": v
+        for k, v in dict(os.environ).items()
+        if not k.startswith("_") and "API" not in k
+    }
+    env_dict |= {
+        "created_at": dstr,
+        "day": ezpz.utils.get_timestamp("%d"),
+        "ezpz_file": ezpz.__file__,
+        "ezpz_version": getattr(ezpz, "__version__", None),
+        "hostname": ezpz.dist.get_hostname(),
+        "month": ezpz.utils.get_timestamp("%m"),
+        "machine": ezpz.dist.get_machine(),
+        "pytorch_backend": str(ezpz.dist.get_torch_backend()).lower(),
+        "torch_version": torch.__version__,
+        "torch_file": torch.__file__,
+        "world_size": ezpz.dist.get_world_size(),
+        "year": ezpz.utils.get_timestamp("%Y"),
+        "working_directory": os.getcwd(),
+    }
+    _ = env_dict.pop("LS_COLORS", None)
+    _ = env_dict.pop("PS1", None)
+    logger.info(f"Running on {ezpz.dist.get_machine()=}")
+    logger.info(f"{env_dict=}")
 
 
 def _has_flag(args: list[str], name: str) -> bool:
@@ -147,7 +182,7 @@ def _translate_legacy_args(args: list[str]) -> list[str]:
 
 
 def _ensure_rank_env() -> None:
-    os.environ.setdefault("LOCAL_RANK", str(ezpz.get_local_rank()))
+    os.environ.setdefault("LOCAL_RANK", str(ezpz.dist.get_local_rank()))
     if torch.distributed.is_initialized():
         os.environ.setdefault("RANK", str(torch.distributed.get_rank()))
         os.environ.setdefault("WORLD_SIZE", str(torch.distributed.get_world_size()))
@@ -155,8 +190,6 @@ def _ensure_rank_env() -> None:
 
 def main(args: list[str] | None = None) -> None:
     init_logger()
-
-    os.environ.setdefault("WANDB_PROJECT", "torchtitan.ezpz.train")
 
     import torchtitan
 
@@ -201,6 +234,7 @@ def main(args: list[str] | None = None) -> None:
 
 
 if __name__ == "__main__":
-    ezpz.setup_torch()
+    ezpz.dist.setup_torch()
     _ensure_rank_env()
+    _update_env()
     main()

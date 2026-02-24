@@ -4,6 +4,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+from pathlib import Path
 from dataclasses import dataclass, field
 
 
@@ -48,7 +49,7 @@ class BlendCorpus:
     shuffle_sample_in_corpus: bool = True
     """Whether to shuffle samples within corpus."""
 
-    blend_sample_in_corpus: bool = True
+    blend_sample_in_corpus: bool = False
     """Whether to shuffle samples within corpus."""
 
     append_eod: bool = True
@@ -60,7 +61,12 @@ class BlendCorpus:
     eod_token_id: int | None = None
     """Optional explicit EOD token id; if None the adapter/tokenizer decides."""
 
-    data_cache_path: str = None
+    data_cache_path: str = ".cache/blendcorpus"
+
+    def __post_init__(self):
+        dcp = Path(self.data_cache_path)
+        if not dcp.is_file():
+            dcp.mkdir(exist_ok=True, parents=True)
 
 
 # --- END BlendCorpus dataclass ---
