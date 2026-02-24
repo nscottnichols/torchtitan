@@ -9,8 +9,34 @@ import os
 import sys
 import ezpz
 
+import torch
+
 
 logger = logging.getLogger()
+
+
+def _detect_rank() -> int:
+    if torch.distributed.is_available() and torch.distributed.is_initialized():
+        return int(torch.distributed.get_rank())
+
+    for key in (
+        "RANK",
+        "OMPI_COMM_WORLD_RANK",
+        "PMI_RANK",
+        "SLURM_PROCID",
+        "MV2_COMM_WORLD_RANK",
+    ):
+        value = os.environ.get(key)
+        if value is not None:
+            try:
+                return int(value)
+            except ValueError:
+                continue
+
+    try:
+        return int(ezpz.get_rank())
+    except Exception:
+        return 0
 
 
 def reset_logger(logger: logging.Logger) -> None:
@@ -23,17 +49,25 @@ def reset_logger(logger: logging.Logger) -> None:
 
 
 def init_logger() -> None:
-    # logger.setLevel(logging.INFO)
-    # logger.handlers.clear()
     reset_logger(logger)
 
+    rank = _detect_rank()
+    level = logging.INFO if rank == 0 else logging.CRITICAL
+
     ch = logging.StreamHandler(sys.stdout)
-    ch.setLevel(logging.INFO) if ezpz.get_rank() == 0 else ch.setLevel(logging.CRITICAL)
+    ch.setLevel(level)
     formatter = logging.Formatter(
         "[titan] %(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
     ch.setFormatter(formatter)
     logger.addHandler(ch)
+    logger.setLevel(level)
+
+    if rank == 0:
+        logging.disable(logging.NOTSET)
+    else:
+        # Keep CRITICAL logs from non-zero ranks and suppress everything else.
+        logging.disable(logging.CRITICAL - 1)
 
     # suppress verbose torch.profiler logging
     os.environ["KINETO_LOG_LEVEL"] = "5"

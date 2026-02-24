@@ -64,6 +64,9 @@ class SPTokenizer:
     def decode(self, ids: list[int]) -> str:
         return self.sp.decode(ids)
 
+    def get_vocab_size(self) -> int:
+        return self.vocab_size
+
 
 def build_sentencepiece_tokenizer(job_config):
     # Prefer explicit tokenizer_path; fall back to hf_assets_path

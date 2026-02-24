@@ -1,4 +1,3 @@
-import logging
 import os
 import sys
 from typing import Any
@@ -16,10 +15,19 @@ DEFAULT_CONFIG = "ezpz_agpt_debugmodel"
 _LEGACY_KEY_REMAP = {
     "job.dump-folder": "dump-folder",
     "job.print-config": "debug.print-config",
+    "job.print-args": "debug.print-config",
     "job.no-print-config": "debug.no-print-config",
     "job.save-config-file": "debug.save-config-file",
     "model.hf-assets-path": "hf-assets-path",
     "model.tokenizer-path": "hf-assets-path",
+    "training.dataset": "dataloader.dataset",
+    "training.dataset-path": "dataloader.dataset-path",
+    "validation.enable": "validator.enable",
+    "validation.no-enable": "validator.no-enable",
+    "validation.freq": "validator.freq",
+    "validation.steps": "validator.steps",
+    "validation.dataset": "validator.dataloader.dataset",
+    "validation.dataset-path": "validator.dataloader.dataset-path",
 }
 
 _FLAVOR_TO_CONFIG = {
@@ -28,6 +36,11 @@ _FLAVOR_TO_CONFIG = {
     "2b": "ezpz_agpt_2b",
     "7b": "ezpz_agpt_7b",
     "8b": "ezpz_agpt_8b",
+    "auroragpt-2b": "ezpz_agpt_2b",
+    "auroragpt2b": "ezpz_agpt_2b",
+    "auroragpt-7b": "ezpz_agpt_7b",
+    "auroragpt7b": "ezpz_agpt_7b",
+    "llama3-8b": "ezpz_agpt_8b",
 }
 
 
@@ -56,6 +69,7 @@ def _config_name_from_flavor(flavor: str) -> str:
 
 def _translate_legacy_args(args: list[str]) -> list[str]:
     translated: list[str] = []
+    legacy_tokenizer_backend: str | None = None
     i = 0
 
     while i < len(args):
@@ -86,9 +100,17 @@ def _translate_legacy_args(args: list[str]) -> list[str]:
                 "Use `--module ezpz.agpt --config ezpz_agpt_debugmodel` and CLI overrides instead."
             )
 
+        if key in {"experimental.custom-args-module", "experimental.custom-import"}:
+            logger.warning("Ignoring deprecated --experimental.* flag for ezpz.")
+            i += 2 if consume_next else 1
+            continue
+
         if key == "model.name":
             if value is not None:
-                translated.extend(["--module", value])
+                module_name = value
+                if value.strip().lower() == "blendcorpus":
+                    module_name = DEFAULT_MODULE
+                translated.extend(["--module", module_name])
             i += 2 if consume_next else 1
             continue
 
@@ -98,13 +120,28 @@ def _translate_legacy_args(args: list[str]) -> list[str]:
             i += 2 if consume_next else 1
             continue
 
-        remapped = _LEGACY_KEY_REMAP.get(key, key)
+        if key == "model.tokenizer-backend":
+            if value is not None:
+                legacy_tokenizer_backend = value
+            i += 2 if consume_next else 1
+            continue
+
+        if key.startswith("blendcorpus."):
+            remapped = f"dataloader.{key.removeprefix('blendcorpus.')}"
+        else:
+            remapped = _LEGACY_KEY_REMAP.get(key, key)
+
         if value is None:
             translated.append(f"--{remapped}")
         else:
             translated.extend([f"--{remapped}", value])
 
         i += 2 if consume_next else 1
+
+    if legacy_tokenizer_backend is not None:
+        translated.extend(
+            ["tokenizer:config", "--tokenizer.backend", legacy_tokenizer_backend]
+        )
 
     return translated
 
@@ -118,7 +155,6 @@ def _ensure_rank_env() -> None:
 
 def main(args: list[str] | None = None) -> None:
     init_logger()
-    logger.setLevel(logging.INFO if ezpz.get_rank() == 0 else logging.CRITICAL)
 
     os.environ.setdefault("WANDB_PROJECT", "torchtitan.ezpz.train")
 
