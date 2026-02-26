@@ -29,7 +29,8 @@ MODEL=2b
 MBS=2
 GAS=4
 SEQ_LEN=8192
-GBS=$((WORLD_SIZE * GAS * MBS))
+WORLD_SIZE="${NGPUS:-1}"
+GBS=$((NGPUS * GAS * MBS))
 
 ezpz launch python3 -m torchtitan.experiments.ezpz.train \
    --module ezpz.agpt \
