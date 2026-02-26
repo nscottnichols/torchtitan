@@ -27,10 +27,7 @@ uv pip install tensorboard tyro
 ```bash
 MODEL=2b
 MBS=2
-GAS=4
 SEQ_LEN=8192
-WORLD_SIZE="${NGPUS:-1}"
-GBS=$((NGPUS * GAS * MBS))
 
 ezpz launch python3 -m torchtitan.experiments.ezpz.train \
    --module ezpz.agpt \
@@ -38,12 +35,11 @@ ezpz launch python3 -m torchtitan.experiments.ezpz.train \
    --training.seq-len "${SEQ_LEN}" \
    --training.local_batch_size "${MBS}" \
    --debug.print-config \
-   --training.global_batch_size "${GBS}" \
    --metrics.log_freq=1 \
    --metrics.enable_wandb \
    --compile.enable \
    --training.dataset blendcorpus \
-   --training.dataset_path torchtitan/experiments/ezpz/data-lists/aurora/olmo-mix-1124.txt \
+   --training.dataset_path torchtitan/experiments/ezpz/data-lists/aurora/books.txt \
    --model.tokenizer_backend hf
 ```
 
