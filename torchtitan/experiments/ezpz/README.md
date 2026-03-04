@@ -5,46 +5,64 @@
 > the branch `ezpz`, i.e.:  
 > [saforem2/torchtitan@ezpz](https://github.com/saforem2/torchtitan/tree/ezpz)
 
-## Setup TorchTitan
+1. Submit job:
 
-```bash
-qsub -q next-eval -A AuroraGPT -l walltime=06:00:00,filesystems=flare:home -l select=2 -I
-git clone https://github.com/saforem2/torchtitan --branch ezpz
-cd torchtitan
-```
+   - Aurora:
 
-## Install Dependencies
+     ```bash
+     # [03/04/2026] `-q next-eval` required for PyTorch 2.10 on Aurora
+     qsub -q next-eval -A <project> -l walltime=06:00:00,filesystems=flare:home -l select=2 -I
+     ```
+   
+1. Clone TorchTitan from [saforem2/torchtitan@ezpz](https://github.com/saforem2/torchtitan/blob/ezpz):
 
-```bash
-source <(curl -fsSL https://bit.ly/ezpz-utils) && ezpz_setup_env
-uv pip install "git+https://github.com/saforem2/ezpz@dev"
-uv pip install "git+https://github.com/zhenghh04/blendcorpus"
-uv pip install tensorboard tyro
-```
+   ```bash
+   git clone https://github.com/saforem2/torchtitan --branch ezpz
+   cd torchtitan
+   ```
 
-## Launch Training
+1. Setup environment:
 
-```bash
-MODEL=2b
-MBS=2
-SEQ_LEN=8192
+   ```bash
+   source <(curl -fsSL https://bit.ly/ezpz-utils) && ezpz_setup_env
+   ```
 
-ezpz launch python3 -m torchtitan.experiments.ezpz.train \
-   --module ezpz.agpt \
-   --config "ezpz_agpt_${MODEL}" \
-   --training.seq-len "${SEQ_LEN}" \
-   --training.local_batch_size "${MBS}" \
-   --debug.print-config \
-   --metrics.log_freq=1 \
-   --metrics.enable_wandb \
-   --compile.enable \
-   --training.dataset blendcorpus \
-   --training.dataset_path torchtitan/experiments/ezpz/data-lists/aurora/books.txt \
-   --model.tokenizer_backend hf
-```
+1. Install Dependencies
+
+   ```bash
+   uv pip install "git+https://github.com/saforem2/ezpz"
+   uv pip install "git+https://github.com/zhenghh04/blendcorpus"
+   uv pip install tensorboard tyro
+   ```
+
+1. Launch Training
+
+   - AuroraGPT-2B:
+   
+     ```bash
+     MODEL=2b
+     DFL=torchtitan/experiments/ezpz/data-lists/$(ezpz_get_machine_name)/books.txt
+     ezpz launch python3 -m torchtitan.experiments.ezpz.train \
+        --module ezpz.agpt \
+        --config "ezpz_agpt_${MODEL}" \
+        --training.dataset_path "${DFL}" \
+        --debug.print_config
+     ```
+   
+   - AuroraGPT-7B:
+   
+     ```bash
+     MODEL=7b
+     DFL=torchtitan/experiments/ezpz/data-lists/$(ezpz_get_machine_name)/books.txt
+     ezpz launch python3 -m torchtitan.experiments.ezpz.train \
+        --module ezpz.agpt \
+        --config "ezpz_agpt_${MODEL}" \
+        --training.dataset_path "${DFL}" \
+        --debug.print_config
+     ```
+
 
 ## References
-
 
 - 🍋 `ezpz`:
   - Documentation: [ezpz.cool](https://ezpz.cool)
