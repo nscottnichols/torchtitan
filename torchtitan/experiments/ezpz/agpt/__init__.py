@@ -52,6 +52,73 @@ def _build_llama3_config(
 
 
 agpt_configs = {
+    "llama3_debugmodel": Llama3Model.Config(
+        dim=256,
+        n_layers=6,
+        vocab_size=2048,
+        layer=Llama3TransformerBlock.Config(
+            feed_forward=FeedForward.Config(
+                hidden_dim=compute_ffn_hidden_dim(256, multiple_of=256)
+            ),
+            attention=GQAttention.Config(
+                n_heads=16, attn_backend="sdpa", rope_backend="complex"
+            ),
+        ),
+        rope=RoPE.Config(
+            # TODO: find better ways to enforce dim = decoder dim // n_heads, for all models
+            dim=256 // 16,
+            max_seq_len=131072,
+            theta=500000,
+            backend="complex",
+            scaling="llama",
+        ),
+    ),
+    "llama3_debugmodel_flex_attn": Llama3Model.Config(
+        dim=256,
+        n_layers=6,
+        vocab_size=2048,
+        layer=Llama3TransformerBlock.Config(
+            feed_forward=FeedForward.Config(
+                hidden_dim=compute_ffn_hidden_dim(256, multiple_of=256)
+            ),
+            attention=GQAttention.Config(
+                n_heads=16,
+                attn_backend="flex",
+                attn_mask_type="block_causal",
+                rope_backend="complex",
+            ),
+        ),
+        rope=RoPE.Config(
+            dim=256 // 16,
+            max_seq_len=131072,
+            theta=500000,
+            backend="complex",
+            scaling="llama",
+        ),
+    ),
+    "llama3_debugmodel_varlen_attn": Llama3Model.Config(
+        dim=256,
+        n_layers=6,
+        vocab_size=2048,
+        layer=Llama3TransformerBlock.Config(
+            feed_forward=FeedForward.Config(
+                hidden_dim=compute_ffn_hidden_dim(256, multiple_of=256)
+            ),
+            attention=GQAttention.Config(
+                n_heads=16,
+                attn_backend="varlen",
+                attn_mask_type="block_causal",
+                rope_backend="complex",
+            ),
+        ),
+        rope=RoPE.Config(
+            dim=256 // 16,
+            max_seq_len=131072,
+            theta=500000,
+            backend="complex",
+            scaling="llama",
+        ),
+    ),
     "debug": _build_llama3_config(
         dim=256,
         n_layers=6,
@@ -61,7 +128,7 @@ agpt_configs = {
         vocab_size=2048,
         hidden_dim=compute_ffn_hidden_dim(256, multiple_of=256),
     ),
-    "2b": _build_llama3_config(
+    "2B": _build_llama3_config(
         dim=2048,
         n_layers=12,
         n_heads=16,
@@ -70,7 +137,7 @@ agpt_configs = {
         vocab_size=256128,
         hidden_dim=11008,
     ),
-    "7b": _build_llama3_config(
+    "7B": _build_llama3_config(
         dim=4096,
         n_layers=32,
         n_heads=32,
@@ -92,6 +159,8 @@ agpt_configs = {
     ),
 }
 agpt_configs["debugmodel"] = agpt_configs["debug"]
+agpt_configs["2b"] = agpt_configs["2B"]
+agpt_configs["7b"] = agpt_configs["7B"]
 
 
 def model_registry(flavor: str) -> FaultTolerantModelSpec:
