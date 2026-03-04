@@ -226,7 +226,7 @@ def main(args: list[str] | None = None) -> None:
             wbconfig |= {"config": asdict(config)}
             wbconfig |= ezpz.distributed.get_dist_info()
             _ = ezpz.setup_wandb(
-                project_name=wbconfig['project'],
+                project_name=wbconfig['env']['project'],
                 config=wbconfig,
             )
         except Exception as e:
