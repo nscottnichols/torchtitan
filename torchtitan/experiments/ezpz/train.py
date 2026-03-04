@@ -222,7 +222,7 @@ def main(args: list[str] | None = None) -> None:
         trainer = config.build()
         try:
             wbconfig = {}
-            wbconfig |= {"env": {_update_env()}}
+            wbconfig |= {"env": _update_env()}
             wbconfig |= {"config": asdict(config)}
             wbconfig |= ezpz.distributed.get_dist_info()
             _ = ezpz.setup_wandb(
@@ -259,5 +259,4 @@ def main(args: list[str] | None = None) -> None:
 if __name__ == "__main__":
     ezpz.distributed.setup_torch()
     _ensure_rank_env()
-    _update_env()
     main()
