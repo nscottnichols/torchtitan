@@ -220,19 +220,20 @@ def main(args: list[str] | None = None) -> None:
             return
 
         trainer = config.build()
-        try:
-            wbconfig = {}
-            wbconfig |= {"env": _update_env()}
-            wbconfig |= {"config": asdict(config)}
-            wbconfig |= ezpz.distributed.get_dist_info()
-            _ = ezpz.setup_wandb(
-                project_name=wbconfig['env']['project'],
-                config=wbconfig,
-            )
-        except Exception as e:
-            logger.warning("Unable to update `wandb.run.config`, continuing!")
-            if ezpz.distributed.get_rank() == 0:
-                logger.exception(e)
+        if ezpz.distributed.get_rank() == 0:
+            try:
+                wbconfig = {}
+                wbconfig |= {"env": _update_env()}
+                wbconfig |= {"config": asdict(config)}
+                wbconfig |= ezpz.distributed.get_dist_info()
+                _ = ezpz.setup_wandb(
+                    project_name=wbconfig['env']['project'],
+                    config=wbconfig,
+                )
+            except Exception as e:
+                logger.warning("Unable to update `wandb.run.config`, continuing!")
+                if ezpz.distributed.get_rank() == 0:
+                    logger.exception(e)
 
         if config.checkpoint.create_seed_checkpoint:
             assert int(os.environ["WORLD_SIZE"]) == 1, (
