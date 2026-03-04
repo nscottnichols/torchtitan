@@ -157,10 +157,33 @@ agpt_configs = {
             4096, multiple_of=1024, ffn_dim_multiplier=1.3
         ),
     ),
+    "20B": _build_llama3_config(
+        dim=5120,
+        n_layers=64,
+        n_heads=40,
+        n_kv_heads=8,
+        rope_theta=500000,
+        vocab_size=128256,
+        hidden_dim=compute_ffn_hidden_dim(5120, multiple_of=1024),
+    ),
+    "50B": _build_llama3_config(
+        dim=8192,
+        n_layers=56,
+        n_heads=64,
+        n_kv_heads=8,
+        rope_theta=500000,
+        vocab_size=128256,
+        hidden_dim=compute_ffn_hidden_dim(
+            8192, multiple_of=1024, ffn_dim_multiplier=1.3
+        ),
+    ),
 }
 agpt_configs["debugmodel"] = agpt_configs["debug"]
 agpt_configs["2b"] = agpt_configs["2B"]
 agpt_configs["7b"] = agpt_configs["7B"]
+agpt_configs["8b"] = agpt_configs["8B"]
+agpt_configs["20b"] = agpt_configs["20B"]
+agpt_configs["50b"] = agpt_configs["50B"]
 
 
 def model_registry(flavor: str) -> FaultTolerantModelSpec:
