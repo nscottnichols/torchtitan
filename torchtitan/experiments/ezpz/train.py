@@ -5,7 +5,7 @@ import datetime
 from typing import Any
 
 import ezpz
-import ezpz.dist
+import ezpz.distributed
 import ezpz.utils
 import torch
 import torch.distributed
@@ -63,19 +63,19 @@ def _update_env() -> None:
         "day": ezpz.utils.get_timestamp("%d"),
         "ezpz_file": ezpz.__file__,
         "ezpz_version": getattr(ezpz, "__version__", None),
-        "hostname": ezpz.dist.get_hostname(),
+        "hostname": ezpz.distributed.get_hostname(),
         "month": ezpz.utils.get_timestamp("%m"),
-        "machine": ezpz.dist.get_machine(),
-        "pytorch_backend": str(ezpz.dist.get_torch_backend()).lower(),
+        "machine": ezpz.distributed.get_machine(),
+        "pytorch_backend": str(ezpz.distributed.get_torch_backend()).lower(),
         "torch_version": torch.__version__,
         "torch_file": torch.__file__,
-        "world_size": ezpz.dist.get_world_size(),
+        "world_size": ezpz.distributed.get_world_size(),
         "year": ezpz.utils.get_timestamp("%Y"),
         "working_directory": os.getcwd(),
     }
     _ = env_dict.pop("LS_COLORS", None)
     _ = env_dict.pop("PS1", None)
-    logger.info(f"Running on {ezpz.dist.get_machine()=}")
+    logger.info(f"Running on {ezpz.distributed.get_machine()=}")
     logger.info(f"{env_dict=}")
 
 
@@ -182,7 +182,7 @@ def _translate_legacy_args(args: list[str]) -> list[str]:
 
 
 def _ensure_rank_env() -> None:
-    os.environ.setdefault("LOCAL_RANK", str(ezpz.dist.get_local_rank()))
+    os.environ.setdefault("LOCAL_RANK", str(ezpz.distributed.get_local_rank()))
     if torch.distributed.is_initialized():
         os.environ.setdefault("RANK", str(torch.distributed.get_rank()))
         os.environ.setdefault("WORLD_SIZE", str(torch.distributed.get_world_size()))
@@ -210,6 +210,26 @@ def main(args: list[str] | None = None) -> None:
             return
 
         trainer = config.build()
+        try:
+            import wandb
+
+            if wandb.run is not None:
+                wandb.run.config.update(
+                    {
+                        "DIST_INFO": get_dist_info(),
+                        "hostname": ezpz.distributed.get_hostname(),
+                        "pytorch_backend": ezpz.distributed.get_torch_backend(),
+                        "torch_version": torch.__version__,
+                        "world_size": ezpz.distributed.get_world_size(),
+                        "ezpz_version": ezpz.__version__,
+                        "machine": ezpz.distributed.get_machine(),
+                        "working_directory": os.getcwd(),
+                    }
+                )
+                if config is not None:
+                    wandb.run.config.update({"config": config})
+        except Exception:
+            logger.warning("Unable to update `wandb.run.config`, continuing!")
 
         if config.checkpoint.create_seed_checkpoint:
             assert int(os.environ["WORLD_SIZE"]) == 1, (
@@ -234,7 +254,7 @@ def main(args: list[str] | None = None) -> None:
 
 
 if __name__ == "__main__":
-    ezpz.dist.setup_torch()
+    ezpz.distributed.setup_torch()
     _ensure_rank_env()
     _update_env()
     main()
