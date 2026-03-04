@@ -1,6 +1,7 @@
 import os
 import sys
 import datetime
+import json
 
 from typing import Any
 
@@ -10,6 +11,7 @@ import ezpz.utils
 import torch
 import torch.distributed
 
+from dataclasses import asdict
 from torchtitan.config import ConfigManager
 from torchtitan.experiments.ezpz.logging import init_logger
 from torchtitan.tools.logging import logger
@@ -49,24 +51,27 @@ _FLAVOR_TO_CONFIG = {
 }
 
 
-def _update_env() -> None:
-    os.environ.setdefault("WANDB_PROJECT", "torchtitan.ezpz.train")
+def _update_env() -> dict:
+    wb_project_name = 'torchtitan.ezpz.train'
+    os.environ.setdefault("WANDB_PROJECT", f"{wb_project_name}")
     now = datetime.datetime.now()
     dstr = now.strftime("%Y-%m-%d-%H%M%S")
     env_dict = {
         f"env.{k}": v
         for k, v in dict(os.environ).items()
-        if not k.startswith("_") and "API" not in k
+        if not k.startswith("_") and "API" not in k and "LS_" not in k
     }
     env_dict |= {
         "created_at": dstr,
         "day": ezpz.utils.get_timestamp("%d"),
+        "DIST_INFO": ezpz.distributed.get_dist_info(),
         "ezpz_file": ezpz.__file__,
         "ezpz_version": getattr(ezpz, "__version__", None),
         "hostname": ezpz.distributed.get_hostname(),
         "month": ezpz.utils.get_timestamp("%m"),
         "machine": ezpz.distributed.get_machine(),
         "pytorch_backend": str(ezpz.distributed.get_torch_backend()).lower(),
+        "project": wb_project_name,
         "torch_version": torch.__version__,
         "torch_file": torch.__file__,
         "world_size": ezpz.distributed.get_world_size(),
@@ -76,7 +81,12 @@ def _update_env() -> None:
     _ = env_dict.pop("LS_COLORS", None)
     _ = env_dict.pop("PS1", None)
     logger.info(f"Running on {ezpz.distributed.get_machine()=}")
-    logger.info(f"{env_dict=}")
+    logger.info(f"environment={json.dumps(env_dict, indent=4, sort_keys=True)}")
+    #     logger.info(
+    #     f"DistInfo={json.dumps(dist_info, indent=4, sort_keys=True)}"
+    # )
+
+    return env_dict
 
 
 def _has_flag(args: list[str], name: str) -> bool:
@@ -211,25 +221,18 @@ def main(args: list[str] | None = None) -> None:
 
         trainer = config.build()
         try:
-            import wandb
-
-            if wandb.run is not None:
-                wandb.run.config.update(
-                    {
-                        "DIST_INFO": get_dist_info(),
-                        "hostname": ezpz.distributed.get_hostname(),
-                        "pytorch_backend": ezpz.distributed.get_torch_backend(),
-                        "torch_version": torch.__version__,
-                        "world_size": ezpz.distributed.get_world_size(),
-                        "ezpz_version": ezpz.__version__,
-                        "machine": ezpz.distributed.get_machine(),
-                        "working_directory": os.getcwd(),
-                    }
-                )
-                if config is not None:
-                    wandb.run.config.update({"config": config})
-        except Exception:
+            wbconfig = {}
+            wbconfig |= {"env": {_update_env()}}
+            wbconfig |= {"config": asdict(config)}
+            wbconfig |= ezpz.distributed.get_dist_info()
+            _ = ezpz.setup_wandb(
+                project_name=wbconfig['project'],
+                config=wbconfig,
+            )
+        except Exception as e:
             logger.warning("Unable to update `wandb.run.config`, continuing!")
+            if ezpz.distributed.get_rank() == 0:
+                logger.exception(e)
 
         if config.checkpoint.create_seed_checkpoint:
             assert int(os.environ["WORLD_SIZE"]) == 1, (
