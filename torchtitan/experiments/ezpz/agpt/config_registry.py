@@ -4,6 +4,7 @@ from torchtitan.components.metrics import MetricsProcessor
 from torchtitan.components.optimizer import OptimizersContainer
 from torchtitan.components.validate import Validator
 from torchtitan.config import ActivationCheckpointConfig, CommConfig, TrainingConfig
+from torchtitan.config.configs import CompileConfig
 from torchtitan.experiments.ezpz.blendcorpus.blendcorpus_builder import (
     BlendCorpusDataLoader,
 )
@@ -52,20 +53,32 @@ def ezpz_agpt_debugmodel() -> FaultTolerantTrainer.Config:
 
 
 def ezpz_agpt_2b() -> FaultTolerantTrainer.Config:
-    return _base_config("2b")
+    cfg = _base_config("2b")
+    cfg.training.local_batch_size = 2
+    cfg.training.seq_len = 8192
+    cfg.training.dtype = "bfloat16"
+    cfg.dataloader.dataset = "blendcorpus"
+    cfg.metrics.log_freq = 1
+    cfg.metrics.enable_wandb = True
+    cfg.compile = CompileConfig(enable=True)
+    cfg.checkpoint.enable = True
+    cfg.checkpoint.interval = 50
+    return cfg
 
 
 def ezpz_agpt_7b() -> FaultTolerantTrainer.Config:
-    return _base_config("7b")
+    cfg = _base_config("7b")
+    cfg.training.local_batch_size = 2
+    cfg.training.seq_len = 4096
+    cfg.training.dtype = "bfloat16"
+    cfg.dataloader.dataset = "blendcorpus"
+    cfg.metrics.log_freq = 1
+    cfg.metrics.enable_wandb = True
+    cfg.compile = CompileConfig(enable=True)
+    cfg.checkpoint.enable = True
+    cfg.checkpoint.interval = 50
+    return cfg
 
 
 def ezpz_agpt_8b() -> FaultTolerantTrainer.Config:
     return _base_config("8B")
-
-
-def ezpz_agpt_blendcorpus_debugmodel() -> FaultTolerantTrainer.Config:
-    cfg = _base_config("debugmodel")
-    cfg.dataloader.dataset = "blendcorpus"
-    if isinstance(cfg.tokenizer, EZPZTokenizer.Config):
-        cfg.tokenizer.backend = "sptoken"
-    return cfg
