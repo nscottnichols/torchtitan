@@ -11,6 +11,7 @@ import ezpz.utils
 import torch
 import torch.distributed
 
+from pathlib import Path
 from dataclasses import asdict
 from torchtitan.config import ConfigManager
 from torchtitan.experiments.ezpz.logging import init_logger
@@ -18,6 +19,11 @@ from torchtitan.tools.logging import logger
 
 DEFAULT_MODULE = "ezpz.agpt"
 DEFAULT_CONFIG = "ezpz_agpt_debugmodel"
+
+fp = Path(__file__)
+WBPROJ_NAME = f"torchtitan.{fp.parent.stem}.{fp.stem}"
+os.environ.setdefault("WANDB_PROJECT", f"{WBPROJ_NAME}")
+
 
 _LEGACY_KEY_REMAP = {
     "job.dump-folder": "dump-folder",
@@ -52,8 +58,6 @@ _FLAVOR_TO_CONFIG = {
 
 
 def _update_env() -> dict:
-    wb_project_name = 'torchtitan.ezpz.train'
-    os.environ.setdefault("WANDB_PROJECT", f"{wb_project_name}")
     now = datetime.datetime.now()
     dstr = now.strftime("%Y-%m-%d-%H%M%S")
     env_dict = {
@@ -71,7 +75,7 @@ def _update_env() -> dict:
         "month": ezpz.utils.get_timestamp("%m"),
         "machine": ezpz.distributed.get_machine(),
         "pytorch_backend": str(ezpz.distributed.get_torch_backend()).lower(),
-        "project": wb_project_name,
+        "project": WBPROJ_NAME,
         "torch_version": torch.__version__,
         "torch_file": torch.__file__,
         "world_size": ezpz.distributed.get_world_size(),
@@ -227,7 +231,7 @@ def main(args: list[str] | None = None) -> None:
                 wbconfig |= {"config": asdict(config)}
                 wbconfig |= ezpz.distributed.get_dist_info()
                 _ = ezpz.setup_wandb(
-                    project_name=wbconfig['env']['project'],
+                    project_name=WBPROJ_NAME,
                     config=wbconfig,
                 )
             except Exception as e:
