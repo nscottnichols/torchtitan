@@ -5,6 +5,7 @@ from torchtitan.distributed.pipeline_parallel import pipeline_llm
 from torchtitan.experiments.ezpz.agpt.parallelize import parallelize_llama
 from torchtitan.experiments.ft.diloco import fragment_llm
 from torchtitan.models.common import (
+    Embedding,
     FeedForward,
     GQAttention,
     RoPE,
@@ -41,6 +42,7 @@ def _build_llama3_config(
         dim=dim,
         n_layers=n_layers,
         vocab_size=vocab_size,
+        tok_embeddings=Embedding.Config(),
         layer=Llama3TransformerBlock.Config(
             feed_forward=FeedForward.Config(hidden_dim=hidden_dim),
             attention=GQAttention.Config(
@@ -95,6 +97,7 @@ agpt_configs = {
         dim=256,
         n_layers=6,
         vocab_size=2048,
+        tok_embeddings=Embedding.Config(),
         layer=Llama3TransformerBlock.Config(
             feed_forward=FeedForward.Config(
                 hidden_dim=compute_ffn_hidden_dim(256, multiple_of=256)
@@ -118,6 +121,7 @@ agpt_configs = {
         dim=256,
         n_layers=6,
         vocab_size=2048,
+        tok_embeddings=Embedding.Config(),
         layer=Llama3TransformerBlock.Config(
             feed_forward=FeedForward.Config(
                 hidden_dim=compute_ffn_hidden_dim(256, multiple_of=256)
@@ -150,6 +154,7 @@ agpt_configs = {
         dim=2048,
         n_layers=12,
         vocab_size=256128,
+        tok_embeddings=Embedding.Config(),
         layer=Llama3TransformerBlock.Config(
             feed_forward=FeedForward.Config(
                 hidden_dim=compute_ffn_hidden_dim(2048, multiple_of=1024)
