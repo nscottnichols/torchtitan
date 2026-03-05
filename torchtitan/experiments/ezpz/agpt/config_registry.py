@@ -49,11 +49,28 @@ def _base_config(flavor: str) -> FaultTolerantTrainer.Config:
 
 
 def ezpz_agpt_debugmodel() -> FaultTolerantTrainer.Config:
-    return _base_config("debugmodel")
+    cfg = _base_config("debugmodel")
+    cfg.metrics.enable_wandb = True
+    return cfg
 
 
 def ezpz_agpt_2b() -> FaultTolerantTrainer.Config:
     cfg = _base_config("2b")
+    cfg.debug.print_config = True
+    cfg.training.local_batch_size = 2
+    cfg.training.seq_len = 8192
+    cfg.training.dtype = "bfloat16"
+    cfg.dataloader.dataset = "blendcorpus"
+    cfg.metrics.log_freq = 1
+    cfg.metrics.enable_wandb = True
+    cfg.compile = CompileConfig(enable=True)
+    cfg.checkpoint.enable = True
+    cfg.checkpoint.interval = 50
+    return cfg
+
+def ezpz_agpt_2b_flex_attn() -> FaultTolerantTrainer.Config:
+    cfg = _base_config("2b_flex_attn")
+    cfg.debug.print_config = True
     cfg.training.local_batch_size = 2
     cfg.training.seq_len = 8192
     cfg.training.dtype = "bfloat16"
@@ -68,6 +85,7 @@ def ezpz_agpt_2b() -> FaultTolerantTrainer.Config:
 
 def ezpz_agpt_7b() -> FaultTolerantTrainer.Config:
     cfg = _base_config("7b")
+    cfg.debug.print_config = True
     cfg.training.local_batch_size = 2
     cfg.training.seq_len = 4096
     cfg.training.dtype = "bfloat16"
@@ -86,6 +104,7 @@ def ezpz_agpt_8b() -> FaultTolerantTrainer.Config:
 
 def ezpz_agpt_20b() -> FaultTolerantTrainer.Config:
     cfg = _base_config("20b")
+    cfg.debug.print_config = True
     cfg.training.local_batch_size = 1
     cfg.training.seq_len = 8192
     cfg.training.dtype = "bfloat16"

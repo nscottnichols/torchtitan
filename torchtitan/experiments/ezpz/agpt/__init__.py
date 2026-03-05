@@ -1,3 +1,5 @@
+from typing import Literal
+
 from torchtitan.components.loss import build_cross_entropy_loss
 from torchtitan.distributed.pipeline_parallel import pipeline_llm
 from torchtitan.experiments.ezpz.agpt.parallelize import parallelize_llama
@@ -17,6 +19,9 @@ __all__ = [
     "parallelize_llama",
 ]
 
+ # backend: Literal['complex', 'cos_sin'] = "complex",
+ #    scaling: Literal['none', 'llama', 'yarn'] = "none",
+
 
 def _build_llama3_config(
     *,
@@ -27,6 +32,10 @@ def _build_llama3_config(
     rope_theta: int,
     vocab_size: int,
     hidden_dim: int,
+    attn_backend:  str = "sdpa",
+    rope_backend:  Literal["complex", "cos_sin"] = "complex",
+    scaling: Literal["none", "llama", "yarn"] = "none",
+    max_seq_len: int = 131072,
 ) -> Llama3Model.Config:
     return Llama3Model.Config(
         dim=dim,
@@ -37,43 +46,52 @@ def _build_llama3_config(
             attention=GQAttention.Config(
                 n_heads=n_heads,
                 n_kv_heads=n_kv_heads,
-                attn_backend="sdpa",
-                rope_backend="complex",
+                attn_backend=attn_backend,
+                rope_backend=rope_backend
             ),
         ),
         rope=RoPE.Config(
             dim=dim // n_heads,
-            max_seq_len=131072,
+            max_seq_len=max_seq_len,
             theta=rope_theta,
-            backend="complex",
-            scaling="llama",
+            backend=rope_backend,
+            scaling=scaling,
         ),
     )
 
 
 agpt_configs = {
-    "llama3_debugmodel": Llama3Model.Config(
+    # "debugmodel": Llama3Model.Config(
+    #     dim=256,
+    #     n_layers=6,
+    #     vocab_size=2048,
+    #     layer=Llama3TransformerBlock.Config(
+    #         feed_forward=FeedForward.Config(
+    #             hidden_dim=compute_ffn_hidden_dim(256, multiple_of=256)
+    #         ),
+    #         attention=GQAttention.Config(
+    #             n_heads=16, attn_backend="sdpa", rope_backend="complex"
+    #         ),
+    #     ),
+    #     rope=RoPE.Config(
+    #         # TODO: find better ways to enforce dim = decoder dim // n_heads, for all models
+    #         dim=256 // 16,
+    #         max_seq_len=131072,
+    #         theta=500000,
+    #         backend="complex",
+    #         scaling="llama",
+    #     ),
+    # ),
+    "debug": _build_llama3_config(
         dim=256,
         n_layers=6,
+        n_heads=16,
+        n_kv_heads=None,
+        rope_theta=500000,
         vocab_size=2048,
-        layer=Llama3TransformerBlock.Config(
-            feed_forward=FeedForward.Config(
-                hidden_dim=compute_ffn_hidden_dim(256, multiple_of=256)
-            ),
-            attention=GQAttention.Config(
-                n_heads=16, attn_backend="sdpa", rope_backend="complex"
-            ),
-        ),
-        rope=RoPE.Config(
-            # TODO: find better ways to enforce dim = decoder dim // n_heads, for all models
-            dim=256 // 16,
-            max_seq_len=131072,
-            theta=500000,
-            backend="complex",
-            scaling="llama",
-        ),
+        hidden_dim=compute_ffn_hidden_dim(256, multiple_of=256),
     ),
-    "llama3_debugmodel_flex_attn": Llama3Model.Config(
+    "debugmodel_flex_attn": Llama3Model.Config(
         dim=256,
         n_layers=6,
         vocab_size=2048,
@@ -96,7 +114,7 @@ agpt_configs = {
             scaling="llama",
         ),
     ),
-    "llama3_debugmodel_varlen_attn": Llama3Model.Config(
+    "debugmodel_varlen_attn": Llama3Model.Config(
         dim=256,
         n_layers=6,
         vocab_size=2048,
@@ -119,15 +137,6 @@ agpt_configs = {
             scaling="llama",
         ),
     ),
-    "debug": _build_llama3_config(
-        dim=256,
-        n_layers=6,
-        n_heads=16,
-        n_kv_heads=None,
-        rope_theta=500000,
-        vocab_size=2048,
-        hidden_dim=compute_ffn_hidden_dim(256, multiple_of=256),
-    ),
     "2B": _build_llama3_config(
         dim=2048,
         n_layers=12,
@@ -136,6 +145,29 @@ agpt_configs = {
         rope_theta=50000,
         vocab_size=256128,
         hidden_dim=11008,
+    ),
+    "2B_flex_attn": Llama3Model.Config(
+        dim=2048,
+        n_layers=12,
+        vocab_size=256128,
+        layer=Llama3TransformerBlock.Config(
+            feed_forward=FeedForward.Config(
+                hidden_dim=compute_ffn_hidden_dim(2048, multiple_of=1024)
+            ),
+            attention=GQAttention.Config(
+                n_heads=16,
+                attn_backend="flex",
+                attn_mask_type="block_causal",
+                rope_backend="complex",
+            ),
+        ),
+        rope=RoPE.Config(
+            dim=2048 // 16,
+            max_seq_len=256128,
+            theta=500000,
+            backend="complex",
+            scaling="llama",
+        ),
     ),
     "7B": _build_llama3_config(
         dim=4096,
@@ -163,7 +195,7 @@ agpt_configs = {
         n_heads=40,
         n_kv_heads=8,
         rope_theta=500000,
-        vocab_size=128256,
+        vocab_size=256128,
         hidden_dim=compute_ffn_hidden_dim(5120, multiple_of=1024),
     ),
     "50B": _build_llama3_config(
@@ -172,7 +204,7 @@ agpt_configs = {
         n_heads=64,
         n_kv_heads=8,
         rope_theta=500000,
-        vocab_size=128256,
+        vocab_size=256128,
         hidden_dim=compute_ffn_hidden_dim(
             8192, multiple_of=1024, ffn_dim_multiplier=1.3
         ),
@@ -180,6 +212,7 @@ agpt_configs = {
 }
 agpt_configs["debugmodel"] = agpt_configs["debug"]
 agpt_configs["2b"] = agpt_configs["2B"]
+agpt_configs["2b_flex_attn"] = agpt_configs["2B_flex_attn"]
 agpt_configs["7b"] = agpt_configs["7B"]
 agpt_configs["8b"] = agpt_configs["8B"]
 agpt_configs["20b"] = agpt_configs["20B"]
