@@ -59,7 +59,6 @@ class BlendCorpusDataLoader(BaseDataLoader):
         data_cache_path: str = ".cache/blendcorpus"
 
         train_iters: int | None = None
-        global_batch_size: int | None = None
 
     def __init__(
         self,
@@ -108,9 +107,7 @@ class BlendCorpusDataLoader(BaseDataLoader):
         pp_degree = getattr(parallel_dims, "pp", 1)
         cp_degree = getattr(parallel_dims, "cp", 1)
 
-        requested_global_batch_size = config.global_batch_size
-        if not requested_global_batch_size or requested_global_batch_size <= 0:
-            requested_global_batch_size = kwargs.get("global_batch_size")
+        requested_global_batch_size = kwargs.get("global_batch_size")
         if not requested_global_batch_size or requested_global_batch_size <= 0:
             requested_global_batch_size = local_batch_size * dp_world_size
 
