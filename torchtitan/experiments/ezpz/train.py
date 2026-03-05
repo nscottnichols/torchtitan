@@ -224,16 +224,19 @@ def main(args: list[str] | None = None) -> None:
             return
 
         trainer = config.build()
-        if ezpz.distributed.get_rank() == 0:
+        if ezpz.distributed.get_rank() == 0 and ezpz.distributed.verify_wandb():
             try:
+                run = ezpz.distributed.setup_wandb(
+                    project_name=WBPROJ_NAME,
+                    # config=wbconfig,
+                )
                 wbconfig = {}
                 wbconfig |= {"env": _update_env()}
-                wbconfig |= {"config": asdict(config)}
-                wbconfig |= ezpz.distributed.get_dist_info()
-                _ = ezpz.setup_wandb(
-                    project_name=WBPROJ_NAME,
-                    config=wbconfig,
-                )
+                wbconfig |= config.to_dict()
+                # wbconfig |= {"config": asdict(config)}
+                wbconfig |= {"dist": ezpz.distributed.get_dist_info()}
+                if run is not None:
+                    run.config.update(wbconfig)
             except Exception as e:
                 logger.warning("Unable to update `wandb.run.config`, continuing!")
                 if ezpz.distributed.get_rank() == 0:
