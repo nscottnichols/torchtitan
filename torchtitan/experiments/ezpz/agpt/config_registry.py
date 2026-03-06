@@ -1,3 +1,6 @@
+import ezpz
+import ezpz.distributed
+
 from torchtitan.components.checkpoint import CheckpointManager
 from torchtitan.components.lr_scheduler import LRSchedulersContainer
 from torchtitan.components.metrics import MetricsProcessor
@@ -50,17 +53,35 @@ def _base_config(flavor: str) -> FaultTolerantTrainer.Config:
 
 def ezpz_agpt_debugmodel() -> FaultTolerantTrainer.Config:
     cfg = _base_config("debugmodel")
+    cfg.hf_assets_path = "./assets/test"
     cfg.metrics.enable_wandb = True
-    return cfg
-
-
-def ezpz_agpt_2b() -> FaultTolerantTrainer.Config:
-    cfg = _base_config("2b")
     cfg.debug.print_config = True
     cfg.training.local_batch_size = 2
     cfg.training.seq_len = 8192
     cfg.training.dtype = "bfloat16"
     cfg.dataloader.dataset = "blendcorpus"
+    cfg.dataloader.dataset_path = (
+        f"torchtitan/experiments/ezpz/{ezpz.distributed.get_machine()}/books.txt"
+    )
+    cfg.metrics.log_freq = 1
+    cfg.metrics.enable_wandb = True
+    cfg.compile = CompileConfig(enable=True)
+    cfg.checkpoint.enable = True
+    cfg.checkpoint.interval = 50
+    return cfg
+
+
+def ezpz_agpt_2b() -> FaultTolerantTrainer.Config:
+    cfg = _base_config("2b")
+    cfg.hf_assets_path = "./assets/hf/gemma-7b"
+    cfg.debug.print_config = True
+    cfg.training.local_batch_size = 2
+    cfg.training.seq_len = 8192
+    cfg.training.dtype = "bfloat16"
+    cfg.dataloader.dataset = "blendcorpus"
+    cfg.dataloader.dataset_path = (
+        f"torchtitan/experiments/ezpz/{ezpz.distributed.get_machine()}/books.txt"
+    )
     cfg.metrics.log_freq = 1
     cfg.metrics.enable_wandb = True
     cfg.compile = CompileConfig(enable=True)
@@ -70,11 +91,15 @@ def ezpz_agpt_2b() -> FaultTolerantTrainer.Config:
 
 def ezpz_agpt_2b_flex_attn() -> FaultTolerantTrainer.Config:
     cfg = _base_config("2b_flex_attn")
+    cfg.hf_assets_path = "./assets/hf/gemma-7b"
     cfg.debug.print_config = True
     cfg.training.local_batch_size = 2
     cfg.training.seq_len = 8192
     cfg.training.dtype = "bfloat16"
     cfg.dataloader.dataset = "blendcorpus"
+    cfg.dataloader.dataset_path = (
+        f"torchtitan/experiments/ezpz/{ezpz.distributed.get_machine()}/books.txt"
+    )
     cfg.metrics.log_freq = 1
     cfg.metrics.enable_wandb = True
     cfg.compile = CompileConfig(enable=True)
@@ -85,11 +110,15 @@ def ezpz_agpt_2b_flex_attn() -> FaultTolerantTrainer.Config:
 
 def ezpz_agpt_7b() -> FaultTolerantTrainer.Config:
     cfg = _base_config("7b")
+    cfg.hf_assets_path = "./assets/hf/llama-2-7b-hf"
     cfg.debug.print_config = True
     cfg.training.local_batch_size = 2
     cfg.training.seq_len = 4096
     cfg.training.dtype = "bfloat16"
     cfg.dataloader.dataset = "blendcorpus"
+    cfg.dataloader.dataset_path = (
+        f"torchtitan/experiments/ezpz/{ezpz.distributed.get_machine()}/books.txt"
+    )
     cfg.metrics.log_freq = 1
     cfg.metrics.enable_wandb = True
     cfg.compile = CompileConfig(enable=True)
@@ -104,11 +133,15 @@ def ezpz_agpt_8b() -> FaultTolerantTrainer.Config:
 
 def ezpz_agpt_20b() -> FaultTolerantTrainer.Config:
     cfg = _base_config("20b")
+    cfg.hf_assets_path = "./assets/hf/gemma-7b"
     cfg.debug.print_config = True
     cfg.training.local_batch_size = 1
     cfg.training.seq_len = 8192
     cfg.training.dtype = "bfloat16"
     cfg.dataloader.dataset = "blendcorpus"
+    cfg.dataloader.dataset_path = (
+        f"torchtitan/experiments/ezpz/{ezpz.distributed.get_machine()}/books.txt"
+    )
     cfg.metrics.log_freq = 1
     cfg.metrics.enable_wandb = True
     cfg.compile = CompileConfig(enable=True)
@@ -119,10 +152,14 @@ def ezpz_agpt_20b() -> FaultTolerantTrainer.Config:
 
 def ezpz_agpt_50b() -> FaultTolerantTrainer.Config:
     cfg = _base_config("50b")
+    cfg.hf_assets_path = "./assets/hf/gemma-7b"
     cfg.training.local_batch_size = 1
     cfg.training.seq_len = 8192
     cfg.training.dtype = "bfloat16"
     cfg.dataloader.dataset = "blendcorpus"
+    cfg.dataloader.dataset_path = (
+        f"torchtitan/experiments/ezpz/{ezpz.distributed.get_machine()}/books.txt"
+    )
     cfg.metrics.log_freq = 1
     cfg.metrics.enable_wandb = True
     cfg.compile = CompileConfig(enable=True)

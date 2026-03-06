@@ -84,7 +84,7 @@ agpt_configs = {
     #         scaling="llama",
     #     ),
     # ),
-    "debug": _build_llama3_config(
+    "debugmodel": _build_llama3_config(
         dim=256,
         n_layers=6,
         n_heads=16,
@@ -215,7 +215,7 @@ agpt_configs = {
         ),
     ),
 }
-agpt_configs["debugmodel"] = agpt_configs["debug"]
+# agpt_configs["debugmodel"] = agpt_configs["debug"]
 agpt_configs["2b"] = agpt_configs["2B"]
 agpt_configs["2b_flex_attn"] = agpt_configs["2B_flex_attn"]
 agpt_configs["7b"] = agpt_configs["7B"]

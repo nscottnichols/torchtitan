@@ -1,4 +1,6 @@
-import ezpz.dist
+import ezpz
+
+import ezpz.distributed
 
 import torch
 import torch.nn as nn
@@ -229,7 +231,7 @@ def apply_compile(model: nn.Module, compile_config: CompileConfig):
 def disable_fsdp_gradient_division(model: nn.Module) -> None:
     force_sum_reduction = False
     if torch.distributed.is_available() and torch.distributed.is_initialized():
-        backend = ezpz.dist.get_torch_backend()
+        backend = ezpz.distributed.get_torch_backend()
         if backend and backend.lower() != "nccl":
             force_sum_reduction = True
 
