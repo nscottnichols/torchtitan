@@ -38,29 +38,52 @@
 1. Launch Training
 
    - AuroraGPT-2B:
-   
+
      ```bash
      MODEL=2b
      DFL=torchtitan/experiments/ezpz/data-lists/$(ezpz_get_machine_name)/books.txt
      ezpz launch python3 -m torchtitan.experiments.ezpz.train \
-        --module ezpz.agpt \
-        --config "ezpz_agpt_${MODEL}" \
-        --training.dataset_path "${DFL}" \
-        --debug.print_config
+         --module ezpz.agpt \
+         --config "ezpz_agpt_${MODEL}" \
+         --training.dataset_path "${DFL}" \
+         --debug.print_config
      ```
-   
+
    - AuroraGPT-7B:
-   
+
      ```bash
      MODEL=7b
      DFL=torchtitan/experiments/ezpz/data-lists/$(ezpz_get_machine_name)/books.txt
      ezpz launch python3 -m torchtitan.experiments.ezpz.train \
-        --module ezpz.agpt \
-        --config "ezpz_agpt_${MODEL}" \
-        --training.dataset_path "${DFL}" \
-        --debug.print_config
+         --module ezpz.agpt \
+         --config "ezpz_agpt_${MODEL}" \
+         --training.dataset_path "${DFL}" \
+         --debug.print_config
      ```
 
+> [!TIP]
+>   - To suppress the `UserWarning: Torchinductor` error seen when using
+>     `--compile.enable` on Aurora, you can export:
+>
+>     ```bash
+>     export SYCL_DISABLE_FSYCL_SYCLHPP_WARNING=1
+>     ```
+
+
+## Launching with `run_train.sh`
+
+- [run_train.sh](torchtitan/experiments/ezpz/run_train.sh)
+
+    ```bash
+    # AuroraGPT-2B model:
+    MODEL=2b bash torchtitan/experiments/ezpz/run_train.sh
+    # or, AuroraGPT-7B model:
+    MODEL=7b bash torchtitan/experiments/ezpz/run_train.sh
+    # or, to specify the data-file-list:
+    MODEL=7b \
+        DFL=torchtitan/experiments/ezpz/data-lists/$(ezpz_get_machine_name)/books.txt \
+        bash torchtitan/experiments/ezpz/run_train.sh
+    ```
 
 ## References
 
