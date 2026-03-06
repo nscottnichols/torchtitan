@@ -10,15 +10,15 @@ import ezpz.distributed
 import ezpz.utils
 import torch
 import torch.distributed
+from torch.distributed import is_initialized, get_rank, get_world_size
 
 from pathlib import Path
-from dataclasses import asdict
 from torchtitan.config import ConfigManager
 from torchtitan.experiments.ezpz.logging import init_logger
 from torchtitan.tools.logging import logger
 
 DEFAULT_MODULE = "ezpz.agpt"
-DEFAULT_CONFIG = "ezpz_agpt_debugmodel"
+DEFAULT_CONFIG = "ezpz_agpt_2b"
 
 fp = Path(__file__)
 WBPROJ_NAME = f"torchtitan.{fp.parent.stem}.{fp.stem}"
@@ -60,7 +60,7 @@ _FLAVOR_TO_CONFIG = {
 def _update_env() -> dict:
     now = datetime.datetime.now()
     dstr = now.strftime("%Y-%m-%d-%H%M%S")
-    env_dict = {
+    env_dict: dict[str, Any] = {
         f"env.{k}": v
         for k, v in dict(os.environ).items()
         if not k.startswith("_") and "API" not in k and "LS_" not in k
@@ -70,7 +70,7 @@ def _update_env() -> dict:
         "day": ezpz.utils.get_timestamp("%d"),
         "DIST_INFO": ezpz.distributed.get_dist_info(),
         "ezpz_file": ezpz.__file__,
-        "ezpz_version": getattr(ezpz, "__version__", None),
+        "ezpz_version": getattr(ezpz, "__version__", "0.0"),
         "hostname": ezpz.distributed.get_hostname(),
         "month": ezpz.utils.get_timestamp("%m"),
         "machine": ezpz.distributed.get_machine(),
@@ -78,7 +78,7 @@ def _update_env() -> dict:
         "project": WBPROJ_NAME,
         "torch_version": torch.__version__,
         "torch_file": torch.__file__,
-        "world_size": ezpz.distributed.get_world_size(),
+        "world_size": str(ezpz.distributed.get_world_size()),
         "year": ezpz.utils.get_timestamp("%Y"),
         "working_directory": os.getcwd(),
     }
@@ -86,9 +86,6 @@ def _update_env() -> dict:
     _ = env_dict.pop("PS1", None)
     logger.info(f"Running on {ezpz.distributed.get_machine()=}")
     logger.info(f"environment={json.dumps(env_dict, indent=4, sort_keys=True)}")
-    #     logger.info(
-    #     f"DistInfo={json.dumps(dist_info, indent=4, sort_keys=True)}"
-    # )
 
     return env_dict
 
@@ -197,9 +194,9 @@ def _translate_legacy_args(args: list[str]) -> list[str]:
 
 def _ensure_rank_env() -> None:
     os.environ.setdefault("LOCAL_RANK", str(ezpz.distributed.get_local_rank()))
-    if torch.distributed.is_initialized():
-        os.environ.setdefault("RANK", str(torch.distributed.get_rank()))
-        os.environ.setdefault("WORLD_SIZE", str(torch.distributed.get_world_size()))
+    if is_initialized():
+        os.environ.setdefault("RANK", str(get_rank()))
+        os.environ.setdefault("WORLD_SIZE", str(get_world_size()))
 
 
 def main(args: list[str] | None = None) -> None:
@@ -213,6 +210,7 @@ def main(args: list[str] | None = None) -> None:
     )
 
     raw_args = sys.argv[1:] if args is None else args
+    # parsed_args = _translate_legacy_args(raw_args)
     parsed_args = _inject_default_module_and_config(_translate_legacy_args(raw_args))
     config_manager = ConfigManager()
     config: Any = config_manager.parse_args(parsed_args)
