@@ -17,6 +17,7 @@ _supported_experiments = frozenset(
         "autoparallel.local_map_deepseek_v3",
         "ft.llama3",
         "ezpz.agpt",
+        "ezpz.moe",
         "rl.unified",
     ]
 )
