@@ -45,21 +45,24 @@ COMM_MODE=${COMM_MODE:-""}
 export LOG_RANK=${LOG_RANK:-0}
 TORCHFT_LIGHTHOUSE=${TORCHFT_LIGHTHOUSE:-"http://localhost:29510"}
 
+CHECKPOINT_DIR="aGPT-${MODEL}-$(basename "${DFL}")-seq${SEQ_LEN}_mb${MBS}_gb${GBS}"
+
 if [ -n "$COMM_MODE" ]; then
-	# Communication mode specified: validate configuration or run in debug mode
-	echo "Running with comm_mode=${COMM_MODE}"
-	NGPU="${NGPU}" LOCAL_RANK=0 python3 -m torchtitan.train \
-		--module "${MODULE}" \
-		--config "${CONFIG}" \
-		"$@" \
-		--comm.mode="${COMM_MODE}" \
-		--training.steps 1
+    # Communication mode specified: validate configuration or run in debug mode
+    echo "Running with comm_mode=${COMM_MODE}"
+    NGPU="${NGPU}" LOCAL_RANK=0 python3 -m torchtitan.experiments.ezpz.train \
+        --module "${MODULE}" \
+        --config "${CONFIG}" \
+        "$@" \
+        --comm.mode="${COMM_MODE}" \
+        --training.steps 1
 else
     TORCHFT_LIGHTHOUSE="${TORCHFT_LIGHTHOUSE}" \
         ezpz launch python3 -m torchtitan.experiments.ezpz.train \
         --debug.print_config \
-		--module "${MODULE}" \
-		--config "${CONFIG}" \
+        --module "${MODULE}" \
+        --config "${CONFIG}" \
         --training.dataset_path "${DFL}" \
-		"$@"
+        --checkpoint.folder "${CHECKPOINT_DIR}" \
+        "$@"
 fi
