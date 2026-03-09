@@ -7,9 +7,11 @@
 import math
 from dataclasses import dataclass
 from typing import cast
+import ezpz
 
 import torch
 from torch import nn
+import torch.nn.functional as F
 from torch.nn.attention.flex_attention import BlockMask
 
 from torchtitan.models.common import trunc_normal_
@@ -25,6 +27,11 @@ from torchtitan.models.common.rope import apply_rotary_emb_single_complex
 from torchtitan.models.utils import get_moe_model_nparams_and_flops
 from torchtitan.tools.logging import logger
 from torchtitan.tools.utils import has_cuda_capability
+
+from torchtitan.models.common.attention import GQAttention
+# from torchtitan.models.common.decoder import Decoder, TransformerBlock
+# from torchtitan.models.utils import get_moe_model_nparams_and_flops
+# from torchtitan.tools.logging import logger
 
 
 class Attention(BaseAttention):
@@ -133,6 +140,13 @@ class Attention(BaseAttention):
         q = q.transpose(1, 2)
         k = k.transpose(1, 2)
         v = v.transpose(1, 2)
+        # pad_v = self.qk_head_dim != self.v_head_dim
+        # if self.qk_head_dim != self.v_head_dim:
+        #     if ezpz.distributed.get_rank() == 0:
+        #         logger.warning("self.qk_head_dim != self.v_head_dim!")
+        #     logger.info(f"{self.qk_head_dim=}")
+        #     logger.info(f"{self.v_head_dim=}")
+        #     # v = F.pad(v, (0, self.qk_head_dim - self.v_head_dim))
 
         match self.attn_backend:
             case "flex":
@@ -144,9 +158,26 @@ class Attention(BaseAttention):
                 assert attention_masks is None
                 output = self.inner_attention(q, k, v, scale=self.softmax_scale)
 
+        # After attention output, before transpose (replace line 147):
+        # if pad_v:
+        #     output = output[..., : self.v_head_dim]
+
         output = output.transpose(1, 2).contiguous()
         output = output.view(bsz, seqlen, -1)
-        return self.wo(output)
+        # try:
+        output = self.wo(output)
+        # except Exception as e:
+        #     logger.info(f"{x.shape=}")
+        #     logger.info(f"{bsz=}")
+
+        #     logger.info(f"{seqlen=}")
+        #     logger.info(f"{q.shape=}")
+        #     logger.info(f"{k.shape=}")
+        #     logger.info(f"{v.shape=}")
+        #     logger.info(f"{output.shape=}")
+        #     ezpz.barrier()
+        #     ezpz.utils.breakpoint(0)
+        return output
 
     def init_weights(self, **kwargs) -> None:
         init_std = kwargs.get("init_std")
@@ -202,9 +233,13 @@ class moeTransformerBlock(TransformerBlock):
         attention_masks: AttentionMasksType | None,
         positions: torch.Tensor | None = None,
     ):
+        # try:
         x = x + self.attention(
             self.attention_norm(x), freqs_cis, attention_masks, positions
         )
+        # except Exception as exc:
+        #     logger.exception(exc)
+        #     ezpz.utils.breakpoint(0)
         if self.moe_enabled:
             x = x + self.moe(self.ffn_norm(x))
         else:
@@ -257,13 +292,13 @@ class moeModel(Decoder):
             self.rope = _dc.replace(self.rope, max_seq_len=seq_len)
 
             # Sync rope fields to attention
-            assert isinstance(self.layer.attention, Attention.Config)
-            self.layer.attention = _dc.replace(
-                self.layer.attention,
-                rope_max_seq_len=seq_len,
-                rope_factor=self.rope.rope_factor,
-                rope_original_seq_len=self.rope.original_seq_len,
-            )
+            # assert isinstance(self.layer.attention, Attention.Config)
+            # self.layer.attention = _dc.replace(
+            #     self.layer.attention,
+            #     rope_max_seq_len=seq_len,
+            #     rope_factor=self.rope.rope_factor,
+            #     rope_original_seq_len=self.rope.original_seq_len,
+            # )
 
             assert self.layer.moe is not None
             if self.layer.moe.use_grouped_mm and not has_cuda_capability(9, 0):
@@ -293,13 +328,22 @@ class moeModel(Decoder):
         def get_nparams_and_flops(
             self, model: nn.Module, seq_len: int
         ) -> tuple[int, int]:
-            assert isinstance(self.layer.attention, Attention.Config)
-            return get_moe_model_nparams_and_flops(
-                self,
-                model,
-                self.layer.attention.n_heads,
-                self.layer.attention.qk_nope_head_dim
-                + self.layer.attention.qk_rope_head_dim
-                + self.layer.attention.v_head_dim,
-                seq_len,
-            )
+            if isinstance(self.layer.attention, Attention.Config):
+                return get_moe_model_nparams_and_flops(
+                    self,
+                    model,
+                    self.layer.attention.n_heads,
+                    self.layer.attention.qk_nope_head_dim
+                    + self.layer.attention.qk_rope_head_dim
+                    + self.layer.attention.v_head_dim,
+                    seq_len,
+                )
+            elif isinstance(self.layer.attention, GQAttention.Config):
+                assert self.layer.attention.head_dim is not None
+                return get_moe_model_nparams_and_flops(
+                    self,
+                    model,
+                    self.layer.attention.n_heads,
+                    2 * self.layer.attention.head_dim,
+                    seq_len,
+                )

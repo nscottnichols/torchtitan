@@ -42,10 +42,43 @@ def moe_debugmodel() -> Trainer.Config:
         hf_assets_path="./tests/assets/tokenizer",
         debug=DebugConfig(print_config=True),
         metrics=MetricsProcessor.Config(log_freq=1, enable_wandb=True),
-        # tokenizer=EZPZTokenizer.Config(backend="hf"),
+        model_spec=model_registry("debugmodel"),
+        tokenizer=EZPZTokenizer.Config(backend="hf"),
+        dataloader=BlendCorpusDataLoader.Config(dataset="blendcorpus"),
+        optimizer=OptimizersContainer.Config(lr=8e-4),
+        lr_scheduler=LRSchedulersContainer.Config(
+            warmup_steps=2,
+            decay_ratio=0.8,
+            decay_type="linear",
+            min_lr_factor=0.0,
+        ),
+        training=TrainingConfig(
+            local_batch_size=8,
+            seq_len=2048,
+            steps=10,
+        ),
+        parallelism=ParallelismConfig(
+            expert_parallel_degree=1,
+            expert_tensor_parallel_degree=1,
+        ),
+        checkpoint=CheckpointManager.Config(
+            interval=10,
+            last_save_model_only=False,
+        ),
+        activation_checkpoint=ActivationCheckpointConfig(
+            mode="selective",
+            selective_ac_option="op",
+        ),
+    )
+
+
+def moe_debugmodel_hf() -> Trainer.Config:
+    return Trainer.Config(
+        hf_assets_path="./tests/assets/tokenizer",
+        debug=DebugConfig(print_config=True),
+        metrics=MetricsProcessor.Config(log_freq=1, enable_wandb=True),
         model_spec=model_registry("debugmodel"),
         dataloader=HuggingFaceTextDataLoader.Config(dataset="c4_test"),
-        # dataloader=BlendCorpusDataLoader.Config(dataset="blendcorpus"),
         optimizer=OptimizersContainer.Config(lr=8e-4),
         lr_scheduler=LRSchedulersContainer.Config(
             warmup_steps=2,
@@ -79,13 +112,90 @@ def moe_debugmodel_flex_attn() -> Trainer.Config:
     return config
 
 
+def moe_debugmodel_flex_attn_hf() -> Trainer.Config:
+    config = moe_debugmodel_hf()
+    config.model_spec = model_registry("debugmodel_flex_attn_hf")
+    return config
+
+
+def moe_small() -> Trainer.Config:
+    return Trainer.Config(
+        hf_assets_path="./tests/assets/tokenizer",
+        debug=DebugConfig(print_config=True),
+        metrics=MetricsProcessor.Config(log_freq=1, enable_wandb=True),
+        model_spec=model_registry("small"),
+        tokenizer=EZPZTokenizer.Config(backend="hf"),
+        dataloader=BlendCorpusDataLoader.Config(dataset="blendcorpus"),
+        optimizer=OptimizersContainer.Config(lr=8e-4),
+        lr_scheduler=LRSchedulersContainer.Config(
+            warmup_steps=2,
+            decay_ratio=0.8,
+            decay_type="linear",
+            min_lr_factor=0.0,
+        ),
+        training=TrainingConfig(
+            local_batch_size=8,
+            seq_len=2048,
+            steps=10,
+        ),
+        parallelism=ParallelismConfig(
+            expert_parallel_degree=1,
+            expert_tensor_parallel_degree=1,
+        ),
+        checkpoint=CheckpointManager.Config(
+            interval=10,
+            last_save_model_only=False,
+        ),
+        activation_checkpoint=ActivationCheckpointConfig(
+            mode="selective",
+            selective_ac_option="op",
+        ),
+    )
+
+
+def moe_small_hf() -> Trainer.Config:
+    return Trainer.Config(
+        hf_assets_path="./assets/hf/gemma-7b",
+        debug=DebugConfig(print_config=True),
+        metrics=MetricsProcessor.Config(log_freq=1, enable_wandb=True),
+        model_spec=model_registry("small"),
+        dataloader=HuggingFaceTextDataLoader.Config(dataset="c4_test"),
+        optimizer=OptimizersContainer.Config(lr=8e-4),
+        lr_scheduler=LRSchedulersContainer.Config(
+            warmup_steps=2,
+            decay_ratio=0.8,
+            decay_type="linear",
+            min_lr_factor=0.0,
+        ),
+        training=TrainingConfig(
+            local_batch_size=8,
+            seq_len=2048,
+            steps=10,
+        ),
+        parallelism=ParallelismConfig(
+            expert_parallel_degree=1,
+            expert_tensor_parallel_degree=1,
+        ),
+        checkpoint=CheckpointManager.Config(
+            interval=10,
+            last_save_model_only=False,
+        ),
+        activation_checkpoint=ActivationCheckpointConfig(
+            mode="selective",
+            selective_ac_option="op",
+        ),
+    )
+
+
 def moe_16b() -> Trainer.Config:
     return Trainer.Config(
         hf_assets_path="./assets/hf/deepseek-moe-16b-base",
         model_spec=model_registry("16B"),
-        dataloader=HuggingFaceTextDataLoader.Config(
-            dataset="c4",
-        ),
+        dataloader=BlendCorpusDataLoader.Config(dataset="c4_test"),
+        tokenizer=EZPZTokenizer.Config(backend="hf"),
+        # dataloader=HuggingFaceTextDataLoader.Config(
+        #     dataset="c4",
+        # ),
         optimizer=OptimizersContainer.Config(lr=2.2e-4),
         lr_scheduler=LRSchedulersContainer.Config(
             decay_ratio=0.8,

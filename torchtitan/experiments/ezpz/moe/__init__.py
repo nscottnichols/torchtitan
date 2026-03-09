@@ -10,6 +10,14 @@ from torchtitan.distributed.pipeline_parallel import pipeline_llm
 from torchtitan.models.common import Embedding, FeedForward, RoPE
 from torchtitan.models.common.moe import MoE
 from torchtitan.protocols.model_spec import ModelSpec
+from torchtitan.models.common import (
+    Embedding,
+    FeedForward,
+    GQAttention,
+    RoPE,
+    compute_ffn_hidden_dim,
+)
+
 # from .model import Attention, moeModel, DeepSeekV3TransformerBlock
 from .model import Attention, moeModel, moeTransformerBlock
 
@@ -23,6 +31,17 @@ __all__ = [
     "moe_configs",
 ]
 
+# attention=Attention.Config(
+#     n_heads=16,
+#     q_lora_rank=0,
+#     kv_lora_rank=512,
+#     qk_nope_head_dim=128,
+#     qk_rope_head_dim=64,
+#     v_head_dim=128,
+#     mscale=0.70,
+#     attn_backend="sdpa",
+#     attn_mask_type="causal",
+# ),
 
 moe_configs = {
     "debugmodel": moeModel.Config(
@@ -97,6 +116,46 @@ moe_configs = {
             dim=64,
             max_seq_len=4096 * 4,
             theta=10000.0,
+            backend="complex",
+            scaling="yarn",
+            rope_factor=40.0,
+            beta_fast=32.0,
+            beta_slow=1.0,
+            original_seq_len=4096,
+        ),
+    ),
+    "small": moeModel.Config(
+        vocab_size=256128,
+        dim=2048,
+        n_layers=12,
+        tok_embeddings=Embedding.Config(),
+        layer=moeTransformerBlock.Config(
+            n_dense_layers=1,
+            moe=MoE.Config(
+                hidden_dim=512,
+                num_experts=64,
+                num_shared_experts=0,
+                top_k=6,
+                score_func="softmax",
+                route_norm=True,
+                route_scale=1.0,
+                score_before_experts=False,
+            ),
+            feed_forward=FeedForward.Config(hidden_dim=2048),
+            attention=GQAttention.Config(
+                n_heads=32,
+                n_kv_heads=4,
+                head_dim=128,
+                qk_norm=True,
+                norm_eps=1e-6,
+                attn_backend="sdpa",
+                rope_backend="complex",
+            ),
+        ),
+        rope=RoPE.Config(
+            dim=64,
+            max_seq_len=256128,
+            theta=50000.0,
             backend="complex",
             scaling="yarn",
             rope_factor=40.0,
@@ -233,6 +292,10 @@ moe_configs = {
         ),
     ),
 }
+
+moe_configs["debugmodel_hf"] = moe_configs["debugmodel"]
+moe_configs["debugmodel_flex_attn_hf"] = moe_configs["debugmodel_flex_attn"]
+# moe_configs["small_hf"] = moe_configs["small"]
 
 
 def model_registry(flavor: str) -> ModelSpec:

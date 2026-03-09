@@ -71,6 +71,10 @@ def ezpz_agpt_debugmodel() -> FaultTolerantTrainer.Config:
     return cfg
 
 
+def agpt_debugmodel() -> FaultTolerantTrainer.Config:
+    return ezpz_agpt_debugmodel()
+
+
 def ezpz_agpt_2b() -> FaultTolerantTrainer.Config:
     cfg = _base_config("2b")
     cfg.hf_assets_path = "./assets/hf/gemma-7b"
@@ -89,6 +93,11 @@ def ezpz_agpt_2b() -> FaultTolerantTrainer.Config:
     cfg.checkpoint.interval = 50
     return cfg
 
+
+def agpt_2b() -> FaultTolerantTrainer.Config:
+    return ezpz_agpt_2b()
+
+
 def ezpz_agpt_2b_flex_attn() -> FaultTolerantTrainer.Config:
     cfg = _base_config("2b_flex_attn")
     cfg.hf_assets_path = "./assets/hf/gemma-7b"
@@ -106,6 +115,10 @@ def ezpz_agpt_2b_flex_attn() -> FaultTolerantTrainer.Config:
     cfg.checkpoint.enable = True
     cfg.checkpoint.interval = 50
     return cfg
+
+
+def agpt_2b_flex_attn() -> FaultTolerantTrainer.Config:
+    return ezpz_agpt_2b_flex_attn()
 
 
 def ezpz_agpt_7b() -> FaultTolerantTrainer.Config:
@@ -127,8 +140,16 @@ def ezpz_agpt_7b() -> FaultTolerantTrainer.Config:
     return cfg
 
 
+def agpt_7b() -> FaultTolerantTrainer.Config:
+    return ezpz_agpt_7b()
+
+
 def ezpz_agpt_8b() -> FaultTolerantTrainer.Config:
     return _base_config("8B")
+
+
+def agpt_8b() -> FaultTolerantTrainer.Config:
+    return ezpz_agpt_8b()
 
 
 def ezpz_agpt_20b() -> FaultTolerantTrainer.Config:
@@ -150,6 +171,10 @@ def ezpz_agpt_20b() -> FaultTolerantTrainer.Config:
     return cfg
 
 
+def agpt_20b() -> FaultTolerantTrainer.Config:
+    return ezpz_agpt_20b()
+
+
 def ezpz_agpt_50b() -> FaultTolerantTrainer.Config:
     cfg = _base_config("50b")
     cfg.hf_assets_path = "./assets/hf/gemma-7b"
@@ -166,3 +191,7 @@ def ezpz_agpt_50b() -> FaultTolerantTrainer.Config:
     cfg.checkpoint.enable = True
     cfg.checkpoint.interval = 50
     return cfg
+
+
+def agpt_50b() -> FaultTolerantTrainer.Config:
+    return ezpz_agpt_50b()

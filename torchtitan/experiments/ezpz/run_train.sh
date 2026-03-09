@@ -45,7 +45,7 @@ COMM_MODE=${COMM_MODE:-""}
 export LOG_RANK=${LOG_RANK:-0}
 TORCHFT_LIGHTHOUSE=${TORCHFT_LIGHTHOUSE:-"http://localhost:29510"}
 
-CHECKPOINT_DIR="aGPT-${MODEL}-$(basename "${DFL}")-seq${SEQ_LEN}_mb${MBS}_gb${GBS}"
+CHECKPOINT_DIR="aGPT-${MODEL}-ws${NGPU}-$(basename "${DFL}")"
 
 if [ -n "$COMM_MODE" ]; then
     # Communication mode specified: validate configuration or run in debug mode

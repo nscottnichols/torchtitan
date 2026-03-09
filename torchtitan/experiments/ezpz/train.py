@@ -24,6 +24,11 @@ fp = Path(__file__)
 WBPROJ_NAME = f"torchtitan.{fp.parent.stem}.{fp.stem}"
 os.environ.setdefault("WANDB_PROJECT", f"{WBPROJ_NAME}")
 
+try:
+    import intel_extension_for_pytorch as ipex
+except Exception:
+    pass
+
 
 _LEGACY_KEY_REMAP = {
     "job.dump-folder": "dump-folder",
@@ -212,6 +217,7 @@ def main(args: list[str] | None = None) -> None:
     raw_args = sys.argv[1:] if args is None else args
     # parsed_args = _translate_legacy_args(raw_args)
     parsed_args = _inject_default_module_and_config(_translate_legacy_args(raw_args))
+    logger.info(f"\n{json.dumps(parsed_args, indent=4, sort_keys=True)}")
     config_manager = ConfigManager()
     config: Any = config_manager.parse_args(parsed_args)
     trainer = None

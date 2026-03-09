@@ -20,8 +20,8 @@ __all__ = [
     "parallelize_llama",
 ]
 
- # backend: Literal['complex', 'cos_sin'] = "complex",
- #    scaling: Literal['none', 'llama', 'yarn'] = "none",
+# backend: Literal['complex', 'cos_sin'] = "complex",
+#    scaling: Literal['none', 'llama', 'yarn'] = "none",
 
 
 def _build_llama3_config(
@@ -33,8 +33,8 @@ def _build_llama3_config(
     rope_theta: int,
     vocab_size: int,
     hidden_dim: int,
-    attn_backend:  str = "sdpa",
-    rope_backend:  Literal["complex", "cos_sin"] = "complex",
+    attn_backend: str = "sdpa",
+    rope_backend: Literal["complex", "cos_sin"] = "complex",
     scaling: Literal["none", "llama", "yarn"] = "none",
     max_seq_len: int = 131072,
 ) -> Llama3Model.Config:
@@ -49,7 +49,7 @@ def _build_llama3_config(
                 n_heads=n_heads,
                 n_kv_heads=n_kv_heads,
                 attn_backend=attn_backend,
-                rope_backend=rope_backend
+                rope_backend=rope_backend,
             ),
         ),
         rope=RoPE.Config(
