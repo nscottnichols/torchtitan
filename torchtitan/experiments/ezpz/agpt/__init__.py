@@ -8,6 +8,7 @@ from torchtitan.models.common import (
     Embedding,
     FeedForward,
     GQAttention,
+    RMSNorm,
     RoPE,
     compute_ffn_hidden_dim,
 )
@@ -43,7 +44,10 @@ def _build_llama3_config(
         n_layers=n_layers,
         vocab_size=vocab_size,
         tok_embeddings=Embedding.Config(),
+        norm=RMSNorm.Config(),
         layer=Llama3TransformerBlock.Config(
+            attention_norm=RMSNorm.Config(),
+            ffn_norm=RMSNorm.Config(),
             feed_forward=FeedForward.Config(hidden_dim=hidden_dim),
             attention=GQAttention.Config(
                 n_heads=n_heads,
@@ -98,7 +102,10 @@ agpt_configs = {
         n_layers=6,
         vocab_size=2048,
         tok_embeddings=Embedding.Config(),
+        norm=RMSNorm.Config(),
         layer=Llama3TransformerBlock.Config(
+            attention_norm=RMSNorm.Config(),
+            ffn_norm=RMSNorm.Config(),
             feed_forward=FeedForward.Config(
                 hidden_dim=compute_ffn_hidden_dim(256, multiple_of=256)
             ),
@@ -122,7 +129,10 @@ agpt_configs = {
         n_layers=6,
         vocab_size=2048,
         tok_embeddings=Embedding.Config(),
+        norm=RMSNorm.Config(),
         layer=Llama3TransformerBlock.Config(
+            attention_norm=RMSNorm.Config(),
+            ffn_norm=RMSNorm.Config(),
             feed_forward=FeedForward.Config(
                 hidden_dim=compute_ffn_hidden_dim(256, multiple_of=256)
             ),
@@ -155,7 +165,10 @@ agpt_configs = {
         n_layers=12,
         vocab_size=256128,
         tok_embeddings=Embedding.Config(),
+        norm=RMSNorm.Config(),
         layer=Llama3TransformerBlock.Config(
+            attention_norm=RMSNorm.Config(),
+            ffn_norm=RMSNorm.Config(),
             feed_forward=FeedForward.Config(
                 hidden_dim=compute_ffn_hidden_dim(2048, multiple_of=1024)
             ),

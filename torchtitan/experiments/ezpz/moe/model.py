@@ -14,7 +14,7 @@ from torch import nn
 import torch.nn.functional as F
 from torch.nn.attention.flex_attention import BlockMask
 
-from torchtitan.models.common import trunc_normal_
+from torchtitan.models.common.rmsnorm import RMSNorm
 from torchtitan.models.common.attention import (
     AttentionMasksType,
     BaseAttention,
@@ -49,7 +49,8 @@ class Attention(BaseAttention):
         qk_nope_head_dim: int = 128
         qk_rope_head_dim: int = 64
         v_head_dim: int = 128
-        norm_eps: float = 1e-5
+        q_norm: RMSNorm.Config
+        kv_norm: RMSNorm.Config
         attn_backend: str = "sdpa"
         attn_mask_type: str = "causal"
         mscale: float = 1.0
@@ -72,14 +73,14 @@ class Attention(BaseAttention):
             self.wq = nn.Linear(self.dim, self.n_heads * self.qk_head_dim, bias=False)
         else:
             self.wq_a = nn.Linear(self.dim, self.q_lora_rank, bias=False)
-            self.q_norm = nn.RMSNorm(self.q_lora_rank, eps=config.norm_eps)
+            self.q_norm = config.q_norm.build(normalized_shape=self.q_lora_rank)
             self.wq_b = nn.Linear(
                 self.q_lora_rank, self.n_heads * self.qk_head_dim, bias=False
             )
         self.wkv_a = nn.Linear(
             self.dim, self.kv_lora_rank + self.qk_rope_head_dim, bias=False
         )
-        self.kv_norm = nn.RMSNorm(self.kv_lora_rank, eps=config.norm_eps)
+        self.kv_norm = config.kv_norm.build(normalized_shape=self.kv_lora_rank)
         self.wkv_b = nn.Linear(
             self.kv_lora_rank,
             self.n_heads * (self.qk_nope_head_dim + self.v_head_dim),
@@ -192,12 +193,12 @@ class Attention(BaseAttention):
             linear_list.append(self.wq)
 
         for linear in linear_list:
-            trunc_normal_(linear.weight, mean=0.0, std=0.02)
-        trunc_normal_(self.wo.weight, mean=0.0, std=init_std)
+            nn.init.trunc_normal_(linear.weight, mean=0.0, std=0.02)
+        nn.init.trunc_normal_(self.wo.weight, mean=0.0, std=init_std)
 
-        self.kv_norm.reset_parameters()
+        self.kv_norm.init_weights()
         if self.q_lora_rank > 0:
-            self.q_norm.reset_parameters()
+            self.q_norm.init_weights()
 
 
 class moeTransformerBlock(TransformerBlock):
@@ -212,8 +213,8 @@ class moeTransformerBlock(TransformerBlock):
     def __init__(self, config: Config, *, layer_id: int, dim: int, n_layers: int):
         super().__init__()
         self.attention = config.attention.build(dim=dim)
-        self.attention_norm = nn.RMSNorm(dim, eps=config.norm_eps)
-        self.ffn_norm = nn.RMSNorm(dim, eps=config.norm_eps)
+        self.attention_norm = config.attention_norm.build(normalized_shape=dim)
+        self.ffn_norm = config.ffn_norm.build(normalized_shape=dim)
 
         self.moe_enabled = layer_id >= config.n_dense_layers
         if self.moe_enabled:
@@ -250,7 +251,7 @@ class moeTransformerBlock(TransformerBlock):
         buffer_device = kwargs.get("buffer_device")
         assert buffer_device is not None
         for norm in (self.attention_norm, self.ffn_norm):
-            norm.reset_parameters()
+            norm.init_weights()
         self.attention.init_weights(init_std=self.weight_init_std)
         if self.moe_enabled:
             cast(MoE, self.moe).init_weights(

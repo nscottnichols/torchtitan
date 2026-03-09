@@ -7,16 +7,16 @@
 from torchtitan.components.loss import build_cross_entropy_loss
 from torchtitan.components.optimizer import register_moe_load_balancing_hook
 from torchtitan.distributed.pipeline_parallel import pipeline_llm
-from torchtitan.models.common import Embedding, FeedForward, RoPE
-from torchtitan.models.common.moe import MoE
-from torchtitan.protocols.model_spec import ModelSpec
 from torchtitan.models.common import (
     Embedding,
     FeedForward,
     GQAttention,
+    RMSNorm,
     RoPE,
     compute_ffn_hidden_dim,
 )
+from torchtitan.models.common.moe import MoE
+from torchtitan.protocols.model_spec import ModelSpec
 
 # from .model import Attention, moeModel, DeepSeekV3TransformerBlock
 from .model import Attention, moeModel, moeTransformerBlock
@@ -49,8 +49,11 @@ moe_configs = {
         dim=256,
         n_layers=6,
         tok_embeddings=Embedding.Config(),
+        norm=RMSNorm.Config(),
         layer=moeTransformerBlock.Config(
             n_dense_layers=1,
+            attention_norm=RMSNorm.Config(),
+            ffn_norm=RMSNorm.Config(),
             moe=MoE.Config(
                 hidden_dim=256,
                 num_experts=8,
@@ -68,6 +71,8 @@ moe_configs = {
                 qk_rope_head_dim=64,
                 v_head_dim=128,
                 mscale=0.70,
+                q_norm=RMSNorm.Config(),
+                kv_norm=RMSNorm.Config(),
             ),
             feed_forward=FeedForward.Config(hidden_dim=1024),
         ),
@@ -88,8 +93,11 @@ moe_configs = {
         dim=256,
         n_layers=6,
         tok_embeddings=Embedding.Config(),
+        norm=RMSNorm.Config(),
         layer=moeTransformerBlock.Config(
             n_dense_layers=1,
+            attention_norm=RMSNorm.Config(),
+            ffn_norm=RMSNorm.Config(),
             moe=MoE.Config(
                 hidden_dim=256,
                 num_experts=8,
@@ -107,6 +115,8 @@ moe_configs = {
                 qk_rope_head_dim=64,
                 v_head_dim=128,
                 mscale=0.70,
+                q_norm=RMSNorm.Config(),
+                kv_norm=RMSNorm.Config(),
                 attn_backend="flex",
                 attn_mask_type="block_causal",
             ),
@@ -129,8 +139,11 @@ moe_configs = {
         dim=2048,
         n_layers=12,
         tok_embeddings=Embedding.Config(),
+        norm=RMSNorm.Config(),
         layer=moeTransformerBlock.Config(
             n_dense_layers=1,
+            attention_norm=RMSNorm.Config(),
+            ffn_norm=RMSNorm.Config(),
             moe=MoE.Config(
                 hidden_dim=512,
                 num_experts=64,
@@ -146,8 +159,8 @@ moe_configs = {
                 n_heads=32,
                 n_kv_heads=4,
                 head_dim=128,
-                qk_norm=True,
-                norm_eps=1e-6,
+                q_norm=RMSNorm.Config(eps=1e-6),
+                k_norm=RMSNorm.Config(eps=1e-6),
                 attn_backend="sdpa",
                 rope_backend="complex",
             ),
@@ -169,8 +182,11 @@ moe_configs = {
         dim=2048,
         n_layers=27,
         tok_embeddings=Embedding.Config(),
+        norm=RMSNorm.Config(),
         layer=moeTransformerBlock.Config(
             n_dense_layers=1,
+            attention_norm=RMSNorm.Config(),
+            ffn_norm=RMSNorm.Config(),
             moe=MoE.Config(
                 hidden_dim=1408,
                 num_experts=64,
@@ -188,6 +204,8 @@ moe_configs = {
                 qk_rope_head_dim=64,
                 v_head_dim=128,
                 mscale=0.70,
+                q_norm=RMSNorm.Config(),
+                kv_norm=RMSNorm.Config(),
                 attn_backend="flex",
                 attn_mask_type="block_causal",
             ),
@@ -210,8 +228,11 @@ moe_configs = {
         dim=5120,
         n_layers=60,
         tok_embeddings=Embedding.Config(),
+        norm=RMSNorm.Config(),
         layer=moeTransformerBlock.Config(
             n_dense_layers=1,
+            attention_norm=RMSNorm.Config(),
+            ffn_norm=RMSNorm.Config(),
             moe=MoE.Config(
                 hidden_dim=1536,
                 num_experts=160,
@@ -231,6 +252,8 @@ moe_configs = {
                 qk_nope_head_dim=128,
                 qk_rope_head_dim=64,
                 v_head_dim=128,
+                q_norm=RMSNorm.Config(),
+                kv_norm=RMSNorm.Config(),
                 attn_backend="flex",
                 attn_mask_type="block_causal",
             ),
@@ -253,8 +276,11 @@ moe_configs = {
         dim=7168,
         n_layers=61,
         tok_embeddings=Embedding.Config(),
+        norm=RMSNorm.Config(),
         layer=moeTransformerBlock.Config(
             n_dense_layers=3,
+            attention_norm=RMSNorm.Config(),
+            ffn_norm=RMSNorm.Config(),
             moe=MoE.Config(
                 hidden_dim=2048,
                 num_experts=256,
@@ -274,6 +300,8 @@ moe_configs = {
                 qk_nope_head_dim=128,
                 qk_rope_head_dim=64,
                 v_head_dim=128,
+                q_norm=RMSNorm.Config(),
+                kv_norm=RMSNorm.Config(),
                 attn_backend="flex",
                 attn_mask_type="block_causal",
             ),
