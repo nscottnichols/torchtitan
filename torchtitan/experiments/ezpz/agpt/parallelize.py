@@ -5,7 +5,7 @@ import ezpz.distributed
 import torch
 import torch.nn as nn
 from torch.distributed._composable.fsdp import FSDPModule
-from torch.distributed._composable.replicate import replicate
+from torch.distributed._composable.replicate_with_fsdp import replicate
 from torch.distributed.device_mesh import DeviceMesh
 from torch.distributed.fsdp import CPUOffloadPolicy, fully_shard, MixedPrecisionPolicy
 from torch.distributed.tensor import Replicate, Shard
@@ -130,13 +130,11 @@ def parallelize_llama(
         if training.enable_cpu_offload:
             logger.info("Applied CPU Offloading to the model")
     elif parallel_dims.dp_replicate_enabled:
-        dp_replicate_mesh = parallel_dims.get_mesh("dp_replicate")
-        if parallel_dims.world_size != dp_replicate_mesh.size():
-            raise RuntimeError("DDP has not supported > 1D parallelism")
-        apply_ddp(
+        apply_replicate(
             model,
-            dp_replicate_mesh,
-            enable_compile=model_compile_enabled,
+            parallel_dims.get_mesh("dp_replicate"),
+            param_dtype=TORCH_DTYPE_MAP[training.mixed_precision_param],
+            reduce_dtype=TORCH_DTYPE_MAP[training.mixed_precision_reduce],
         )
 
     return model
@@ -293,13 +291,34 @@ def apply_fsdp(
     disable_fsdp_gradient_division(model)
 
 
-def apply_ddp(
+def apply_replicate(
     model: nn.Module,
     dp_mesh: DeviceMesh,
-    enable_compile: bool,
+    param_dtype: torch.dtype,
+    reduce_dtype: torch.dtype,
 ):
-    if enable_compile:
-        torch._dynamo.config.optimize_ddp = "ddp_optimizer"
+    mp_policy = MixedPrecisionPolicy(param_dtype=param_dtype, reduce_dtype=reduce_dtype)
+    replicate_config = {"mesh": dp_mesh, "mp_policy": mp_policy}
 
-    replicate(model, device_mesh=dp_mesh, bucket_cap_mb=100)
-    logger.info("Applied DDP to the model")
+    if model.tok_embeddings is not None:
+        replicate(
+            model.tok_embeddings,
+            **replicate_config,
+        )
+    for layer_id, transformer_block in model.layers.items():
+        replicate(
+            transformer_block,
+            **replicate_config,
+        )
+
+    if model.norm is not None and model.output is not None:
+        replicate(
+            [model.norm, model.output],
+            **replicate_config,
+        )
+    replicate(model, **replicate_config)
+
+    # Disable Replicate's automatic gradient division (ReplicateModule inherits from FSDPModule)
+    disable_fsdp_gradient_division(model)
+
+    logger.info("Applied replicate to the model")
