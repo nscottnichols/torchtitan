@@ -1,6 +1,9 @@
 # mypy: allow-untyped-decorators
 # mypy: allow-untyped-defs
-from typing import cast, Callable, List, Optional, Tuple, Union
+from __future__ import annotations
+
+from collections.abc import Callable
+from typing import cast
 
 import torch
 from torch import Tensor
@@ -34,20 +37,20 @@ class ADOPT(Optimizer):
     def __init__(
         self,
         params: ParamsT,
-        lr: Union[float, Tensor] = 1e-3,
-        betas: Tuple[float, float] = (0.9, 0.9999),
+        lr: float | Tensor = 1e-3,
+        betas: tuple[float, float] = (0.9, 0.9999),
         eps: float = 1e-6,
-        clip_lambda: Optional[Callable[[int], float]] = lambda step: (
+        clip_lambda: Callable[[int], float] | None = lambda step: (
             step**0.25
         ),
         weight_decay: float = 0.0,
         decouple: bool = False,
         *,
-        foreach: Optional[bool] = None,
+        foreach: bool | None = None,
         maximize: bool = False,
         capturable: bool = False,
         differentiable: bool = False,
-        fused: Optional[bool] = None,
+        fused: bool | None = None,
     ):
         if isinstance(lr, Tensor):
             if foreach and not capturable:
@@ -204,11 +207,11 @@ class ADOPT(Optimizer):
                 loss = closure()
 
         for group in self.param_groups:
-            params_with_grad: List[Tensor] = []
-            grads: List[Tensor] = []
-            exp_avgs: List[Tensor] = []
-            exp_avg_sqs: List[Tensor] = []
-            state_steps: List[Tensor] = []
+            params_with_grad: list[Tensor] = []
+            grads: list[Tensor] = []
+            exp_avgs: list[Tensor] = []
+            exp_avg_sqs: list[Tensor] = []
+            state_steps: list[Tensor] = []
             beta1, beta2 = group["betas"]
 
             has_complex = self._init_group(
@@ -247,19 +250,19 @@ class ADOPT(Optimizer):
 
 
 def _single_tensor_adopt(
-    params: List[Tensor],
-    grads: List[Tensor],
-    exp_avgs: List[Tensor],
-    exp_avg_sqs: List[Tensor],
-    state_steps: List[Tensor],
-    grad_scale: Optional[Tensor],
-    found_inf: Optional[Tensor],
+    params: list[Tensor],
+    grads: list[Tensor],
+    exp_avgs: list[Tensor],
+    exp_avg_sqs: list[Tensor],
+    state_steps: list[Tensor],
+    grad_scale: Tensor | None,
+    found_inf: Tensor | None,
     *,
     has_complex: bool,
     beta1: float,
     beta2: float,
-    lr: Union[float, Tensor],
-    clip_lambda: Optional[Callable[[int], float]],
+    lr: float | Tensor,
+    clip_lambda: Callable[[int], float] | None,
     weight_decay: float,
     decouple: bool,
     eps: float,
@@ -329,19 +332,19 @@ def _single_tensor_adopt(
 
 
 def _multi_tensor_adopt(
-    params: List[Tensor],
-    grads: List[Tensor],
-    exp_avgs: List[Tensor],
-    exp_avg_sqs: List[Tensor],
-    state_steps: List[Tensor],
-    grad_scale: Optional[Tensor],
-    found_inf: Optional[Tensor],
+    params: list[Tensor],
+    grads: list[Tensor],
+    exp_avgs: list[Tensor],
+    exp_avg_sqs: list[Tensor],
+    state_steps: list[Tensor],
+    grad_scale: Tensor | None,
+    found_inf: Tensor | None,
     *,
     has_complex: bool,
     beta1: float,
     beta2: float,
-    lr: Union[float, Tensor],
-    clip_lambda: Optional[Callable[[int], float]],
+    lr: float | Tensor,
+    clip_lambda: Callable[[int], float] | None,
     weight_decay: float,
     decouple: bool,
     eps: float,
@@ -384,11 +387,11 @@ def _multi_tensor_adopt(
         device_exp_avg_sqs_,
         device_state_steps_,
     ), _ in grouped_tensors.values():
-        device_params = cast(List[Tensor], device_params_)
-        device_grads = cast(List[Tensor], device_grads_)
-        device_exp_avgs = cast(List[Tensor], device_exp_avgs_)
-        device_exp_avg_sqs = cast(List[Tensor], device_exp_avg_sqs_)
-        device_state_steps = cast(List[Tensor], device_state_steps_)
+        device_params = cast(list[Tensor], device_params_)
+        device_grads = cast(list[Tensor], device_grads_)
+        device_exp_avgs = cast(list[Tensor], device_exp_avgs_)
+        device_exp_avg_sqs = cast(list[Tensor], device_exp_avg_sqs_)
+        device_state_steps = cast(list[Tensor], device_state_steps_)
 
         # Handle complex parameters
         if has_complex:
@@ -471,19 +474,19 @@ def _multi_tensor_adopt(
 
 
 def _fused_adopt(
-    params: List[Tensor],
-    grads: List[Tensor],
-    exp_avgs: List[Tensor],
-    exp_avg_sqs: List[Tensor],
-    state_steps: List[Tensor],
-    grad_scale: Optional[Tensor],
-    found_inf: Optional[Tensor],
+    params: list[Tensor],
+    grads: list[Tensor],
+    exp_avgs: list[Tensor],
+    exp_avg_sqs: list[Tensor],
+    state_steps: list[Tensor],
+    grad_scale: Tensor | None,
+    found_inf: Tensor | None,
     *,
     has_complex: bool,  # Needed for consistency.
     beta1: float,
     beta2: float,
-    lr: Union[float, Tensor],
-    clip_lambda: Optional[Callable[[int], float]],
+    lr: float | Tensor,
+    clip_lambda: Callable[[int], float] | None,
     weight_decay: float,
     decouple: bool,
     eps: float,
@@ -496,25 +499,25 @@ def _fused_adopt(
 
 @_disable_dynamo_if_unsupported(single_tensor_fn=_single_tensor_adopt)
 def adopt(
-    params: List[Tensor],
-    grads: List[Tensor],
-    exp_avgs: List[Tensor],
-    exp_avg_sqs: List[Tensor],
-    state_steps: List[Tensor],
+    params: list[Tensor],
+    grads: list[Tensor],
+    exp_avgs: list[Tensor],
+    exp_avg_sqs: list[Tensor],
+    state_steps: list[Tensor],
     # kwonly args with defaults are not supported by functions compiled with torchscript issue #70627
     # setting this as kwarg for now as functional API is compiled by torch/distributed/optim
-    foreach: Optional[bool] = None,
+    foreach: bool | None = None,
     capturable: bool = False,
     differentiable: bool = False,
-    fused: Optional[bool] = None,
-    grad_scale: Optional[Tensor] = None,
-    found_inf: Optional[Tensor] = None,
+    fused: bool | None = None,
+    grad_scale: Tensor | None = None,
+    found_inf: Tensor | None = None,
     has_complex: bool = False,
     *,
     beta1: float,
     beta2: float,
-    lr: Union[float, Tensor],
-    clip_lambda: Optional[Callable[[int], float]],
+    lr: float | Tensor,
+    clip_lambda: Callable[[int], float] | None,
     weight_decay: float,
     decouple: bool,
     eps: float,

@@ -1,9 +1,10 @@
-import os
-import torch
 import math
+from collections.abc import Callable, Iterable
+from typing import Any
+
+import torch
 import torch.distributed as dist
 from torch import Tensor
-from typing import Iterable, Optional, Callable, List, Dict, Any
 
 
 # This code snippet is a modified version adapted from the following GitHub repository:
@@ -57,10 +58,11 @@ class Muon(torch.optim.Optimizer):
             ns_steps=ns_steps,
             adamw_betas=adamw_betas,
             adamw_eps=adamw_eps,
+            adjuster_lr_ref=adjuster_lr_ref,
         )
 
         # Initialize the base optimizer with all parameter groups
-        super(Muon, self).__init__(params, defaults)
+        super().__init__(params, defaults)
 
         # Process parameter groups to determine which will use Muon and which will use AdamW
         for i, group in enumerate(self.param_groups):
@@ -98,7 +100,7 @@ class Muon(torch.optim.Optimizer):
         """
         Handle state loading for the optimizer.
         """
-        super(Muon, self).__setstate__(state)
+        super().__setstate__(state)
 
         # Ensure all parameter groups have the required defaults
         for group in self.param_groups:
@@ -157,6 +159,7 @@ class Muon(torch.optim.Optimizer):
             ns_steps = group["ns_steps"]
             adamw_betas = group["adamw_betas"]
             adamw_eps = group["adamw_eps"]
+            adjuster_lr_ref = group["adjuster_lr_ref"]
 
             # Get use_muon_list (initialize if not present)
             if "use_muon_list" not in group or not group["use_muon_list"]:
@@ -278,8 +281,8 @@ class QKInputRecorder:
     """
 
     def __init__(self, auto_clear: bool = True):
-        self._buffers: Dict[int, Tensor] = {}
-        self._handles: List[Any] = []
+        self._buffers: dict[int, Tensor] = {}
+        self._handles: list[Any] = []
         self._auto_clear = auto_clear
         self._retrieved: set = set()  # Track which buffers were retrieved
 
@@ -294,12 +297,12 @@ class QKInputRecorder:
 
         return _capture
 
-    def attach(self, module) -> Callable[[], Optional[Tensor]]:
+    def attach(self, module) -> Callable[[], Tensor | None]:
         key = id(module)
         handle = module.register_forward_pre_hook(self._make_hook(key))
         self._handles.append(handle)
 
-        def getter() -> Optional[Tensor]:
+        def getter() -> Tensor | None:
             tensor = self._buffers.get(key, None)
             if tensor is not None:
                 self._retrieved.add(key)
@@ -351,9 +354,9 @@ class MuonClip(Muon):
         momentum: float = 0.95,
         nesterov: bool = True,
         ns_steps: int = 5,
-        adamw_betas=(0.95, 0.95),
+        adamw_betas: tuple[float, float] = (0.95, 0.95),
         adamw_eps: float = 1e-8,
-        adjuster_lr_ref=False,
+        adjuster_lr_ref: bool = False,
         # MuonClip extras:
         qk_clip: bool = True,
         clip_t: float = 100.0,
@@ -375,9 +378,10 @@ class MuonClip(Muon):
         self._clip_t_default = float(clip_t)
         self._alpha_default = float(alpha)
         self._use_sqrt_d = bool(use_sqrt_d)
-        self._pairs: List[
-            Dict[str, Any]
+        self._pairs: list[
+            dict[str, Any]
         ] = []  # W_q, W_k, x_getter, d_head, t, alpha
+        self._recorders: list[QKInputRecorder] = []
 
     # --------- Registration APIs ---------
 
@@ -385,11 +389,11 @@ class MuonClip(Muon):
         self,
         W_q: Tensor,
         W_k: Tensor,
-        x_getter: Callable[[], Optional[Tensor]],
+        x_getter: Callable[[], Tensor | None],
         *,
-        d_head: Optional[int] = None,
-        t: Optional[float] = None,
-        alpha: Optional[float] = None,
+        d_head: int | None = None,
+        t: float | None = None,
+        alpha: float | None = None,
     ):
         """Register a Q/K weight pair for clipping."""
         # Validate tensor shapes
@@ -415,12 +419,12 @@ class MuonClip(Muon):
         self,
         attn_module: torch.nn.Module,
         *,
-        recorder: Optional[QKInputRecorder] = None,
+        recorder: QKInputRecorder | None = None,
         q_attr: str = "q_proj",
         k_attr: str = "k_proj",
-        d_head: Optional[int] = None,
-        t: Optional[float] = None,
-        alpha: Optional[float] = None,
+        d_head: int | None = None,
+        t: float | None = None,
+        alpha: float | None = None,
     ):
         """
         Convenience hook for the common case with separate q/k Linear modules.
@@ -443,6 +447,8 @@ class MuonClip(Muon):
             t=t,
             alpha=alpha,
         )
+        if recorder not in self._recorders:
+            self._recorders.append(recorder)
         return recorder  # keep this object alive somewhere!
 
     # ------------- Core step --------------
@@ -454,7 +460,7 @@ class MuonClip(Muon):
         W_k: Tensor,
         x: Tensor,
         *,
-        d_head: Optional[int],
+        d_head: int | None,
         t: float,
         alpha: float,
         eps: float = 1e-12,
@@ -558,5 +564,5 @@ class MuonClip(Muon):
         for recorder in self._recorders:
             try:
                 recorder.remove()
-            except:
+            except Exception:
                 pass  # Ignore errors during cleanup

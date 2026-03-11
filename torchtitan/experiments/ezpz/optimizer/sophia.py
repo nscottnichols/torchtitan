@@ -1,8 +1,6 @@
-import math
 import torch
 from torch import Tensor
 from torch.optim.optimizer import Optimizer
-from typing import List, Optional
 
 
 # SOphiaG implementation from https://github.com/Liuhong99/Sophia/blob/main/sophia.py, copy pasted here because no pip and not sure about submodules
@@ -39,7 +37,7 @@ class SophiaG(Optimizer):
             maximize=maximize,
             capturable=capturable,
         )
-        super(SophiaG, self).__init__(params, defaults)
+        super().__init__(params, defaults)
 
     def __setstate__(self, state):
         super().__setstate__(state)
@@ -153,11 +151,11 @@ class SophiaG(Optimizer):
 
 
 def sophiag(
-    params: List[Tensor],
-    grads: List[Tensor],
-    exp_avgs: List[Tensor],
-    hessian: List[Tensor],
-    state_steps: List[Tensor],
+    params: list[Tensor],
+    grads: list[Tensor],
+    exp_avgs: list[Tensor],
+    hessian: list[Tensor],
+    state_steps: list[Tensor],
     capturable: bool = False,
     *,
     bs: int,
@@ -194,11 +192,11 @@ def sophiag(
 
 
 def _single_tensor_sophiag(
-    params: List[Tensor],
-    grads: List[Tensor],
-    exp_avgs: List[Tensor],
-    hessian: List[Tensor],
-    state_steps: List[Tensor],
+    params: list[Tensor],
+    grads: list[Tensor],
+    exp_avgs: list[Tensor],
+    hessian: list[Tensor],
+    state_steps: list[Tensor],
     *,
     bs: int,
     beta1: float,
