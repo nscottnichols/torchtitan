@@ -1,3 +1,9 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+#
+# This source code is licensed under the BSD-style license found in the
+# LICENSE file in the root directory of this source tree.
+
 from typing import Literal
 
 from torchtitan.components.loss import build_cross_entropy_loss
@@ -5,12 +11,12 @@ from torchtitan.distributed.pipeline_parallel import pipeline_llm
 from torchtitan.experiments.ezpz.agpt.parallelize import parallelize_llama
 from torchtitan.experiments.ft.diloco import fragment_llm
 from torchtitan.models.common import (
+    compute_ffn_hidden_dim,
     Embedding,
     FeedForward,
     GQAttention,
     RMSNorm,
     RoPE,
-    compute_ffn_hidden_dim,
 )
 from torchtitan.models.llama3.model import Llama3Model, Llama3TransformerBlock
 from torchtitan.models.llama3.state_dict_adapter import Llama3StateDictAdapter

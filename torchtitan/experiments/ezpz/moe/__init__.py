@@ -8,12 +8,12 @@ from torchtitan.components.loss import build_cross_entropy_loss
 from torchtitan.components.optimizer import register_moe_load_balancing_hook
 from torchtitan.distributed.pipeline_parallel import pipeline_llm
 from torchtitan.models.common import (
+    compute_ffn_hidden_dim,
     Embedding,
     FeedForward,
     GQAttention,
     RMSNorm,
     RoPE,
-    compute_ffn_hidden_dim,
 )
 from torchtitan.models.common.moe import MoE
 from torchtitan.protocols.model_spec import ModelSpec

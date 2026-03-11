@@ -18,9 +18,9 @@ logger = ezpz.get_logger(__name__)
 
 class SPTokenizer:
     def __init__(self, model_path: str):
-        assert isinstance(model_path, (str, os.PathLike)) and model_path, (
-            f"SP model path must be a non-empty string, got: {model_path!r}"
-        )
+        assert (
+            isinstance(model_path, (str, os.PathLike)) and model_path
+        ), f"SP model path must be a non-empty string, got: {model_path!r}"
         model_path = str(model_path)
         # Accept a directory containing tokenizer.model or a direct .model file
         spm_file = (
@@ -56,9 +56,9 @@ class SPTokenizer:
         # Safety: range check
         if ids:
             mn, mx = min(ids), max(ids)
-            assert mn >= 0 and mx < self.vocab_size, (
-                f"Token IDs out of range: min={mn}, max={mx}, vocab_size={self.vocab_size}"
-            )
+            assert (
+                mn >= 0 and mx < self.vocab_size
+            ), f"Token IDs out of range: min={mn}, max={mx}, vocab_size={self.vocab_size}"
         return ids
 
     def decode(self, ids: list[int]) -> str:

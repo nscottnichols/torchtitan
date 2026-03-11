@@ -13,12 +13,12 @@ from torchtitan.config import (
     ParallelismConfig,
     TrainingConfig,
 )
-from torchtitan.hf_datasets.text_datasets import HuggingFaceTextDataLoader
-from torchtitan.trainer import Trainer
 from torchtitan.experiments.ezpz.blendcorpus.blendcorpus_builder import (
     BlendCorpusDataLoader,
 )
 from torchtitan.experiments.ezpz.blendcorpus.build_tokenizer import EZPZTokenizer
+from torchtitan.hf_datasets.text_datasets import HuggingFaceTextDataLoader
+from torchtitan.trainer import Trainer
 
 from . import model_registry
 

@@ -15,19 +15,19 @@ from torchtitan.components.quantization.float8 import (
 from torchtitan.config import (
     ActivationCheckpointConfig,
     CompileConfig,
+    DebugConfig,
     ParallelismConfig,
     TrainingConfig,
-    DebugConfig,
 )
 from torchtitan.experiments.ezpz.blendcorpus.blendcorpus_builder import (
     BlendCorpusDataLoader,
 )
 from torchtitan.experiments.ezpz.blendcorpus.build_tokenizer import EZPZTokenizer
+from torchtitan.experiments.ft.trainer import FaultTolerantTrainer
 from torchtitan.hf_datasets.text_datasets import HuggingFaceTextDataLoader
 from torchtitan.protocols.model_converter import ModelConvertersContainer
 
 from torchtitan.trainer import Trainer
-from torchtitan.experiments.ft.trainer import FaultTolerantTrainer
 
 from . import model_registry
 

@@ -1,7 +1,15 @@
-import os
-import sys
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+#
+# This source code is licensed under the BSD-style license found in the
+# LICENSE file in the root directory of this source tree.
+
 import datetime
 import json
+import os
+import sys
+
+from pathlib import Path
 
 from typing import Any
 
@@ -10,9 +18,8 @@ import ezpz.distributed
 import ezpz.utils
 import torch
 import torch.distributed
-from torch.distributed import is_initialized, get_rank, get_world_size
+from torch.distributed import get_rank, get_world_size, is_initialized
 
-from pathlib import Path
 from torchtitan.config import ConfigManager
 from torchtitan.experiments.ezpz.logging import init_logger
 from torchtitan.tools.logging import logger
@@ -247,12 +254,12 @@ def main(args: list[str] | None = None) -> None:
                     logger.exception(e)
 
         if config.checkpoint.create_seed_checkpoint:
-            assert int(os.environ["WORLD_SIZE"]) == 1, (
-                "Must create seed checkpoint using a single device, to disable sharding."
-            )
-            assert config.checkpoint.enable, (
-                "Must enable checkpointing when creating a seed checkpoint."
-            )
+            assert (
+                int(os.environ["WORLD_SIZE"]) == 1
+            ), "Must create seed checkpoint using a single device, to disable sharding."
+            assert (
+                config.checkpoint.enable
+            ), "Must enable checkpointing when creating a seed checkpoint."
             trainer.checkpointer.save(curr_step=0, last_step=True)
             logger.info("Created seed checkpoint")
         else:

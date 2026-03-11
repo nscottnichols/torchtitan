@@ -1,3 +1,9 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+#
+# This source code is licensed under the BSD-style license found in the
+# LICENSE file in the root directory of this source tree.
+
 import ezpz
 
 import ezpz.distributed
@@ -60,7 +66,9 @@ def parallelize_llama(
     ac_config: ActivationCheckpointConfig,
     dump_folder: str,
 ):
-    assert training.seq_len % parallel_dims.seq_len_divisor == 0, f"""
+    assert (
+        training.seq_len % parallel_dims.seq_len_divisor == 0
+    ), f"""
         Sequence length {training.seq_len} must be divisible by the product of TP degree
         ({parallel_dims.tp}) and 2 * CP degree ({parallel_dims.cp}).
         """

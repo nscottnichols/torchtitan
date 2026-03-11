@@ -7,28 +7,30 @@
 import math
 from dataclasses import dataclass
 from typing import cast
+
 import ezpz
 
 import torch
-from torch import nn
 import torch.nn.functional as F
+from torch import nn
 from torch.nn.attention.flex_attention import BlockMask
 
-from torchtitan.models.common.rmsnorm import RMSNorm
 from torchtitan.models.common.attention import (
     AttentionMasksType,
     BaseAttention,
     FlexAttentionWrapper,
+    GQAttention,
     ScaledDotProductAttentionWrapper,
 )
 from torchtitan.models.common.decoder import Decoder, TransformerBlock
 from torchtitan.models.common.moe import MoE
+
+from torchtitan.models.common.rmsnorm import RMSNorm
 from torchtitan.models.common.rope import apply_rotary_emb_single_complex
 from torchtitan.models.utils import get_moe_model_nparams_and_flops
 from torchtitan.tools.logging import logger
 from torchtitan.tools.utils import has_cuda_capability
 
-from torchtitan.models.common.attention import GQAttention
 # from torchtitan.models.common.decoder import Decoder, TransformerBlock
 # from torchtitan.models.utils import get_moe_model_nparams_and_flops
 # from torchtitan.tools.logging import logger
