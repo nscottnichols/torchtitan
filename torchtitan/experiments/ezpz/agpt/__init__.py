@@ -94,7 +94,7 @@ agpt_configs = {
         n_heads=16,
         n_kv_heads=None,
         rope_theta=500000,
-        vocab_size=2048,
+        vocab_size=32000,
         hidden_dim=compute_ffn_hidden_dim(256, multiple_of=256),
     ),
     "debugmodel_flex_attn": Llama3Model.Config(
