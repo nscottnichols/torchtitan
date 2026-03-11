@@ -209,11 +209,38 @@ def _build_optimizer_config(
 ) -> OptimizersContainer.Config:
     """Build optimizer Config from name, base config, and CLI overrides."""
     config_cls = _OPTIMIZER_CONFIGS[name]
+    base_cls = OptimizersContainer.Config
     kwargs: dict[str, Any] = {}
 
+    # Collect base class field defaults so we can detect subclass overrides
+    base_field_defaults: dict[str, Any] = {
+        f.name: f.default
+        for f in dataclasses.fields(base_cls)
+        if f.default is not dataclasses.MISSING
+    }
+
     for field in dataclasses.fields(config_cls):
-        # Copy shared fields from the base config (e.g. lr, weight_decay)
-        if hasattr(base, field.name):
+        if not hasattr(base, field.name):
+            continue  # subclass-only field — let its own default apply
+
+        base_default = base_field_defaults.get(field.name, dataclasses.MISSING)
+        sub_default = (
+            field.default
+            if field.default is not dataclasses.MISSING
+            else dataclasses.MISSING
+        )
+
+        if (
+            base_default is not dataclasses.MISSING
+            and sub_default is not dataclasses.MISSING
+            and base_default != sub_default
+        ):
+            # Subclass intentionally overrode this default (e.g. name="Muon",
+            # beta1=0.95) — keep the subclass value, don't clobber with base
+            kwargs[field.name] = sub_default
+        else:
+            # Shared field with same default — copy from base so config
+            # registry values (lr, weight_decay, etc.) propagate
             kwargs[field.name] = getattr(base, field.name)
 
     # Apply CLI overrides with type coercion
