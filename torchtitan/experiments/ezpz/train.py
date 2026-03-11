@@ -4,6 +4,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import dataclasses
 import datetime
 import json
 import os
@@ -20,8 +21,15 @@ import torch
 import torch.distributed
 from torch.distributed import get_rank, get_world_size, is_initialized
 
+from torchtitan.components.optimizer import OptimizersContainer
 from torchtitan.config import ConfigManager
 from torchtitan.experiments.ezpz.logging import init_logger
+from torchtitan.experiments.ezpz.optimizer import (
+    ADOPTOptimizersContainer,
+    MuonClipOptimizersContainer,
+    MuonOptimizersContainer,
+    SophiaGOptimizersContainer,
+)
 from torchtitan.tools.logging import logger
 
 DEFAULT_MODULE = "ezpz.agpt"
@@ -66,6 +74,15 @@ _FLAVOR_TO_CONFIG = {
     "auroragpt-7b": "ezpz_agpt_7b",
     "auroragpt7b": "ezpz_agpt_7b",
     "llama3-8b": "ezpz_agpt_8b",
+}
+
+_OPTIMIZER_CONFIGS: dict[str, type[OptimizersContainer.Config]] = {
+    "adamw": OptimizersContainer.Config,
+    "adam": OptimizersContainer.Config,
+    "adopt": ADOPTOptimizersContainer.Config,
+    "sophiag": SophiaGOptimizersContainer.Config,
+    "muon": MuonOptimizersContainer.Config,
+    "muonclip": MuonClipOptimizersContainer.Config,
 }
 
 
@@ -114,6 +131,114 @@ def _inject_default_module_and_config(args: list[str]) -> list[str]:
     if not _has_flag(merged, "config"):
         merged = ["--config", DEFAULT_CONFIG, *merged]
     return merged
+
+
+def _extract_optimizer_args(
+    args: list[str],
+) -> tuple[str | None, dict[str, str], list[str]]:
+    """Extract ``--optimizer name`` and ``--optimizer.*`` overrides from args.
+
+    Only activates when ``--optimizer`` (bare) is present. If absent,
+    all args pass through to tyro unchanged.
+
+    Returns:
+        (optimizer_name, overrides_dict, remaining_args)
+    """
+    # Quick check: is --optimizer present as a standalone flag?
+    has_bare_optimizer = False
+    for i, arg in enumerate(args):
+        if arg == "--optimizer":
+            has_bare_optimizer = True
+            break
+    if not has_bare_optimizer:
+        return None, {}, list(args)
+
+    optimizer_name: str | None = None
+    overrides: dict[str, str] = {}
+    remaining: list[str] = []
+    i = 0
+    while i < len(args):
+        token = args[i]
+
+        # --optimizer <name> (bare, no dot)
+        if token == "--optimizer":
+            if i + 1 < len(args) and not args[i + 1].startswith("--"):
+                optimizer_name = args[i + 1].strip().lower()
+                i += 2
+                continue
+            else:
+                raise ValueError("--optimizer requires a name (e.g. --optimizer muon)")
+
+        # --optimizer.field value  or  --optimizer.field=value
+        if token.startswith("--optimizer."):
+            if "=" in token:
+                key_part, value = token.split("=", 1)
+                field_name = key_part.removeprefix("--optimizer.")
+                overrides[field_name] = value
+                i += 1
+            else:
+                field_name = token.removeprefix("--optimizer.")
+                if i + 1 < len(args) and not args[i + 1].startswith("--"):
+                    overrides[field_name] = args[i + 1]
+                    i += 2
+                else:
+                    # Boolean flag with no value — treat as "true"
+                    overrides[field_name] = "true"
+                    i += 1
+            continue
+
+        remaining.append(token)
+        i += 1
+
+    if optimizer_name is None:
+        raise ValueError("--optimizer flag found but no name provided")
+
+    if optimizer_name not in _OPTIMIZER_CONFIGS:
+        available = ", ".join(sorted(_OPTIMIZER_CONFIGS.keys()))
+        raise ValueError(
+            f"Unknown optimizer '{optimizer_name}'. Available: {available}"
+        )
+
+    return optimizer_name, overrides, remaining
+
+
+def _build_optimizer_config(
+    name: str,
+    base: OptimizersContainer.Config,
+    overrides: dict[str, str],
+) -> OptimizersContainer.Config:
+    """Build optimizer Config from name, base config, and CLI overrides."""
+    config_cls = _OPTIMIZER_CONFIGS[name]
+    kwargs: dict[str, Any] = {}
+
+    for field in dataclasses.fields(config_cls):
+        # Copy shared fields from the base config (e.g. lr, weight_decay)
+        if hasattr(base, field.name):
+            kwargs[field.name] = getattr(base, field.name)
+
+    # Apply CLI overrides with type coercion
+    for raw_key, raw_value in overrides.items():
+        field_name = raw_key.replace("-", "_")
+        # Find the matching field for type info
+        matching = [f for f in dataclasses.fields(config_cls) if f.name == field_name]
+        if not matching:
+            available = [f.name for f in dataclasses.fields(config_cls)]
+            raise ValueError(
+                f"Unknown optimizer field '{field_name}' for {name}. "
+                f"Available: {available}"
+            )
+        field = matching[0]
+        # Coerce string to field type
+        if field.type is bool or field.type == "bool":
+            kwargs[field_name] = raw_value.lower() in ("true", "1", "yes")
+        elif field.type is int or field.type == "int":
+            kwargs[field_name] = int(raw_value)
+        elif field.type is float or field.type == "float":
+            kwargs[field_name] = float(raw_value)
+        else:
+            kwargs[field_name] = raw_value
+
+    return config_cls(**kwargs)
 
 
 def _canonicalize_option(option: str) -> str:
@@ -222,11 +347,28 @@ def main(args: list[str] | None = None) -> None:
     )
 
     raw_args = sys.argv[1:] if args is None else args
-    # parsed_args = _translate_legacy_args(raw_args)
     parsed_args = _inject_default_module_and_config(_translate_legacy_args(raw_args))
+
+    # Extract --optimizer before tyro sees it (tyro only knows the base Config)
+    optimizer_name, optimizer_overrides, parsed_args = _extract_optimizer_args(
+        parsed_args
+    )
+
     logger.info(f"\n{json.dumps(parsed_args, indent=4, sort_keys=True)}")
     config_manager = ConfigManager()
     config: Any = config_manager.parse_args(parsed_args)
+
+    # Swap in the correct optimizer Config subclass if --optimizer was specified
+    if optimizer_name is not None:
+        config.optimizer = _build_optimizer_config(
+            optimizer_name,
+            config.optimizer,
+            optimizer_overrides,
+        )
+        logger.info(
+            "Using optimizer: %s (%s)", optimizer_name, type(config.optimizer).__name__
+        )
+
     trainer = None
 
     try:
