@@ -18,6 +18,42 @@ from torchtitan.experiments.ft.trainer import FaultTolerantTrainer
 from . import model_registry
 
 
+def agpt_debugmodel() -> FaultTolerantTrainer.Config:
+    return ezpz_agpt_debugmodel()
+
+
+def agpt_2b() -> FaultTolerantTrainer.Config:
+    return ezpz_agpt_2b()
+
+
+def agpt_2b_hf() -> FaultTolerantTrainer.Config:
+    cfg = ezpz_agpt_2b()
+    cfg.dataloader.dataset_path = None
+    return cfg
+
+
+def agpt_2b_flex_attn() -> FaultTolerantTrainer.Config:
+    return ezpz_agpt_2b_flex_attn()
+
+
+def agpt_7b() -> FaultTolerantTrainer.Config:
+    return ezpz_agpt_7b()
+
+
+def agpt_7b_hf() -> FaultTolerantTrainer.Config:
+    cfg = ezpz_agpt_7b()
+    cfg.dataloader.dataset_path = None
+    return cfg
+
+
+def ezpz_agpt_8b() -> FaultTolerantTrainer.Config:
+    return _base_config("8B")
+
+
+def agpt_8b() -> FaultTolerantTrainer.Config:
+    return ezpz_agpt_8b()
+
+
 def _base_config(flavor: str) -> FaultTolerantTrainer.Config:
     return FaultTolerantTrainer.Config(
         hf_assets_path="./tests/assets/tokenizer",
@@ -60,8 +96,9 @@ def ezpz_agpt_debugmodel() -> FaultTolerantTrainer.Config:
     cfg.training.seq_len = 8192
     cfg.training.dtype = "bfloat16"
     cfg.dataloader.dataset = "blendcorpus"
+    machine_name = ezpz.distributed.get_machine().lower()
     cfg.dataloader.dataset_path = (
-        f"torchtitan/experiments/ezpz/{ezpz.distributed.get_machine()}/books.txt"
+        f"torchtitan/experiments/ezpz/data-lists/{machine_name}/books.txt"
     )
     cfg.metrics.log_freq = 1
     cfg.metrics.enable_wandb = True
@@ -69,10 +106,6 @@ def ezpz_agpt_debugmodel() -> FaultTolerantTrainer.Config:
     cfg.checkpoint.enable = True
     cfg.checkpoint.interval = 50
     return cfg
-
-
-def agpt_debugmodel() -> FaultTolerantTrainer.Config:
-    return ezpz_agpt_debugmodel()
 
 
 def ezpz_agpt_2b() -> FaultTolerantTrainer.Config:
@@ -83,8 +116,9 @@ def ezpz_agpt_2b() -> FaultTolerantTrainer.Config:
     cfg.training.seq_len = 8192
     cfg.training.dtype = "bfloat16"
     cfg.dataloader.dataset = "blendcorpus"
+    machine_name = ezpz.distributed.get_machine().lower()
     cfg.dataloader.dataset_path = (
-        f"torchtitan/experiments/ezpz/{ezpz.distributed.get_machine()}/books.txt"
+        f"torchtitan/experiments/ezpz/data-lists/{machine_name}/books.txt"
     )
     cfg.metrics.log_freq = 1
     cfg.metrics.enable_wandb = True
@@ -92,10 +126,6 @@ def ezpz_agpt_2b() -> FaultTolerantTrainer.Config:
     cfg.checkpoint.enable = True
     cfg.checkpoint.interval = 50
     return cfg
-
-
-def agpt_2b() -> FaultTolerantTrainer.Config:
-    return ezpz_agpt_2b()
 
 
 def ezpz_agpt_2b_flex_attn() -> FaultTolerantTrainer.Config:
@@ -106,8 +136,9 @@ def ezpz_agpt_2b_flex_attn() -> FaultTolerantTrainer.Config:
     cfg.training.seq_len = 8192
     cfg.training.dtype = "bfloat16"
     cfg.dataloader.dataset = "blendcorpus"
+    machine_name = ezpz.distributed.get_machine().lower()
     cfg.dataloader.dataset_path = (
-        f"torchtitan/experiments/ezpz/{ezpz.distributed.get_machine()}/books.txt"
+        f"torchtitan/experiments/ezpz/data-lists/{machine_name}/books.txt"
     )
     cfg.metrics.log_freq = 1
     cfg.metrics.enable_wandb = True
@@ -115,10 +146,6 @@ def ezpz_agpt_2b_flex_attn() -> FaultTolerantTrainer.Config:
     cfg.checkpoint.enable = True
     cfg.checkpoint.interval = 50
     return cfg
-
-
-def agpt_2b_flex_attn() -> FaultTolerantTrainer.Config:
-    return ezpz_agpt_2b_flex_attn()
 
 
 def ezpz_agpt_7b() -> FaultTolerantTrainer.Config:
@@ -129,27 +156,15 @@ def ezpz_agpt_7b() -> FaultTolerantTrainer.Config:
     cfg.training.seq_len = 4096
     cfg.training.dtype = "bfloat16"
     cfg.dataloader.dataset = "blendcorpus"
+    machine_name = ezpz.distributed.get_machine().lower()
     cfg.dataloader.dataset_path = (
-        f"torchtitan/experiments/ezpz/{ezpz.distributed.get_machine()}/books.txt"
+        f"torchtitan/experiments/ezpz/data-lists/{machine_name}/books.txt"
     )
-    cfg.metrics.log_freq = 1
     cfg.metrics.enable_wandb = True
     cfg.compile = CompileConfig(enable=True)
     cfg.checkpoint.enable = True
     cfg.checkpoint.interval = 50
     return cfg
-
-
-def agpt_7b() -> FaultTolerantTrainer.Config:
-    return ezpz_agpt_7b()
-
-
-def ezpz_agpt_8b() -> FaultTolerantTrainer.Config:
-    return _base_config("8B")
-
-
-def agpt_8b() -> FaultTolerantTrainer.Config:
-    return ezpz_agpt_8b()
 
 
 def ezpz_agpt_20b() -> FaultTolerantTrainer.Config:
@@ -160,8 +175,9 @@ def ezpz_agpt_20b() -> FaultTolerantTrainer.Config:
     cfg.training.seq_len = 8192
     cfg.training.dtype = "bfloat16"
     cfg.dataloader.dataset = "blendcorpus"
+    machine_name = ezpz.distributed.get_machine().lower()
     cfg.dataloader.dataset_path = (
-        f"torchtitan/experiments/ezpz/{ezpz.distributed.get_machine()}/books.txt"
+        f"torchtitan/experiments/ezpz/data-lists/{machine_name}/books.txt"
     )
     cfg.metrics.log_freq = 1
     cfg.metrics.enable_wandb = True
@@ -182,8 +198,9 @@ def ezpz_agpt_50b() -> FaultTolerantTrainer.Config:
     cfg.training.seq_len = 8192
     cfg.training.dtype = "bfloat16"
     cfg.dataloader.dataset = "blendcorpus"
+    machine_name = ezpz.distributed.get_machine().lower()
     cfg.dataloader.dataset_path = (
-        f"torchtitan/experiments/ezpz/{ezpz.distributed.get_machine()}/books.txt"
+        f"torchtitan/experiments/ezpz/data-lists/{machine_name}/books.txt"
     )
     cfg.metrics.log_freq = 1
     cfg.metrics.enable_wandb = True
