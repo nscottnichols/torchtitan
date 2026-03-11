@@ -404,6 +404,13 @@ def main(args: list[str] | None = None) -> None:
             return
 
         trainer = config.build()
+
+        # SophiaG requires a hessian EMA update each step before the param update
+        if isinstance(trainer.optimizers, SophiaGOptimizersContainer):
+            trainer.optimizers.register_step_pre_hook(
+                lambda *_args, **_kwargs: trainer.optimizers.update_hessian()
+            )
+
         if ezpz.distributed.get_rank() == 0 and ezpz.distributed.verify_wandb():
             try:
                 run = ezpz.distributed.setup_wandb(
