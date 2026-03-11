@@ -90,7 +90,7 @@ def _update_env() -> dict:
     _ = env_dict.pop("LS_COLORS", None)
     _ = env_dict.pop("PS1", None)
     logger.info(f"Running on {ezpz.distributed.get_machine()=}")
-    logger.info(f"environment={json.dumps(env_dict, indent=4, sort_keys=True)}")
+    # logger.info(f"environment={json.dumps(env_dict, indent=4, sort_keys=True)}")
 
     return env_dict
 
