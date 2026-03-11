@@ -25,7 +25,9 @@ from torchtitan.experiments.ezpz.blendcorpus.blendcorpus_builder import (
 from torchtitan.experiments.ezpz.blendcorpus.build_tokenizer import EZPZTokenizer
 from torchtitan.hf_datasets.text_datasets import HuggingFaceTextDataLoader
 from torchtitan.protocols.model_converter import ModelConvertersContainer
+
 from torchtitan.trainer import Trainer
+from torchtitan.experiments.ft.trainer import FaultTolerantTrainer
 
 from . import model_registry
 
@@ -37,8 +39,8 @@ from . import model_registry
 # cfg.compile = CompileConfig(enable=True)
 # cfg.checkpoint.enable = True
 # cfg.checkpoint.interval = 50
-def moe_debugmodel() -> Trainer.Config:
-    return Trainer.Config(
+def moe_debugmodel() -> FaultTolerantTrainer.Config:
+    return FaultTolerantTrainer.Config(
         hf_assets_path="./tests/assets/tokenizer",
         debug=DebugConfig(print_config=True),
         metrics=MetricsProcessor.Config(log_freq=1, enable_wandb=True),
@@ -72,8 +74,8 @@ def moe_debugmodel() -> Trainer.Config:
     )
 
 
-def moe_debugmodel_hf() -> Trainer.Config:
-    return Trainer.Config(
+def moe_debugmodel_hf() -> FaultTolerantTrainer.Config:
+    return FaultTolerantTrainer.Config(
         hf_assets_path="./tests/assets/tokenizer",
         debug=DebugConfig(print_config=True),
         metrics=MetricsProcessor.Config(log_freq=1, enable_wandb=True),
@@ -106,20 +108,20 @@ def moe_debugmodel_hf() -> Trainer.Config:
     )
 
 
-def moe_debugmodel_flex_attn() -> Trainer.Config:
+def moe_debugmodel_flex_attn() -> FaultTolerantTrainer.Config:
     config = moe_debugmodel()
     config.model_spec = model_registry("debugmodel_flex_attn")
     return config
 
 
-def moe_debugmodel_flex_attn_hf() -> Trainer.Config:
+def moe_debugmodel_flex_attn_hf() -> FaultTolerantTrainer.Config:
     config = moe_debugmodel_hf()
     config.model_spec = model_registry("debugmodel_flex_attn_hf")
     return config
 
 
-def moe_small() -> Trainer.Config:
-    return Trainer.Config(
+def moe_small() -> FaultTolerantTrainer.Config:
+    return FaultTolerantTrainer.Config(
         hf_assets_path="./tests/assets/tokenizer",
         debug=DebugConfig(print_config=True),
         metrics=MetricsProcessor.Config(log_freq=1, enable_wandb=True),
@@ -153,8 +155,8 @@ def moe_small() -> Trainer.Config:
     )
 
 
-def moe_small_hf() -> Trainer.Config:
-    return Trainer.Config(
+def moe_small_hf() -> FaultTolerantTrainer.Config:
+    return FaultTolerantTrainer.Config(
         hf_assets_path="./assets/hf/gemma-7b",
         debug=DebugConfig(print_config=True),
         metrics=MetricsProcessor.Config(log_freq=1, enable_wandb=True),
@@ -187,8 +189,8 @@ def moe_small_hf() -> Trainer.Config:
     )
 
 
-def moe_16b() -> Trainer.Config:
-    return Trainer.Config(
+def moe_16b() -> FaultTolerantTrainer.Config:
+    return FaultTolerantTrainer.Config(
         hf_assets_path="./assets/hf/deepseek-moe-16b-base",
         model_spec=model_registry("16B"),
         dataloader=BlendCorpusDataLoader.Config(dataset="c4_test"),
@@ -221,8 +223,8 @@ def moe_16b() -> Trainer.Config:
     )
 
 
-def moe_671b() -> Trainer.Config:
-    return Trainer.Config(
+def moe_671b() -> FaultTolerantTrainer.Config:
+    return FaultTolerantTrainer.Config(
         hf_assets_path="./assets/hf/DeepSeek-V3.1-Base",
         model_spec=model_registry("671B"),
         dataloader=HuggingFaceTextDataLoader.Config(
