@@ -143,13 +143,20 @@ class Attention(BaseAttention):
         q = q.transpose(1, 2)
         k = k.transpose(1, 2)
         v = v.transpose(1, 2)
-        # pad_v = self.qk_head_dim != self.v_head_dim
-        # if self.qk_head_dim != self.v_head_dim:
-        #     if ezpz.distributed.get_rank() == 0:
-        #         logger.warning("self.qk_head_dim != self.v_head_dim!")
-        #     logger.info(f"{self.qk_head_dim=}")
-        #     logger.info(f"{self.v_head_dim=}")
-        #     # v = F.pad(v, (0, self.qk_head_dim - self.v_head_dim))
+
+        # NOTE: The XPU SDPA backend on Aurora doesn't properly handle
+        # different head dimensions for Q/K vs V.
+        # On Intel XPU (Aurora), F.scaled_dot_product_attention returns output
+        # with Q/K's head dimension instead of V's.
+        # Standard CUDA backends correctly return (B, H, L, Ev) when E != Ev,
+        # but the XPU MATH backend does not.
+        pad_v = self.qk_head_dim != self.v_head_dim
+        if pad_v:
+            # if ezpz.distributed.get_rank() == 0:
+            #     logger.warning("self.qk_head_dim != self.v_head_dim!")
+            # logger.info(f"{self.qk_head_dim=}")
+            # logger.info(f"{self.v_head_dim=}")
+            v = F.pad(v, (0, self.qk_head_dim - self.v_head_dim))
 
         match self.attn_backend:
             case "flex":
@@ -162,24 +169,12 @@ class Attention(BaseAttention):
                 output = self.inner_attention(q, k, v, scale=self.softmax_scale)
 
         # After attention output, before transpose (replace line 147):
-        # if pad_v:
-        #     output = output[..., : self.v_head_dim]
+        if pad_v:
+            output = output[..., : self.v_head_dim]
 
         output = output.transpose(1, 2).contiguous()
         output = output.view(bsz, seqlen, -1)
-        # try:
         output = self.wo(output)
-        # except Exception as e:
-        #     logger.info(f"{x.shape=}")
-        #     logger.info(f"{bsz=}")
-
-        #     logger.info(f"{seqlen=}")
-        #     logger.info(f"{q.shape=}")
-        #     logger.info(f"{k.shape=}")
-        #     logger.info(f"{v.shape=}")
-        #     logger.info(f"{output.shape=}")
-        #     ezpz.barrier()
-        #     ezpz.utils.breakpoint(0)
         return output
 
     def init_weights(self, **kwargs) -> None:
