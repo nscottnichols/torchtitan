@@ -45,7 +45,7 @@ __all__ = [
 
 moe_configs = {
     "debugmodel": moeModel.Config(
-        vocab_size=2048,
+        vocab_size=32000,
         dim=256,
         n_layers=6,
         tok_embeddings=Embedding.Config(),
@@ -89,7 +89,7 @@ moe_configs = {
         ),
     ),
     "debugmodel_flex_attn": moeModel.Config(
-        vocab_size=2048,
+        vocab_size=32000,
         dim=256,
         n_layers=6,
         tok_embeddings=Embedding.Config(),
@@ -137,7 +137,7 @@ moe_configs = {
     "small": moeModel.Config(
         vocab_size=256128,
         dim=2048,
-        n_layers=12,
+        n_layers=24,
         tok_embeddings=Embedding.Config(),
         norm=RMSNorm.Config(),
         layer=moeTransformerBlock.Config(
@@ -147,22 +147,26 @@ moe_configs = {
             moe=MoE.Config(
                 hidden_dim=512,
                 num_experts=64,
-                num_shared_experts=0,
+                num_shared_experts=2,
                 top_k=6,
                 score_func="softmax",
                 route_norm=True,
                 route_scale=1.0,
                 score_before_experts=False,
             ),
-            feed_forward=FeedForward.Config(hidden_dim=2048),
-            attention=GQAttention.Config(
-                n_heads=32,
-                n_kv_heads=4,
-                head_dim=128,
-                q_norm=RMSNorm.Config(eps=1e-6),
-                k_norm=RMSNorm.Config(eps=1e-6),
-                attn_backend="sdpa",
-                rope_backend="complex",
+            feed_forward=FeedForward.Config(hidden_dim=4096),
+            attention=Attention.Config(
+                n_heads=16,
+                q_lora_rank=0,
+                kv_lora_rank=512,
+                qk_nope_head_dim=128,
+                qk_rope_head_dim=64,
+                v_head_dim=128,
+                mscale=0.70,
+                q_norm=RMSNorm.Config(),
+                kv_norm=RMSNorm.Config(),
+                attn_backend="flex",
+                attn_mask_type="block_causal",
             ),
         ),
         rope=RoPE.Config(
