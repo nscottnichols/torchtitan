@@ -1,5 +1,5 @@
 #!/bin/bash --login
-#PBS -N agpt-2b-sophiag-olmo-mix
+#PBS -N agpt-20b-sophiag-olmo-mix
 #PBS -l select=256
 #PBS -l walltime=06:00:00
 #PBS -l filesystems=home:flare
@@ -9,7 +9,7 @@
 #PBS -j oe
 
 # ---- Configuration ----
-MODEL="2b"
+MODEL="20b"
 NNODES=256
 SEQ_LEN=8192
 GBS=6144
@@ -21,7 +21,7 @@ DFL="torchtitan/experiments/ezpz/data-lists/aurora/olmo-mix-1124.txt"
 OPTIMIZER="sophiag"
 LR="2.28e-5"
 
-CKPT_DIR="checkpoints/agpt-2b-${OPTIMIZER}-olmo-mix-1124-n${NNODES}-gbs${GBS}"
+CKPT_DIR="checkpoints/agpt-${MODEL}-${OPTIMIZER}-olmo-mix-1124-n${NNODES}-gbs${GBS}"
 
 # ---- Environment ----
 cd "${PBS_O_WORKDIR}" || exit 1
@@ -37,6 +37,8 @@ ezpz launch python3 -m torchtitan.experiments.ezpz.train \
     --module ezpz.agpt \
     --config "agpt_${MODEL}" \
     --debug.print-config \
+    --training.local-batch-size 1 \
+    --activation_checkpoint.mode full \
     --training.global-batch-size "${GBS}" \
     --training.seq-len "${SEQ_LEN}" \
     --training.steps "${TRAINING_STEPS}" \
