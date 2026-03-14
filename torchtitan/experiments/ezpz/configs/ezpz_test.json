@@ -8,7 +8,6 @@
   },
   "training": {
     "local_batch_size": 1,
-    "global_batch_size": 96,
     "seq_len": 8096,
     "steps": 100
   },

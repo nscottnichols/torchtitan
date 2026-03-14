@@ -1,7 +1,6 @@
 {
   "training": {
     "local_batch_size": 2,
-    "global_batch_size": 48,
     "seq_len": 4096,
     "steps": 1000,
     "gc_freq": 1000
@@ -50,8 +49,7 @@
     "num_workers": 2,
     "persistent_workers": true,
     "prefetch_factor": 2,
-    "train_iters": 1000,
-    "global_batch_size": 48
+    "train_iters": 1000
   },
   "compile": {
     "enable": false

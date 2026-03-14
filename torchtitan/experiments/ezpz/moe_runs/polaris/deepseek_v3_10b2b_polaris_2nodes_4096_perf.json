@@ -1,7 +1,6 @@
 {
   "training": {
     "local_batch_size": 1,
-    "global_batch_size": 8,
     "seq_len": 4096,
     "steps": 1000,
     "gc_freq": 200
@@ -43,8 +42,7 @@
   "dataloader": {
     "dataset": "blendcorpus",
     "dataset_path": "torchtitan/experiments/ezpz/data-lists/aurora/nvidia-math1-code2.txt",
-    "train_iters": 1000,
-    "global_batch_size": 24
+    "train_iters": 1000
   },
   "compile": {
     "enable": false

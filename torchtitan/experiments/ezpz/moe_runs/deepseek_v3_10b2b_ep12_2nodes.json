@@ -1,7 +1,6 @@
 {
   "training": {
     "local_batch_size": 1,
-    "global_batch_size": 48,
     "seq_len": 4096,
     "steps": 1000
   },
