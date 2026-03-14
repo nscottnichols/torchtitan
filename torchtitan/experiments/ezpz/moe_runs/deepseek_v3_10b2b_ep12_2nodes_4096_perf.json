@@ -41,7 +41,7 @@
   },
   "dataloader": {
     "dataset": "blendcorpus",
-    "dataset_path": "torchtitan/experiments/ezpz/data-lists/aurora/nvidia-math1-code2.txt",
+    "dataset_path": "torchtitan/experiments/ezpz/data-lists/aurora/books.txt",
     "train_iters": 1000
   },
   "compile": {
