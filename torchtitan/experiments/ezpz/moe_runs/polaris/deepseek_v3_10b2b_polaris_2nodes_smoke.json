@@ -36,7 +36,8 @@
     "load_step": -1
   },
   "dataloader": {
-    "dataset": "c4_test"
+    "dataset": "blendcorpus",
+    "dataset_path": "torchtitan/experiments/ezpz/data-lists/polaris/books.txt"
   },
   "compile": {
     "enable": false
