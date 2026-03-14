@@ -317,6 +317,41 @@ def moe_671b() -> FaultTolerantTrainer.Config:
     )
 
 
+def moe_10b_2b() -> FaultTolerantTrainer.Config:
+    return FaultTolerantTrainer.Config(
+        hf_assets_path="./assets/hf/gemma-7b",
+        debug=DebugConfig(print_config=True),
+        metrics=MetricsProcessor.Config(log_freq=1, enable_wandb=True),
+        model_spec=model_registry("10B_2B"),
+        tokenizer=EZPZTokenizer.Config(backend="hf"),
+        dataloader=BlendCorpusDataLoader.Config(dataset="blendcorpus"),
+        optimizer=OptimizersContainer.Config(lr=2.2e-4),
+        lr_scheduler=LRSchedulersContainer.Config(
+            warmup_steps=200,
+            decay_ratio=0.8,
+            decay_type="cosine",
+            min_lr_factor=0.1,
+        ),
+        training=TrainingConfig(
+            local_batch_size=1,
+            seq_len=4096,
+            steps=1000,
+        ),
+        parallelism=ParallelismConfig(
+            expert_parallel_degree=1,
+            expert_tensor_parallel_degree=1,
+        ),
+        checkpoint=CheckpointManager.Config(
+            interval=100,
+            last_save_model_only=False,
+        ),
+        activation_checkpoint=ActivationCheckpointConfig(
+            mode="selective",
+            selective_ac_option="op",
+        ),
+    )
+
+
 def moe_debugmodel_from_json() -> FaultTolerantTrainer.Config:
     return _config_from_json(moe_debugmodel)
 
@@ -327,6 +362,10 @@ def moe_small_from_json() -> FaultTolerantTrainer.Config:
 
 def moe_16b_from_json() -> FaultTolerantTrainer.Config:
     return _config_from_json(moe_16b)
+
+
+def moe_10b_2b_from_json() -> FaultTolerantTrainer.Config:
+    return _config_from_json(moe_10b_2b)
 
 
 def moe_671b_from_json() -> FaultTolerantTrainer.Config:
