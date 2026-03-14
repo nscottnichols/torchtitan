@@ -12,6 +12,7 @@ from torchtitan.models.common import (
     Embedding,
     FeedForward,
     GQAttention,
+    Linear,
     RMSNorm,
     RoPE,
 )
@@ -50,6 +51,7 @@ moe_configs = {
         n_layers=6,
         tok_embeddings=Embedding.Config(),
         norm=RMSNorm.Config(),
+        output=Linear.Config(),
         layer=moeTransformerBlock.Config(
             n_dense_layers=1,
             attention_norm=RMSNorm.Config(),
@@ -73,6 +75,7 @@ moe_configs = {
                 mscale=0.70,
                 q_norm=RMSNorm.Config(),
                 kv_norm=RMSNorm.Config(),
+                wq=Linear.Config(),
             ),
             feed_forward=FeedForward.Config(hidden_dim=1024),
         ),
@@ -94,6 +97,7 @@ moe_configs = {
         n_layers=6,
         tok_embeddings=Embedding.Config(),
         norm=RMSNorm.Config(),
+        output=Linear.Config(),
         layer=moeTransformerBlock.Config(
             n_dense_layers=1,
             attention_norm=RMSNorm.Config(),
@@ -119,6 +123,7 @@ moe_configs = {
                 kv_norm=RMSNorm.Config(),
                 attn_backend="flex",
                 attn_mask_type="block_causal",
+                wq=Linear.Config(),
             ),
             feed_forward=FeedForward.Config(hidden_dim=1024),
         ),
@@ -140,6 +145,7 @@ moe_configs = {
         n_layers=24,
         tok_embeddings=Embedding.Config(),
         norm=RMSNorm.Config(),
+        output=Linear.Config(),
         layer=moeTransformerBlock.Config(
             n_dense_layers=1,
             attention_norm=RMSNorm.Config(),
@@ -167,6 +173,7 @@ moe_configs = {
                 kv_norm=RMSNorm.Config(),
                 attn_backend="flex",
                 attn_mask_type="block_causal",
+                wq=Linear.Config(),
             ),
         ),
         rope=RoPE.Config(
@@ -187,6 +194,7 @@ moe_configs = {
         n_layers=27,
         tok_embeddings=Embedding.Config(),
         norm=RMSNorm.Config(),
+        output=Linear.Config(),
         layer=moeTransformerBlock.Config(
             n_dense_layers=1,
             attention_norm=RMSNorm.Config(),
@@ -212,6 +220,7 @@ moe_configs = {
                 kv_norm=RMSNorm.Config(),
                 attn_backend="flex",
                 attn_mask_type="block_causal",
+                wq=Linear.Config(),
             ),
             feed_forward=FeedForward.Config(hidden_dim=10944),
         ),
@@ -233,6 +242,7 @@ moe_configs = {
         n_layers=60,
         tok_embeddings=Embedding.Config(),
         norm=RMSNorm.Config(),
+        output=Linear.Config(),
         layer=moeTransformerBlock.Config(
             n_dense_layers=1,
             attention_norm=RMSNorm.Config(),
@@ -260,6 +270,8 @@ moe_configs = {
                 kv_norm=RMSNorm.Config(),
                 attn_backend="flex",
                 attn_mask_type="block_causal",
+                wq_a=Linear.Config(),
+                wq_b=Linear.Config(),
             ),
             feed_forward=FeedForward.Config(hidden_dim=12288),
         ),
@@ -281,6 +293,7 @@ moe_configs = {
         n_layers=61,
         tok_embeddings=Embedding.Config(),
         norm=RMSNorm.Config(),
+        output=Linear.Config(),
         layer=moeTransformerBlock.Config(
             n_dense_layers=3,
             attention_norm=RMSNorm.Config(),
@@ -308,6 +321,8 @@ moe_configs = {
                 kv_norm=RMSNorm.Config(),
                 attn_backend="flex",
                 attn_mask_type="block_causal",
+                wq_a=Linear.Config(),
+                wq_b=Linear.Config(),
             ),
             feed_forward=FeedForward.Config(hidden_dim=18432),
         ),
