@@ -197,31 +197,6 @@ def set_determinism(
         torch.distributed.tensor._random.manual_seed(seed, parallel_dims.world_mesh)
 
 
-def create_context_parallel_ctx(
-    cp_mesh: DeviceMesh,
-    cp_buffers: list[torch.Tensor],
-    cp_seq_dims: list[int],
-    cp_no_restore_buffers: set[torch.Tensor],
-    cp_rotate_method: str,
-):
-    try:
-        from torch.distributed.tensor.experimental import context_parallel
-        from torch.distributed.tensor.experimental._attention import set_rotate_method
-    except ImportError as e:
-        raise ValueError(
-            f"PyTorch version {torch.__version__} does not include the experimental "
-            "Context Parallel API. Please update to a newer version."
-        ) from e
-
-    set_rotate_method(cp_rotate_method)
-    return context_parallel(
-        cp_mesh,
-        buffers=cp_buffers,
-        buffer_seq_dims=cp_seq_dims,
-        no_restore_buffers=cp_no_restore_buffers,
-    )
-
-
 class TrainContext(Protocol):
     @abstractmethod
     def __call__(self) -> contextlib.AbstractContextManager[None]:
@@ -355,10 +330,24 @@ def init_distributed(
         os.makedirs(dump_dir, exist_ok=True)
         _warn_overwrite_env(TRACE_FILE, f"{dump_dir}/{prefix}")
 
+    device_id: torch.device | None = None
+    if comm_config.mode == "torchcomms":
+        try:
+            import torchcomms  # noqa: F401  # pyrefly: ignore [missing-import]
+        except ImportError as err:
+            raise ImportError(
+                "torchcomms package is required for --comm.mode=torchcomms."
+            ) from err
+        import torch.distributed.config as dist_config
+
+        dist_config.use_torchcomms = True
+        device_id = torch.device(device_type, int(os.environ["LOCAL_RANK"]))
+
     torch.distributed.init_process_group(
         backend=_get_distributed_backend(enable_cpu_backend),
         timeout=timedelta(seconds=comm_config.init_timeout_seconds),
         _ranks=ranks if ranks is not None else [],
+        device_id=device_id,
     )
 
     return torch.distributed.get_world_size()
