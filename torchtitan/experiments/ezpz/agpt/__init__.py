@@ -15,6 +15,7 @@ from torchtitan.models.common import (
     Embedding,
     FeedForward,
     GQAttention,
+    Linear,
     RMSNorm,
     RoPE,
 )
@@ -51,6 +52,7 @@ def _build_llama3_config(
         vocab_size=vocab_size,
         tok_embeddings=Embedding.Config(),
         norm=RMSNorm.Config(),
+        output=Linear.Config(),
         layer=Llama3TransformerBlock.Config(
             attention_norm=RMSNorm.Config(),
             ffn_norm=RMSNorm.Config(),
@@ -109,6 +111,7 @@ agpt_configs = {
         vocab_size=2048,
         tok_embeddings=Embedding.Config(),
         norm=RMSNorm.Config(),
+        output=Linear.Config(),
         layer=Llama3TransformerBlock.Config(
             attention_norm=RMSNorm.Config(),
             ffn_norm=RMSNorm.Config(),
@@ -136,6 +139,7 @@ agpt_configs = {
         vocab_size=2048,
         tok_embeddings=Embedding.Config(),
         norm=RMSNorm.Config(),
+        output=Linear.Config(),
         layer=Llama3TransformerBlock.Config(
             attention_norm=RMSNorm.Config(),
             ffn_norm=RMSNorm.Config(),
@@ -172,6 +176,7 @@ agpt_configs = {
         vocab_size=256128,
         tok_embeddings=Embedding.Config(),
         norm=RMSNorm.Config(),
+        output=Linear.Config(),
         layer=Llama3TransformerBlock.Config(
             attention_norm=RMSNorm.Config(),
             ffn_norm=RMSNorm.Config(),
