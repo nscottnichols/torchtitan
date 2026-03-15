@@ -2,16 +2,16 @@
 
 ## Available Models
 
-| Config | Model | Description |
-|---|---|---|
-| `moe_debugmodel` | debugmodel (256d, 6L, 8 experts) | Tiny model for fast iteration |
-| `moe_small` | small (2048d, 24L, 64 experts) | Small model |
-| `moe_10b_2b` | 10B/2B (2048d, 27L, 36 experts, top_k=3) | 10B total / 2B active |
-| `moe_16b` | 16B (2048d, 27L, 64 experts) | Full 16B |
-| `moe_671b` | 671B (7168d, 61L, 256 experts) | Full 671B |
+| Config           | Model                                    | Description                   |
+| ---------------- | ---------------------------------------- | ----------------------------- |
+| `moe_debugmodel` | debugmodel (256d, 6L, 8 experts)         | Tiny model for fast iteration |
+| `moe_small`      | small (2048d, 24L, 64 experts)           | Small model                   |
+| `moe_10b_2b`     | 10B/2B (2048d, 27L, 36 experts, top_k=3) | 10B total / 2B active         |
+| `moe_16b`        | 16B (2048d, 27L, 64 experts)             | Full 16B                      |
+| `moe_671b`       | 671B (7168d, 61L, 256 experts)           | Full 671B                     |
 
 Each has a `_from_json` variant (e.g. `moe_10b_2b_from_json`) that applies
-overrides from the `TT_CONFIG_JSON` environment variable.
+overrides from the `TT_CONFIG_JSON` environment variable
 
 ---
 
@@ -195,7 +195,7 @@ ezpz launch python3 -m torchtitan.experiments.ezpz.train \
 ezpz launch python3 -m torchtitan.experiments.ezpz.train \
   --module ezpz.moe --config moe_10b_2b --checkpoint.no_enable \
   --training.local_batch_size 2 --training.seq_len 4096 --training.steps 1000 \
-  --training.gc_freq 1000 --metrics.log_freq 50 \
+  --training.gc_freq 1000 --metrics.log_freq 1 \
   --activation_checkpoint.mode none \
   --dataloader.dataset blendcorpus --dataloader.num_workers 2 \
   --dataloader.persistent_workers --dataloader.prefetch_factor 2 \
@@ -205,7 +205,7 @@ ezpz launch python3 -m torchtitan.experiments.ezpz.train \
 ezpz launch python3 -m torchtitan.experiments.ezpz.train \
   --module ezpz.moe --config moe_10b_2b --checkpoint.no_enable \
   --training.local_batch_size 2 --training.seq_len 4096 --training.steps 1000 \
-  --training.gc_freq 1000 --metrics.log_freq 50 \
+  --training.gc_freq 1000 --metrics.log_freq 1 \
   --activation_checkpoint.mode selective --activation_checkpoint.selective_ac_option op \
   --dataloader.dataset blendcorpus --dataloader.num_workers 2 \
   --dataloader.persistent_workers --dataloader.prefetch_factor 2 \
@@ -215,7 +215,7 @@ ezpz launch python3 -m torchtitan.experiments.ezpz.train \
 ezpz launch python3 -m torchtitan.experiments.ezpz.train \
   --module ezpz.moe --config moe_10b_2b --checkpoint.no_enable \
   --training.local_batch_size 3 --training.seq_len 4096 --training.steps 1000 \
-  --training.gc_freq 1000 --metrics.log_freq 50 \
+  --training.gc_freq 1000 --metrics.log_freq 1 \
   --activation_checkpoint.mode selective --activation_checkpoint.selective_ac_option op \
   --dataloader.dataset blendcorpus --dataloader.num_workers 2 \
   --dataloader.persistent_workers --dataloader.prefetch_factor 2 \
@@ -225,7 +225,7 @@ ezpz launch python3 -m torchtitan.experiments.ezpz.train \
 ezpz launch python3 -m torchtitan.experiments.ezpz.train \
   --module ezpz.moe --config moe_10b_2b --checkpoint.no_enable \
   --training.local_batch_size 3 --training.seq_len 4096 --training.steps 1000 \
-  --training.gc_freq 1000 --metrics.log_freq 50 \
+  --training.gc_freq 1000 --metrics.log_freq 1 \
   --activation_checkpoint.mode full \
   --activation_checkpoint.no_preserve_rng_state \
   --activation_checkpoint.determinism_check none \
@@ -237,7 +237,7 @@ ezpz launch python3 -m torchtitan.experiments.ezpz.train \
 ezpz launch python3 -m torchtitan.experiments.ezpz.train \
   --module ezpz.moe --config moe_10b_2b --checkpoint.no_enable \
   --training.local_batch_size 3 --training.seq_len 4096 --training.steps 1000 \
-  --training.gc_freq 1000 --metrics.log_freq 50 \
+  --training.gc_freq 1000 --metrics.log_freq 1 \
   --activation_checkpoint.mode selective --activation_checkpoint.selective_ac_option 1 \
   --activation_checkpoint.no_preserve_rng_state \
   --activation_checkpoint.determinism_check none \
@@ -249,7 +249,7 @@ ezpz launch python3 -m torchtitan.experiments.ezpz.train \
 ezpz launch python3 -m torchtitan.experiments.ezpz.train \
   --module ezpz.moe --config moe_10b_2b --checkpoint.no_enable \
   --training.local_batch_size 2 --training.seq_len 4096 --training.steps 1000 \
-  --training.gc_freq 1000 --metrics.log_freq 50 \
+  --training.gc_freq 1000 --metrics.log_freq 1 \
   --activation_checkpoint.mode selective --activation_checkpoint.selective_ac_option op \
   --compile.enable --compile.components feed_forward loss --compile.backend inductor \
   --dataloader.dataset blendcorpus --dataloader.num_workers 2 \
