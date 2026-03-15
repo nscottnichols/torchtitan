@@ -252,7 +252,7 @@ def parallelize_moe(
         if training.enable_cpu_offload:
             logger.info("Applied CPU Offloading to the model")
 
-        logger.info(f"\n+{ezpz.models.summarize_model(model, depth=5)}")
+        logger.info(f"\n+{ezpz.models.summarize_model(model)}")
     elif parallel_dims.dp_replicate_enabled:
         apply_replicate(
             model,
