@@ -123,39 +123,48 @@ done
 # ---------------------------------------------------------------------------
 REPORT="${OUTDIR}/report.md"
 
-cat > "${REPORT}" <<EOF
-# ezpz Benchmark Report
-
-| Field     | Value                          |
-|-----------|--------------------------------|
-| Date      | ${RUN_DATE}                    |
-| Commit    | ${GIT_COMMIT}                  |
-| Machine   | ${MACHINE_NAME}                |
-| Job ID    | ${JOB_ID}                      |
-| Nodes     | ${NUM_NODES}                   |
-| GPUs      | ${NGPU}                        |
-| Steps     | ${BENCH_STEPS}                 |
-
-## Results
-
-| Config | Steps | TPS | TFLOPS | MFU | Wall Time (s) | Status |
-|--------|-------|-----|--------|-----|---------------|--------|
-EOF
-
-for ((i = 0; i < NUM_CONFIGS; i++)); do
-    printf "| %-14s | %5s | %7s | %10s | %6s | %13s | %6s |\n" \
-        "${LABELS[$i]}" \
-        "${BENCH_STEPS}" \
-        "${TPS_VALUES[$i]}" \
-        "${TFLOPS_VALUES[$i]}" \
-        "${MFU_VALUES[$i]}" \
-        "${WALL_TIMES[$i]}" \
-        "${STATUSES[$i]}" \
-        >> "${REPORT}"
+# Find the widest value across all metadata fields for column alignment
+_meta_keys=(Date Commit Machine "Job ID" Nodes GPUs Steps)
+_meta_vals=("${RUN_DATE}" "${GIT_COMMIT}" "${MACHINE_NAME}" "${JOB_ID}" "${NUM_NODES}" "${NGPU}" "${BENCH_STEPS}")
+_vw=5
+for _v in "${_meta_vals[@]}"; do
+    (( ${#_v} > _vw )) && _vw=${#_v}
 done
 
-echo "" >> "${REPORT}"
-echo "Logs: \`${OUTDIR}/\`" >> "${REPORT}"
+{
+    echo "# ezpz Benchmark Report"
+    echo ""
+    printf "| %-7s | %-${_vw}s |\n" "Field" "Value"
+    printf "|-%s-|-%s-|\n" "$(printf '%0.s-' $(seq 1 7))" "$(printf '%0.s-' $(seq 1 "${_vw}"))"
+    for ((_j = 0; _j < ${#_meta_keys[@]}; _j++)); do
+        printf "| %-7s | %-${_vw}s |\n" "${_meta_keys[$_j]}" "${_meta_vals[$_j]}"
+    done
+    echo ""
+    echo "## Results"
+    echo ""
+    printf "| %-14s | %5s | %7s | %8s | %6s | %13s | %6s |\n" \
+        "Config" "Steps" "TPS" "TFLOPS" "MFU" "Wall Time (s)" "Status"
+    printf "|-%s-|-%s-|-%s-|-%s-|-%s-|-%s-|-%s-|\n" \
+        "$(printf '%0.s-' $(seq 1 14))" \
+        "$(printf '%0.s-' $(seq 1 5))" \
+        "$(printf '%0.s-' $(seq 1 7))" \
+        "$(printf '%0.s-' $(seq 1 8))" \
+        "$(printf '%0.s-' $(seq 1 6))" \
+        "$(printf '%0.s-' $(seq 1 13))" \
+        "$(printf '%0.s-' $(seq 1 6))"
+    for ((i = 0; i < NUM_CONFIGS; i++)); do
+        printf "| %-14s | %5s | %7s | %8s | %6s | %13s | %6s |\n" \
+            "${LABELS[$i]}" \
+            "${BENCH_STEPS}" \
+            "${TPS_VALUES[$i]}" \
+            "${TFLOPS_VALUES[$i]}" \
+            "${MFU_VALUES[$i]}" \
+            "${WALL_TIMES[$i]}" \
+            "${STATUSES[$i]}"
+    done
+    echo ""
+    echo "Logs: \`${OUTDIR}/\`"
+} > "${REPORT}"
 
 # Print report to stdout
 echo "============================================================"
