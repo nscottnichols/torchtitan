@@ -415,7 +415,7 @@ def main(args: list[str] | None = None) -> None:
             try:
                 run = ezpz.distributed.setup_wandb(
                     project_name=WBPROJ_NAME,
-                    # config=wbconfig,
+                    settings={"console": "wrap"},
                 )
                 wbconfig = {}
                 wbconfig |= {"env": _update_env()}
