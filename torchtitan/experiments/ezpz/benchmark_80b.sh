@@ -75,26 +75,58 @@ DATASET_PATH="torchtitan/experiments/ezpz/data-lists/$(ezpz_get_machine_name)/bo
 # ---------------------------------------------------------------------------
 # blendcorpus builds index files on rank 0; on parallel filesystems the
 # writes may not be visible to other nodes before they try to read them.
-# Run a single-rank warmup with the tiny debugmodel (same dataset + seq_len)
-# to build and flush the index cache before multi-rank benchmarks.
-echo "--- Pre-caching dataset indices (single-rank warmup) ---"
-PRECACHE_LOG="${OUTDIR}/_precache.log"
-if NGPU=1 \
-    ezpz launch python3 -m torchtitan.experiments.ezpz.train \
-        --module ezpz.agpt \
-        --config agpt_debugmodel \
-        --training.steps 1 \
-        --training.seq_len 8192 \
-        --dataloader.dataset blendcorpus \
-        --dataloader.dataset_path "${DATASET_PATH}" \
-        --checkpoint.no-enable \
-    > "${PRECACHE_LOG}" 2>&1; then
-    echo "    OK (see ${PRECACHE_LOG})"
-else
-    echo "    WARN: pre-cache failed (see ${PRECACHE_LOG}), continuing anyway"
-fi
-# Give Lustre time to propagate index files to all nodes
-sync && sleep 5
+# Build the indices on a single process for each model config before
+# launching multi-rank benchmarks.
+echo "--- Pre-caching dataset indices ---"
+for _precache_model in "${MODELS[@]}"; do
+    PRECACHE_LOG="${OUTDIR}/_precache_${_precache_model}.log"
+    echo -n "    ${_precache_model}... "
+    RANK=0 LOCAL_RANK=0 WORLD_SIZE=1 \
+        python3 -c "
+import os
+os.environ.update(RANK='0', LOCAL_RANK='0', WORLD_SIZE='1',
+                  MASTER_ADDR='localhost', MASTER_PORT='29500')
+import torch
+torch.distributed.init_process_group(backend='gloo', world_size=1, rank=0)
+from blendcorpus.data.config import set_config, get_config
+from blendcorpus.data.gpt_dataset import build_gpt_datasets
+from blendcorpus import parallel_state as mpu
+from types import SimpleNamespace
+
+mpu.initialize_model_parallel(
+    tensor_model_parallel_size=1,
+    pipeline_model_parallel_size=1,
+    sequence_parallel_size=1,
+)
+
+cfg = SimpleNamespace(
+    data_file_list='${DATASET_PATH}',
+    seq_length=8192,
+    train_iters=10,
+    micro_batch_size=1,
+    global_batch_size=1,
+    tensor_model_parallel_size=1,
+    pipeline_model_parallel_size=1,
+    sequence_parallel_size=1,
+    num_workers=0,
+    split='100,0,0',
+    dataloader_type='single',
+    shuffle=True,
+    shuffle_sample_in_corpus=True,
+    blend_sample_in_corpus=False,
+    append_eod=True,
+    provide_attention_mask=False,
+    eod_token_id=None,
+    data_cache_path=None,
+)
+set_config(cfg)
+build_gpt_datasets(cfg)
+torch.distributed.destroy_process_group()
+print('OK')
+" > "${PRECACHE_LOG}" 2>&1 && echo "OK" || echo "WARN (see ${PRECACHE_LOG})"
+done
+# Give Lustre time to propagate index files across nodes
+sync && sleep 10
 echo ""
 
 # ---------------------------------------------------------------------------
