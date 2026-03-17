@@ -51,6 +51,8 @@ MACHINE_NAME="$(hostname -s)"
 JOB_ID="${PBS_JOBID:-${SLURM_JOB_ID:-${COBALT_JOBID:-local}}}"
 NUM_NODES="${NHOSTS:-${SLURM_NNODES:-1}}"
 
+DATASET_PATH="torchtitan/experiments/ezpz/data-lists/$(ezpz_get_machine_name)/books.txt"
+
 # ---------------------------------------------------------------------------
 # Run benchmarks
 # ---------------------------------------------------------------------------
@@ -72,7 +74,10 @@ for ((i = 0; i < NUM_CONFIGS; i++)); do
     config="${CONFIGS[$i]}"
     logfile="${OUTDIR}/${label}.log"
 
-    echo "--- [${label}] starting (module=${module} config=${config}) ---"
+    echo "--- [${label}] running (module=${module} config=${config}) ---"
+    echo "    started @ $(tstamp)"
+    echo "    logfile=${logfile}"
+    echo ""
 
     start_seconds=$SECONDS
 
@@ -83,7 +88,8 @@ for ((i = 0; i < NUM_CONFIGS; i++)); do
             --training.steps "${BENCH_STEPS}" \
             --metrics.log-freq 1 \
             --checkpoint.no-enable \
-            --metrics.no-enable-wandb \
+            --dataloader.dataset blendcorpus \
+            --dataloader.dataset_path "${DATASET_PATH}" \
             "$@" \
         > "${logfile}" 2>&1; then
         STATUSES[$i]="OK"
@@ -95,7 +101,7 @@ for ((i = 0; i < NUM_CONFIGS; i++)); do
     WALL_TIMES[$i]="${elapsed}"
 
     # Parse metrics from the last line containing "tps:"
-    last_metrics_line="$(grep 'tps:' "${logfile}" | tail -1 || true)"
+    last_metrics_line="$(egrep 'loss:' "${logfile}" | tail -1 || true)"
 
     if [[ -n "${last_metrics_line}" ]]; then
         # Extract tps: value (integer with commas)
