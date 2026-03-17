@@ -1,5 +1,5 @@
 #!/bin/bash --login
-#PBS -N agpt-2b-sophiag-olmo-mix
+#PBS -N agpt-2b-sophiag-olmo-mix-n256
 #PBS -l select=256
 #PBS -l walltime=06:00:00
 #PBS -l filesystems=home:flare

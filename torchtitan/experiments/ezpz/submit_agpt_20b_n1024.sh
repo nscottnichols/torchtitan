@@ -1,7 +1,7 @@
 #!/bin/bash --login
-#PBS -N agpt-20b-sophiag-olmo-mix-n256
-#PBS -l select=256
-#PBS -l walltime=06:00:00
+#PBS -N agpt-20b-sophiag-olmo-mix-n1024
+#PBS -l select=1024
+#PBS -l walltime=12:00:00
 #PBS -l filesystems=home:flare
 #PBS -A AuroraGPT
 #PBS -q prod
@@ -10,12 +10,12 @@
 
 # ---- Configuration ----
 MODEL="20b"
-NNODES=256
+NNODES=1024
 SEQ_LEN=8192
-GBS=6144
+GBS=12288
 
-# 4,673,780,159,710 tokens / (6144 * 8192) = 92,859 steps
-TRAINING_STEPS=92859
+# 4,673,780,159,710 tokens / (12288 * 8192) = 46,429 steps
+TRAINING_STEPS=46429
 
 DFL="torchtitan/experiments/ezpz/data-lists/aurora/olmo-mix-1124.txt"
 OPTIMIZER="sophiag"

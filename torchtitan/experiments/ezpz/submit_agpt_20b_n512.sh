@@ -1,7 +1,7 @@
 #!/bin/bash --login
-#PBS -N agpt-20b-sophiag-olmo-mix-n256
-#PBS -l select=256
-#PBS -l walltime=06:00:00
+#PBS -N agpt-20b-sophiag-olmo-mix-n512
+#PBS -l select=512
+#PBS -l walltime=12:00:00
 #PBS -l filesystems=home:flare
 #PBS -A AuroraGPT
 #PBS -q prod
@@ -10,7 +10,7 @@
 
 # ---- Configuration ----
 MODEL="20b"
-NNODES=256
+NNODES=512
 SEQ_LEN=8192
 GBS=6144
 
