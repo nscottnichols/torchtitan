@@ -238,6 +238,45 @@ agpt_configs = {
             8192, multiple_of=1024, ffn_dim_multiplier=1.3
         ),
     ),
+    # ~79.5B: Same width as 50B/Llama-70B, 88 layers.
+    # PP-friendly: 88 divisible by 2, 4, 8.
+    "80B": _build_llama3_config(
+        dim=8192,
+        n_layers=88,
+        n_heads=64,
+        n_kv_heads=8,
+        rope_theta=500000,
+        vocab_size=256128,
+        hidden_dim=compute_ffn_hidden_dim(
+            8192, multiple_of=1024, ffn_dim_multiplier=1.3
+        ),
+    ),
+    # ~79.8B: Wider (dim=10240), shallower (56 layers).
+    # Fewer PP stages needed; higher per-layer FLOP density.
+    "80B_wide": _build_llama3_config(
+        dim=10240,
+        n_layers=56,
+        n_heads=80,
+        n_kv_heads=8,
+        rope_theta=500000,
+        vocab_size=256128,
+        hidden_dim=compute_ffn_hidden_dim(
+            10240, multiple_of=1024, ffn_dim_multiplier=1.3
+        ),
+    ),
+    # ~81.5B: Same width as 80B but 96 layers with smaller FFN multiplier.
+    # Most PP-flexible: 96 divisible by 2, 3, 4, 6, 8, 12, 16.
+    "80B_deep": _build_llama3_config(
+        dim=8192,
+        n_layers=96,
+        n_heads=64,
+        n_kv_heads=8,
+        rope_theta=500000,
+        vocab_size=256128,
+        hidden_dim=compute_ffn_hidden_dim(
+            8192, multiple_of=1024, ffn_dim_multiplier=1.2
+        ),
+    ),
 }
 # agpt_configs["debugmodel"] = agpt_configs["debug"]
 agpt_configs["2b"] = agpt_configs["2B"]
@@ -246,6 +285,9 @@ agpt_configs["7b"] = agpt_configs["7B"]
 agpt_configs["8b"] = agpt_configs["8B"]
 agpt_configs["20b"] = agpt_configs["20B"]
 agpt_configs["50b"] = agpt_configs["50B"]
+agpt_configs["80b"] = agpt_configs["80B"]
+agpt_configs["80b_wide"] = agpt_configs["80B_wide"]
+agpt_configs["80b_deep"] = agpt_configs["80B_deep"]
 
 
 def model_registry(flavor: str) -> FaultTolerantModelSpec:
