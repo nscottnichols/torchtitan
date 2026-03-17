@@ -71,6 +71,33 @@ declare -A MODEL_NKVHEADS=(
 DATASET_PATH="torchtitan/experiments/ezpz/data-lists/$(ezpz_get_machine_name)/books.txt"
 
 # ---------------------------------------------------------------------------
+# Pre-cache dataset indices (avoids Lustre race condition on multi-node)
+# ---------------------------------------------------------------------------
+# blendcorpus builds index files on rank 0; on parallel filesystems the
+# writes may not be visible to other nodes before they try to read them.
+# Run a single-rank warmup with the tiny debugmodel (same dataset + seq_len)
+# to build and flush the index cache before multi-rank benchmarks.
+echo "--- Pre-caching dataset indices (single-rank warmup) ---"
+PRECACHE_LOG="${OUTDIR}/_precache.log"
+if NGPU=1 \
+    ezpz launch python3 -m torchtitan.experiments.ezpz.train \
+        --module ezpz.agpt \
+        --config agpt_debugmodel \
+        --training.steps 1 \
+        --training.seq_len 8192 \
+        --dataloader.dataset blendcorpus \
+        --dataloader.dataset_path "${DATASET_PATH}" \
+        --checkpoint.no-enable \
+    > "${PRECACHE_LOG}" 2>&1; then
+    echo "    OK (see ${PRECACHE_LOG})"
+else
+    echo "    WARN: pre-cache failed (see ${PRECACHE_LOG}), continuing anyway"
+fi
+# Give Lustre time to propagate index files to all nodes
+sync && sleep 5
+echo ""
+
+# ---------------------------------------------------------------------------
 # Job metadata
 # ---------------------------------------------------------------------------
 GIT_COMMIT="$(git rev-parse --short HEAD 2>/dev/null || echo 'unknown')"
@@ -140,7 +167,7 @@ for model in "${MODELS[@]}"; do
 
             start_seconds=$SECONDS
 
-            if NGPU="${NGPU}" \
+            NGPU="${NGPU}" \
                 ezpz launch python3 -m torchtitan.experiments.ezpz.train \
                     --module ezpz.agpt \
                     --config "agpt_${model,,}" \
@@ -154,10 +181,19 @@ for model in "${MODELS[@]}"; do
                     --parallelism.pipeline_parallel_degree "${pp}" \
                     --dataloader.dataset blendcorpus \
                     --dataloader.dataset_path "${DATASET_PATH}" \
-                > "${logfile}" 2>&1; then
-                R_STATUS[$RUN_IDX]="OK"
+                > "${logfile}" 2>&1
+            exit_code=$?
+
+            # Check both exit code and presence of training output
+            # (mpiexec can return 0 even when child ranks crash)
+            if (( exit_code != 0 )); then
+                R_STATUS[$RUN_IDX]="FAIL(rc=${exit_code})"
+            elif grep -q 'Traceback\|Error\|Exception' "${logfile}" && ! grep -q 'loss:' "${logfile}"; then
+                R_STATUS[$RUN_IDX]="CRASH"
+            elif ! grep -q 'loss:' "${logfile}"; then
+                R_STATUS[$RUN_IDX]="NO_OUTPUT"
             else
-                R_STATUS[$RUN_IDX]="FAIL"
+                R_STATUS[$RUN_IDX]="OK"
             fi
 
             elapsed=$(( SECONDS - start_seconds ))
