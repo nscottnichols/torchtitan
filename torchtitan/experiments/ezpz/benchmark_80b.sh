@@ -155,9 +155,10 @@ for model in "${MODELS[@]}"; do
             label="${model}_tp${tp}_pp${pp}_dp${dp}"
             logfile="${OUTDIR}/${label}.log"
 
-            echo "--- [${label}] running ---"
+            echo "--- [${label}] running (module=ezpz.agpt config=agpt_${model,,}) ---"
             echo "    model=${model}  TP=${tp}  PP=${pp}  DP=${dp}  layers/stage=$(( n_layers / pp ))"
-            echo "    started @ $(date +%H:%M:%S)"
+            echo "    started @ $(tstamp)"
+            echo "    logfile=${logfile}"
             echo ""
 
             R_MODEL[$RUN_IDX]="${model}"
