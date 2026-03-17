@@ -173,7 +173,7 @@ for model in "${MODELS[@]}"; do
                     --module ezpz.agpt \
                     --config "agpt_${model,,}" \
                     --training.steps "${BENCH_STEPS}" \
-                    --training.local_batch_size 1 \
+                    --training.local_batch_size "${pp}" \
                     --training.seq_len 8192 \
                     --activation_checkpoint.mode full \
                     --metrics.log_freq 1 \
