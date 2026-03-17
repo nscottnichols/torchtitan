@@ -3,7 +3,7 @@
 ## Available Models
 
 | Config           | Model                                    | Description                   |
-| ---------------- | ---------------------------------------- | ----------------------------- |
+|-----------------:|:-----------------------------------------|:------------------------------|
 | `moe_debugmodel` | debugmodel (256d, 6L, 8 experts)         | Tiny model for fast iteration |
 | `moe_small`      | small (2048d, 24L, 64 experts)           | Small model                   |
 | `moe_10b_2b`     | 10B/2B (2048d, 27L, 36 experts, top_k=3) | 10B total / 2B active         |
