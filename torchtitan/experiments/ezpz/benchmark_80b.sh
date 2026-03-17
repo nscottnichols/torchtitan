@@ -43,29 +43,29 @@ mkdir -p "${OUTDIR}"
 BENCH_MODELS="${BENCH_MODELS:-80B 80B_wide 80B_deep}"
 read -ra MODELS <<< "${BENCH_MODELS}"
 
-# Parallelism degrees to sweep
-BENCH_TP="${BENCH_TP:-4 8}"
-BENCH_PP="${BENCH_PP:-1 2 4}"
+# Parallelism degrees to sweep (factors of 12 for Aurora's 12 tiles/node)
+BENCH_TP="${BENCH_TP:-2 3 6 12}"
+BENCH_PP="${BENCH_PP:-1 2 3 4 6 12}"
 read -ra TP_DEGREES <<< "${BENCH_TP}"
 read -ra PP_DEGREES <<< "${BENCH_PP}"
 
 # Layer counts per model (must match __init__.py definitions)
 declare -A MODEL_LAYERS=(
-    ["80B"]=88
-    ["80B_wide"]=56
+    ["80B"]=84
+    ["80B_wide"]=48
     ["80B_deep"]=96
 )
 
 # n_heads / n_kv_heads per model (for TP divisibility check)
 declare -A MODEL_NHEADS=(
-    ["80B"]=64
-    ["80B_wide"]=80
-    ["80B_deep"]=64
+    ["80B"]=72
+    ["80B_wide"]=84
+    ["80B_deep"]=60
 )
 declare -A MODEL_NKVHEADS=(
-    ["80B"]=8
-    ["80B_wide"]=8
-    ["80B_deep"]=8
+    ["80B"]=12
+    ["80B_wide"]=12
+    ["80B_deep"]=12
 )
 
 DATASET_PATH="torchtitan/experiments/ezpz/data-lists/$(ezpz_get_machine_name)/books.txt"

@@ -238,44 +238,40 @@ agpt_configs = {
             8192, multiple_of=1024, ffn_dim_multiplier=1.3
         ),
     ),
-    # ~79.5B: Same width as 50B/Llama-70B, 88 layers.
-    # PP-friendly: 88 divisible by 2, 4, 8.
+    # Aurora-native ~80B configs: n_kv_heads=12, n_heads divisible by 12
+    # so TP can be any factor of 12 (2, 3, 4, 6, 12).
+    #
+    # ~80.8B: Balanced width/depth. PP divides 84: {1,2,3,4,6,12}.
     "80B": _build_llama3_config(
-        dim=8192,
-        n_layers=88,
-        n_heads=64,
-        n_kv_heads=8,
+        dim=9216,
+        n_layers=84,
+        n_heads=72,
+        n_kv_heads=12,
         rope_theta=500000,
         vocab_size=256128,
-        hidden_dim=compute_ffn_hidden_dim(
-            8192, multiple_of=1024, ffn_dim_multiplier=1.3
-        ),
+        hidden_dim=25600,
     ),
-    # ~79.8B: Wider (dim=10240), shallower (56 layers).
-    # Fewer PP stages needed; higher per-layer FLOP density.
+    # ~80.0B: Wider (dim=10752), shallower (48 layers).
+    # PP divides 48: {1,2,3,4,6,8,12,16,24}.
     "80B_wide": _build_llama3_config(
-        dim=10240,
-        n_layers=56,
-        n_heads=80,
-        n_kv_heads=8,
+        dim=10752,
+        n_layers=48,
+        n_heads=84,
+        n_kv_heads=12,
         rope_theta=500000,
         vocab_size=256128,
-        hidden_dim=compute_ffn_hidden_dim(
-            10240, multiple_of=1024, ffn_dim_multiplier=1.3
-        ),
+        hidden_dim=39936,
     ),
-    # ~81.5B: Same width as 80B but 96 layers with smaller FFN multiplier.
-    # Most PP-flexible: 96 divisible by 2, 3, 4, 6, 8, 12, 16.
+    # ~80.9B: Narrower (dim=7680), deeper (96 layers).
+    # PP divides 96: {1,2,3,4,6,8,12,16,24}.
     "80B_deep": _build_llama3_config(
-        dim=8192,
+        dim=7680,
         n_layers=96,
-        n_heads=64,
-        n_kv_heads=8,
+        n_heads=60,
+        n_kv_heads=12,
         rope_theta=500000,
         vocab_size=256128,
-        hidden_dim=compute_ffn_hidden_dim(
-            8192, multiple_of=1024, ffn_dim_multiplier=1.2
-        ),
+        hidden_dim=28672,
     ),
 }
 # agpt_configs["debugmodel"] = agpt_configs["debug"]
