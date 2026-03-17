@@ -252,6 +252,7 @@ def ezpz_agpt_20b() -> FaultTolerantTrainer.Config:
     cfg.training.local_batch_size = 1
     cfg.training.seq_len = 8192
     cfg.training.dtype = "bfloat16"
+    cfg.activation_checkpoint.mode = "full"
     cfg.dataloader.dataset = "blendcorpus"
     machine_name = ezpz.distributed.get_machine().lower()
     cfg.dataloader.dataset_path = (
