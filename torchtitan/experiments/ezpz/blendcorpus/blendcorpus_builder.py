@@ -135,6 +135,7 @@ class BlendCorpusDataLoader(BaseDataLoader):
             seq_length=seq_len,
             train_iters=train_iters,
             eval_iters=0,
+            seed=42,
             micro_batch_size=int(local_batch_size),
             global_batch_size=int(requested_global_batch_size),
             tensor_model_parallel_size=int(tp_degree),
