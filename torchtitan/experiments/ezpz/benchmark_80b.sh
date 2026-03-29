@@ -103,6 +103,7 @@ cfg = SimpleNamespace(
     data_file_list='${DATASET_PATH}',
     seq_length=8192,
     train_iters=10,
+    eval_iters=0,
     micro_batch_size=1,
     global_batch_size=1,
     tensor_model_parallel_size=1,
