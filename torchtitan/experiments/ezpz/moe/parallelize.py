@@ -32,6 +32,7 @@ from torchtitan.config import (
 )
 from torchtitan.distributed import ParallelDims
 from torchtitan.distributed.activation_checkpoint import apply_ac
+from torchtitan.distributed.compile import apply_compile_sparse
 from torchtitan.distributed.context_parallel import apply_cp_to_attention_module
 from torchtitan.distributed.dual_pipe_v import get_dual_pipe_v_flag
 from torchtitan.distributed.tensor_parallel import maybe_enable_async_tp, NoParallel
@@ -39,32 +40,9 @@ from torchtitan.distributed.tensor_parallel import maybe_enable_async_tp, NoPara
 # from torchtitan.models.moe import DeepSeekV3Model
 from torchtitan.experiments.ezpz.moe import moeModel
 from torchtitan.models.llama3.parallelize import apply_replicate
-from torchtitan.models.llama4.parallelize import (
-    apply_compile,
-    apply_fsdp,
-    apply_moe_ep_tp,
-)
+from torchtitan.models.llama4.parallelize import apply_fsdp, apply_moe_ep_tp
 from torchtitan.protocols import ModelConvertersContainer
 from torchtitan.tools.logging import logger
-
-# for selective op activation checkpointing
-_op_sac_save_list = {
-    torch.ops.aten.mm.default,
-    torch.ops.aten.linear.default,
-    torch.ops.aten._scaled_dot_product_efficient_attention.default,
-    torch.ops.aten._scaled_dot_product_flash_attention.default,
-    torch.ops.aten._scaled_dot_product_cudnn_attention.default,
-    torch.ops.aten._scaled_dot_product_attention_math.default,
-    torch.ops.aten._scaled_dot_product_fused_attention_overrideable.default,
-    torch.ops._c10d_functional.reduce_scatter_tensor.default,
-    torch.ops._c10d_functional.all_to_all_single.default,
-    # for low precision training, it's useful to always save
-    # the result of max, since the absolute maximum is
-    # used to compute the scaling factor for quantization.
-    torch.ops.aten.max.default,
-    torch._higher_order_ops.flex_attention,
-    torch._higher_order_ops.inductor_compiled_code,
-}
 
 
 def disable_fsdp_gradient_division(model: nn.Module) -> None:
@@ -142,7 +120,7 @@ def parallelize_moe(
         )
         maybe_enable_async_tp(parallelism, compile_config, tp_mesh)
 
-    # Check if using DeepEP/HybridEP for MoE communication
+    # Check if using DeepEP for MoE communication
     comm_backend = parallelism.expert_parallel_comm_backend
     if comm_backend in ("deepep", "hybridep"):
         if not parallel_dims.ep_enabled:
@@ -155,17 +133,6 @@ def parallelize_moe(
                 f"{comm_backend.upper()} with Expert Tensor Parallelism (ETP) is not supported yet. "
                 "Please set expert_tensor_parallel_degree=1 or use standard communication backend."
             )
-
-        if comm_backend == "hybridep":
-            from torchtitan.distributed.deepep import hybridep  # noqa: F401
-
-            _op_sac_save_list.add(torch.ops.hybridep.dispatch.default)
-            _op_sac_save_list.add(torch.ops.hybridep.combine.default)
-        else:
-            import torchtitan.distributed.deepep  # noqa: F401
-
-            _op_sac_save_list.add(torch.ops.deepep.dispatch.default)
-            _op_sac_save_list.add(torch.ops.deepep.combine.default)
 
     if parallel_dims.tp_enabled or parallel_dims.ep_enabled:
         dual_pipe_v = get_dual_pipe_v_flag(
@@ -206,13 +173,11 @@ def parallelize_moe(
             model,
             ac_config,
             model_compile_enabled=model_compile_enabled,
-            # pyrefly: ignore [bad-argument-type]
-            op_sac_save_list=_op_sac_save_list,
             base_folder=dump_folder,
         )
 
     if model_compile_enabled:
-        apply_compile(model, compile_config, parallel_dims.ep_enabled)
+        apply_compile_sparse(model, compile_config, parallel_dims.ep_enabled)
 
     dp_mesh: DeviceMesh | None = None
     if parallel_dims.fsdp_enabled or parallel_dims.ep_enabled:

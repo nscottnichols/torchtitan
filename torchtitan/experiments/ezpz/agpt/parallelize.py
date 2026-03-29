@@ -32,26 +32,13 @@ from torchtitan.config import (
 )
 from torchtitan.distributed import ParallelDims
 from torchtitan.distributed.activation_checkpoint import apply_ac
+from torchtitan.distributed.compile import apply_compile_dense
 from torchtitan.distributed.context_parallel import apply_cp_to_attention_module
 from torchtitan.distributed.fsdp import get_fsdp_reshard_after_forward_policy
 from torchtitan.distributed.tensor_parallel import maybe_enable_async_tp
 from torchtitan.models.llama3.model import Llama3Model
 from torchtitan.protocols.model_converter import ModelConvertersContainer
 from torchtitan.tools.logging import logger
-
-_op_sac_save_list = {
-    torch.ops.aten.mm.default,
-    torch.ops.aten._scaled_dot_product_efficient_attention.default,
-    torch.ops.aten._scaled_dot_product_flash_attention.default,
-    torch.ops.aten._scaled_dot_product_cudnn_attention.default,
-    torch.ops.aten._scaled_dot_product_attention_math.default,
-    torch.ops.aten._scaled_dot_product_fused_attention_overrideable.default,
-    torch.ops._c10d_functional.reduce_scatter_tensor.default,
-    torch.ops.aten.max.default,
-    torch._higher_order_ops.flex_attention,
-    torch.ops.torch_attn._varlen_attn.default,
-    torch._higher_order_ops.inductor_compiled_code,
-}
 
 
 def parallelize_llama(
@@ -108,12 +95,11 @@ def parallelize_llama(
             model,
             ac_config,
             model_compile_enabled=model_compile_enabled,
-            op_sac_save_list=_op_sac_save_list,
             base_folder=dump_folder,
         )
 
     if model_compile_enabled:
-        apply_compile(model, compile_config)
+        apply_compile_dense(model, compile_config)
 
     if parallel_dims.fsdp_enabled:
         names = (
@@ -222,16 +208,6 @@ def apply_tp(
         f"Applied {'Float8 tensorwise ' if enable_float8_tensorwise_tp else ''}"
         "Tensor Parallelism to the model"
     )
-
-
-def apply_compile(model: nn.Module, compile_config: CompileConfig):
-    for layer_id, transformer_block in model.layers.named_children():
-        transformer_block = torch.compile(
-            transformer_block, backend=compile_config.backend, fullgraph=True
-        )
-        model.layers.register_module(layer_id, transformer_block)
-
-    logger.info("Compiling each TransformerBlock with torch.compile")
 
 
 def disable_fsdp_gradient_division(model: nn.Module) -> None:
