@@ -16,7 +16,7 @@ from torchtitan.models.common import (
     RMSNorm,
     RoPE,
 )
-from torchtitan.models.common.moe import MoE
+from torchtitan.models.common.moe import MoE, TokenChoiceTopKRouter
 from torchtitan.protocols.model_spec import ModelSpec
 
 # from .model import Attention, moeModel, DeepSeekV3TransformerBlock
@@ -60,10 +60,11 @@ moe_configs = {
                 hidden_dim=256,
                 num_experts=8,
                 num_shared_experts=2,
-                top_k=3,
-                score_func="softmax",
-                route_norm=False,
                 score_before_experts=False,
+                router=TokenChoiceTopKRouter.Config(
+                    top_k=3,
+                    score_func="softmax",
+                ),
             ),
             attention=Attention.Config(
                 n_heads=16,
@@ -106,10 +107,11 @@ moe_configs = {
                 hidden_dim=256,
                 num_experts=8,
                 num_shared_experts=2,
-                top_k=3,
-                score_func="softmax",
-                route_norm=False,
                 score_before_experts=False,
+                router=TokenChoiceTopKRouter.Config(
+                    top_k=3,
+                    score_func="softmax",
+                ),
             ),
             attention=Attention.Config(
                 n_heads=16,
@@ -154,11 +156,13 @@ moe_configs = {
                 hidden_dim=512,
                 num_experts=64,
                 num_shared_experts=2,
-                top_k=6,
-                score_func="softmax",
-                route_norm=True,
-                route_scale=1.0,
                 score_before_experts=False,
+                router=TokenChoiceTopKRouter.Config(
+                    top_k=6,
+                    score_func="softmax",
+                    route_norm=True,
+                    route_scale=1.0,
+                ),
             ),
             feed_forward=FeedForward.Config(hidden_dim=4096),
             attention=Attention.Config(
@@ -203,10 +207,11 @@ moe_configs = {
                 hidden_dim=1408,
                 num_experts=64,
                 num_shared_experts=2,
-                top_k=6,
-                score_func="softmax",
-                route_norm=False,
                 score_before_experts=False,
+                router=TokenChoiceTopKRouter.Config(
+                    top_k=6,
+                    score_func="softmax",
+                ),
             ),
             attention=Attention.Config(
                 n_heads=16,
@@ -251,13 +256,14 @@ moe_configs = {
                 hidden_dim=1536,
                 num_experts=160,
                 num_shared_experts=2,
-                top_k=6,
-                num_expert_groups=8,
-                num_limited_groups=3,
-                score_func="softmax",
-                route_norm=False,
-                route_scale=16.0,
                 score_before_experts=False,
+                router=TokenChoiceTopKRouter.Config(
+                    top_k=6,
+                    num_expert_groups=8,
+                    num_limited_groups=3,
+                    score_func="softmax",
+                    route_scale=16.0,
+                ),
             ),
             attention=Attention.Config(
                 n_heads=128,
@@ -302,13 +308,15 @@ moe_configs = {
                 hidden_dim=2048,
                 num_experts=256,
                 num_shared_experts=1,
-                top_k=8,
-                num_expert_groups=8,
-                num_limited_groups=4,
-                score_func="sigmoid",
-                route_norm=True,
-                route_scale=2.5,
                 score_before_experts=False,
+                router=TokenChoiceTopKRouter.Config(
+                    top_k=8,
+                    num_expert_groups=8,
+                    num_limited_groups=4,
+                    score_func="sigmoid",
+                    route_norm=True,
+                    route_scale=2.5,
+                ),
             ),
             attention=Attention.Config(
                 n_heads=128,
@@ -354,10 +362,11 @@ moe_configs = {
                 hidden_dim=1408,
                 num_experts=36,
                 num_shared_experts=2,
-                top_k=3,
-                score_func="softmax",
-                route_norm=False,
                 score_before_experts=False,
+                router=TokenChoiceTopKRouter.Config(
+                    top_k=3,
+                    score_func="softmax",
+                ),
             ),
             attention=Attention.Config(
                 n_heads=16,
