@@ -124,7 +124,6 @@ def moe_debugmodel() -> FaultTolerantTrainer.Config:
         ),
         activation_checkpoint=ActivationCheckpointConfig(
             mode="selective",
-            selective_ac_option="op",
         ),
     )
 
@@ -158,7 +157,6 @@ def moe_debugmodel_hf() -> FaultTolerantTrainer.Config:
         ),
         activation_checkpoint=ActivationCheckpointConfig(
             mode="selective",
-            selective_ac_option="op",
         ),
     )
 
@@ -205,7 +203,6 @@ def moe_small() -> FaultTolerantTrainer.Config:
         ),
         activation_checkpoint=ActivationCheckpointConfig(
             mode="selective",
-            selective_ac_option="op",
         ),
     )
 
@@ -239,7 +236,6 @@ def moe_small_hf() -> FaultTolerantTrainer.Config:
         ),
         activation_checkpoint=ActivationCheckpointConfig(
             mode="selective",
-            selective_ac_option="op",
         ),
     )
 
@@ -272,7 +268,6 @@ def moe_16b() -> FaultTolerantTrainer.Config:
         checkpoint=CheckpointManager.Config(interval=10),
         activation_checkpoint=ActivationCheckpointConfig(
             mode="selective",
-            selective_ac_option="op",
         ),
         compile=CompileConfig(enable=True, components=["loss"]),
     )
@@ -305,7 +300,6 @@ def moe_671b() -> FaultTolerantTrainer.Config:
         checkpoint=CheckpointManager.Config(interval=500),
         activation_checkpoint=ActivationCheckpointConfig(
             mode="selective",
-            selective_ac_option="op",
         ),
         compile=CompileConfig(enable=True, components=["loss"]),
         model_converters=ModelConvertersContainer.Config(
@@ -347,7 +341,6 @@ def moe_10b_2b() -> FaultTolerantTrainer.Config:
         ),
         activation_checkpoint=ActivationCheckpointConfig(
             mode="selective",
-            selective_ac_option="op",
         ),
     )
 

@@ -47,7 +47,6 @@ def qwen3_debugmodel() -> Trainer.Config:
         ),
         activation_checkpoint=ActivationCheckpointConfig(
             mode="selective",
-            selective_ac_option="2",
         ),
     )
 
@@ -74,7 +73,6 @@ def qwen3_0_6b() -> Trainer.Config:
         ),
         activation_checkpoint=ActivationCheckpointConfig(
             mode="selective",
-            selective_ac_option="op",
         ),
     )
 
@@ -100,7 +98,6 @@ def qwen3_1_7b() -> Trainer.Config:
         ),
         activation_checkpoint=ActivationCheckpointConfig(
             mode="selective",
-            selective_ac_option="op",
         ),
     )
 
@@ -132,7 +129,6 @@ def qwen3_14b() -> Trainer.Config:
         ),
         activation_checkpoint=ActivationCheckpointConfig(
             mode="full",
-            selective_ac_option="op",
         ),
     )
 
@@ -164,7 +160,6 @@ def qwen3_32b() -> Trainer.Config:
         ),
         activation_checkpoint=ActivationCheckpointConfig(
             mode="full",
-            selective_ac_option="op",
         ),
     )
 
@@ -199,7 +194,6 @@ def qwen3_moe_debug() -> Trainer.Config:
         ),
         activation_checkpoint=ActivationCheckpointConfig(
             mode="selective",
-            selective_ac_option="op",
         ),
     )
 
@@ -230,6 +224,5 @@ def qwen3_moe_debug_hf() -> Trainer.Config:
         ),
         activation_checkpoint=ActivationCheckpointConfig(
             mode="selective",
-            selective_ac_option="op",
         ),
     )

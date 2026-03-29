@@ -41,7 +41,6 @@
   },
   "activation_checkpoint": {
     "mode": "selective",
-    "selective_ac_option": "1",
     "determinism_check": "none",
     "preserve_rng_state": false
   },
