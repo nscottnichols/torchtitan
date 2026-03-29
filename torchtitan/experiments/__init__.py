@@ -17,6 +17,6 @@ _supported_experiments = frozenset(
         "ezpz.agpt",
         "ezpz.moe",
         "ezpz.qwen3",
-        "rl.unified",
+        "rl",
     ]
 )

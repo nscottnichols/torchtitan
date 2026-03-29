@@ -10,16 +10,17 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 import torch
+import torchstore as ts
 from monarch.actor import Actor, endpoint
-from torch.distributed.tensor import distribute_tensor, DTensor
 from torchtitan.config import Configurable
 from torchtitan.config.configs import ParallelismConfig
-from torchtitan.experiments.rl.unified.plugin import (
+from torchtitan.experiments.rl.plugin import (
     register_model_to_vllm_model_registry,
     VLLM_MODEL_NAME,
 )
-from torchtitan.experiments.rl.unified.types import Episode
+from torchtitan.experiments.rl.types import Episode
 from torchtitan.protocols.model_spec import ModelSpec
+from torchtitan.tools.utils import has_cuda_capability
 from vllm import EngineArgs, LLMEngine, SamplingParams
 from vllm.config import AttentionConfig, CompilationConfig
 from vllm.model_executor.layers.batch_invariant import init_batch_invariance
@@ -129,10 +130,6 @@ class VLLMGenerator(Actor, Configurable):
         sampling: SamplingConfig = field(default_factory=SamplingConfig)
         """Default sampling parameters for generation."""
 
-        attention_backend: str = "FLASH_ATTN"
-        """vLLM attention backend to use (e.g., FLASH_ATTN).
-        Now we only support / explored FlashAttention"""
-
         model_dtype: str = "bfloat16"
         """Data type for model weights, passed directly to vLLM (auto, float16, bfloat16, float32)."""
 
@@ -173,11 +170,11 @@ class VLLMGenerator(Actor, Configurable):
         register_model_to_vllm_model_registry(model_spec)
 
         # Set vLLM environment variables from config before any vLLM initialization
-        os.environ["VLLM_ATTENTION_BACKEND"] = config.attention_backend
+        os.environ["VLLM_ATTENTION_BACKEND"] = "CUSTOM"
 
         if batch_invariant_mode:
             os.environ["VLLM_BATCH_INVARIANT"] = "1"
-            init_batch_invariance(AttentionBackendEnum[config.attention_backend])
+            init_batch_invariance(AttentionBackendEnum.CUSTOM)
 
         # Extract needed fields from configs
         self.model_path = model_path
@@ -199,10 +196,13 @@ class VLLMGenerator(Actor, Configurable):
             enforce_eager=config.compile.is_eager,
             hf_overrides={"architectures": [VLLM_MODEL_NAME]},
             attention_config=AttentionConfig(
-                backend=AttentionBackendEnum[config.attention_backend],
+                backend=AttentionBackendEnum.CUSTOM,
             ),
             disable_log_stats=True,
         )
+        # FA2 requires block_size to be a multiple of 256
+        if not has_cuda_capability(9, 0):
+            engine_kwargs["block_size"] = 256
         vllm_compilation_config = config.compile.get_vllm_compilation_config()
         if vllm_compilation_config is not None:
             engine_kwargs["compilation_config"] = vllm_compilation_config
@@ -305,33 +305,31 @@ class VLLMGenerator(Actor, Configurable):
         return episodes
 
     @endpoint
-    async def update(self, version: int, state_dict: dict) -> None:
-        """Update generator weights.
-        Called by the orchestrator.
+    async def pull_model_state_dict(self, version: int) -> None:
+        """Pull latest weights from TorchStore.
+
+        When ``direct_rdma=True``, weights are read directly from the
+        trainer's GPU memory via one-sided RDMA, bypassing StorageVolumes.
+        When ``False``, data is fetched through StorageVolumes (which may
+        themselves use RDMA as their transport internally).
+
+        See ``push_model_state_dict`` for more details on the distinction.
 
         Args:
-            version: New policy version number
-            state_dict: Full (unsharded) state dict with plain tensors.
+            version: New policy version number.
         """
-        # Reshard full tensors to match this generator's DTensor layout
-        model_state_dict = dict(self._get_model().model.state_dict())
-        for name, tensor in state_dict.items():
-            if name in model_state_dict and isinstance(model_state_dict[name], DTensor):
-                if isinstance(tensor, DTensor):
-                    continue
-                target_dtensor = model_state_dict[name]
-                state_dict[name] = distribute_tensor(
-                    tensor.to(target_dtensor.device_mesh.device_type),
-                    device_mesh=target_dtensor.device_mesh,
-                    placements=target_dtensor.placements,
-                )
+        from monarch.rdma import is_rdma_available
 
-        load_weights = self._get_model().load_weights_from_state_dict(state_dict)
+        model_sd = self._get_model().model.state_dict()
+        await ts.get_state_dict(
+            "model_state_dict",
+            user_state_dict=model_sd,
+            strict=False,
+            direct_rdma=is_rdma_available(),
+        )
         self.policy_version = version
         logger.debug(
-            f"Updated weights into vLLM engine model. "
-            f"Number of parameters: {len(load_weights)}. "
-            f"{os.getpid()=} Generator updating weights to policy v{version}..."
+            f"{os.getpid()=} Generator pulled model state dict for policy v{version}"
         )
 
     def __del__(self):
