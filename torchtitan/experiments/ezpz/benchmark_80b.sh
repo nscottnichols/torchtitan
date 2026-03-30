@@ -216,8 +216,8 @@ for model in "${MODELS[@]}"; do
                     --parallelism.pipeline_parallel_degree "${pp}" \
                     --dataloader.dataset blendcorpus \
                     --dataloader.dataset_path "${DATASET_PATH}" \
-                > "${logfile}" 2>&1
-            exit_code=$?
+                2>&1 | tee "${logfile}"
+            exit_code=${PIPESTATUS[0]}
 
             # Check both exit code and presence of training output
             # (mpiexec can return 0 even when child ranks crash)
