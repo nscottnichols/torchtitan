@@ -158,6 +158,7 @@ class BlendCorpusDataLoader(BaseDataLoader):
             ),
             data_cache_path=os.path.abspath(config.data_cache_path),
         )
+        os.makedirs(bc_cfg.data_cache_path, exist_ok=True)
 
         bc_mpu.initialize_model_parallel(
             tensor_model_parallel_size=bc_cfg.tensor_model_parallel_size,
