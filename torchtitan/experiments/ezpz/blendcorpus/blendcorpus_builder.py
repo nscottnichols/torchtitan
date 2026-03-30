@@ -169,6 +169,13 @@ class BlendCorpusDataLoader(BaseDataLoader):
         bc_set_config(bc_cfg)
         self._bc_cfg = bc_get_config()
 
+        # Build indices on rank 0 first, then barrier so other ranks wait
+        # for the files to be fully written to the parallel filesystem.
+        rank = int(os.environ.get("RANK", 0))
+        if rank == 0:
+            build_gpt_datasets(self._bc_cfg)
+        torch.distributed.barrier()
+
         train_ds, _, _ = build_gpt_datasets(self._bc_cfg)
         self._train_ds = train_ds
         self._build_pretraining_data_loader = build_pretraining_data_loader
