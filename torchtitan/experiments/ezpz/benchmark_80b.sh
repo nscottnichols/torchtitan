@@ -74,6 +74,12 @@ declare -A MODEL_NKVHEADS=(
 DATASET_PATH="torchtitan/experiments/ezpz/data-lists/$(ezpz_get_machine_name)/books.txt"
 
 # ---------------------------------------------------------------------------
+# Kill stale python processes from previous runs
+# ---------------------------------------------------------------------------
+echo "--- Cleaning up stale processes ---"
+pkill -u "${USER}" -f "torchtitan.experiments.ezpz.train" 2>/dev/null && sleep 2 || true
+
+# ---------------------------------------------------------------------------
 # Pre-cache dataset indices (avoids Lustre race condition on multi-node)
 # ---------------------------------------------------------------------------
 # blendcorpus builds index files on rank 0; on parallel filesystems the
