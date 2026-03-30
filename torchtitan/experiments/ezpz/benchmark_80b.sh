@@ -161,12 +161,14 @@ for model in "${MODELS[@]}"; do
             label="${model}_tp${tp}_pp${pp}_dp${dp}"
             logfile="${OUTDIR}/${label}.log"
 
+            echo "--- [${label}] (module=ezpz.agpt config=agpt_${model,,}) ---"
+
             # Clear stale index cache and pre-build with MATCHING parameters
             # so all ranks find the index files during multi-rank training.
             rm -rf .cache/blendcorpus/*.npy 2>/dev/null || true
             global_bs=$(( dp * pp ))  # local_batch_size=pp in the training command
             PRECACHE_LOG="${OUTDIR}/_precache_${label}.log"
-            echo -n "    [${label}] pre-caching indices (global_bs=${global_bs}, seq_len=${seq_len})... "
+            echo -n "    pre-caching indices (global_bs=${global_bs}, seq_len=${seq_len})... "
             RANK=0 LOCAL_RANK=0 WORLD_SIZE=1 \
                 python3 -c "
 import os
@@ -218,7 +220,6 @@ print('OK')
 " > "${PRECACHE_LOG}" 2>&1 && echo "OK" || echo "WARN (see ${PRECACHE_LOG})"
             sync && sleep 5
 
-            echo "--- [${label}] running (module=ezpz.agpt config=agpt_${model,,}) ---"
             echo "    model=${model}  TP=${tp}  PP=${pp}  DP=${dp}  layers/stage=$(( n_layers / pp ))"
             echo "    started @ $(tstamp)"
             echo "    logfile: ${logfile}"
@@ -364,9 +365,9 @@ REPORT="${OUTDIR}/report.md"
         "$(printf '%0.s-' $(seq 1 6))" \
         "$(printf '%0.s-' $(seq 1 10))"
     if $has_wandb; then
-        printf "-%s-|" "$(printf '%0.s-' $(seq 1 6))"
+        printf -- "-%s-|" "$(printf '%0.s-' $(seq 1 6))"
     fi
-    printf "-%s-|\n" "$(printf '%0.s-' $(seq 1 6))"
+    printf -- "-%s-|\n" "$(printf '%0.s-' $(seq 1 6))"
 
     for ((i = 0; i < NUM_RUNS; i++)); do
         printf "| %-10s | %3s | %3s | %5s | %20s | %9s | %8s | %6s | %10s |" \
