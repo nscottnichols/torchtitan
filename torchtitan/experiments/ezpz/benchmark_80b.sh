@@ -187,8 +187,8 @@ for model in "${MODELS[@]}"; do
                     --dataloader.dataset blendcorpus \
                     --dataloader.dataset_path "${DATASET_PATH}" \
                     "${compile_args[@]}" \
-                > "${logfile}" 2>&1
-            exit_code=$?
+                2>&1 | grep -v '^\[rank[1-9][0-9]*\]:' > "${logfile}"
+            exit_code=${PIPESTATUS[0]}
 
             # Check both exit code and presence of training output
             # (mpiexec can return 0 even when child ranks crash)
