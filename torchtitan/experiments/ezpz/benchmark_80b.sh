@@ -44,8 +44,10 @@ BENCH_MODELS="${BENCH_MODELS:-80B 80B_wide 80B_deep}"
 read -ra MODELS <<< "${BENCH_MODELS}"
 
 # Parallelism degrees to sweep (factors of 12 for Aurora's 12 tiles/node)
+# NOTE: PP > 1 is disabled by default on XPU — Intel's SDPA kernel segfaults
+# with GQA (n_heads != n_kv_heads) during pipeline parallel forward passes.
 BENCH_TP="${BENCH_TP:-2 3 6 12}"
-BENCH_PP="${BENCH_PP:-1 2 3 4 6 12}"
+BENCH_PP="${BENCH_PP:-1}"
 read -ra TP_DEGREES <<< "${BENCH_TP}"
 read -ra PP_DEGREES <<< "${BENCH_PP}"
 
