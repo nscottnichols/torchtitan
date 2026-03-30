@@ -35,6 +35,7 @@ fi
 # ---------------------------------------------------------------------------
 BENCH_STEPS="${BENCH_STEPS:-10}"
 BENCH_SEQ_LEN="${BENCH_SEQ_LEN:-8192}"
+FILTER_NONZERO_RANKS="${FILTER_NONZERO_RANKS:-0}"
 NGPU="${NGPU:-${NGPUS:-${WORLD_SIZE:-48}}}"
 TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
 OUTDIR="outputs/benchmarks/80b_${TIMESTAMP}"
@@ -199,7 +200,7 @@ for model in "${MODELS[@]}"; do
                     --dataloader.dataset blendcorpus \
                     --dataloader.dataset_path "${DATASET_PATH}" \
                     "${compile_args[@]}" \
-                2>&1 | grep -v '^\[rank[1-9][0-9]*\]:' > "${logfile}"
+                2>&1 | if (( FILTER_NONZERO_RANKS )); then grep -v '^\[rank[1-9][0-9]*\]:'; else cat; fi > "${logfile}"
             exit_code=${PIPESTATUS[0]}
 
             # Check both exit code and presence of training output
