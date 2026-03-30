@@ -211,7 +211,8 @@ for model in "${MODELS[@]}"; do
 
             start_seconds=$SECONDS
 
-            NGPU="${NGPU}" \
+            stdbuf -oL -eL \
+                env NGPU="${NGPU}" PYTHONUNBUFFERED=1 \
                 ezpz launch python3 -m torchtitan.experiments.ezpz.train \
                     --module ezpz.agpt \
                     --config "agpt_${model,,}" \
