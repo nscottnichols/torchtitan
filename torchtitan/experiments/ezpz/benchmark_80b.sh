@@ -211,6 +211,13 @@ for model in "${MODELS[@]}"; do
 
             start_seconds=$SECONDS
 
+            # Disable torch.compile when PP > 1: XPU SDPA with GQA fails
+            # during pipeline shape inference with FakeTensors.
+            compile_args=()
+            if (( pp > 1 )); then
+                compile_args=("--compile.no-enable")
+            fi
+
             stdbuf -oL -eL \
                 env NGPU="${NGPU}" PYTHONUNBUFFERED=1 \
                 ezpz launch python3 -m torchtitan.experiments.ezpz.train \
@@ -226,6 +233,7 @@ for model in "${MODELS[@]}"; do
                     --parallelism.pipeline_parallel_degree "${pp}" \
                     --dataloader.dataset blendcorpus \
                     --dataloader.dataset_path "${DATASET_PATH}" \
+                    "${compile_args[@]}" \
                 > "${logfile}" 2>&1
             exit_code=$?
 
