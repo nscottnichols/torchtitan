@@ -166,7 +166,7 @@ for model in "${MODELS[@]}"; do
             echo "--- [${label}] running (module=ezpz.agpt config=agpt_${model,,}) ---"
             echo "    model=${model}  TP=${tp}  PP=${pp}  DP=${dp}  layers/stage=$(( n_layers / pp ))"
             echo "    started @ $(tstamp)"
-            echo "    logfile=${logfile}"
+            echo "    logfile: ${logfile}"
             echo ""
 
             R_MODEL[$RUN_IDX]="${model}"
