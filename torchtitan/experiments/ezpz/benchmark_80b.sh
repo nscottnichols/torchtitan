@@ -105,6 +105,7 @@ cfg = SimpleNamespace(
     train_iters=10,
     eval_iters=0,
     seed=42,
+    data_impl='mmap',
     micro_batch_size=1,
     global_batch_size=1,
     tensor_model_parallel_size=1,
