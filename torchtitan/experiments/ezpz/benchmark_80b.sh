@@ -181,11 +181,11 @@ for model in "${MODELS[@]}"; do
             continue
         fi
 
-        # Check seq_len is divisible by TP (required by parallelize_llama)
-        if (( BENCH_SEQ_LEN % tp != 0 )); then
-            echo "--- [${model}] TP=${tp} skipped (seq_len=${BENCH_SEQ_LEN} not divisible by TP) ---"
-            echo ""
-            continue
+        # Adjust seq_len to be divisible by TP (required by parallelize_llama)
+        seq_len="${BENCH_SEQ_LEN}"
+        if (( seq_len % tp != 0 )); then
+            seq_len=$(( seq_len - (seq_len % tp) ))
+            echo "    [${model}] TP=${tp}: adjusted seq_len to ${seq_len} (must be divisible by TP)"
         fi
 
         for pp in "${PP_DEGREES[@]}"; do
@@ -235,7 +235,7 @@ for model in "${MODELS[@]}"; do
                     --config "agpt_${model,,}" \
                     --training.steps "${BENCH_STEPS}" \
                     --training.local_batch_size "${pp}" \
-                    --training.seq_len "${BENCH_SEQ_LEN}" \
+                    --training.seq_len "${seq_len}" \
                     --activation_checkpoint.mode full \
                     --metrics.log_freq 1 \
                     --checkpoint.no-enable \
