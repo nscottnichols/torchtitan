@@ -19,7 +19,7 @@
 #   BENCH_MODELS  — space-separated model flavors (default: "80B 80B_wide 80B_deep")
 #   NGPU / WORLD_SIZE — total number of XPU devices
 
-set -euo pipefail
+set -uo pipefail
 
 # ---------------------------------------------------------------------------
 # Environment setup
@@ -255,7 +255,7 @@ print('OK')
                     --dataloader.dataset blendcorpus \
                     --dataloader.dataset_path "${DATASET_PATH}" \
                     "${compile_args[@]}" \
-                2>&1 | if (( FILTER_NONZERO_RANKS )); then grep -v '^\[rank[1-9][0-9]*\]:'; else cat; fi > "${logfile}"
+                2>&1 | if (( FILTER_NONZERO_RANKS )); then grep -v '^\[rank[1-9][0-9]*\]:'; else cat; fi > "${logfile}" || true
             exit_code=${PIPESTATUS[0]}
 
             # Kill any leftover processes from this run (OOM, crash, timeout)
