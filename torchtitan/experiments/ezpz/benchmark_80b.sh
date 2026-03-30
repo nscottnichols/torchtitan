@@ -338,7 +338,7 @@ REPORT="${OUTDIR}/report.md"
 
     echo "## Results"
     echo ""
-    printf "| %-10s | %3s | %3s | %5s | %20s | %9s | %8s | %6s | %10s |"  \
+    printf "| %-14s | %3s | %3s | %5s | %20s | %9s | %8s | %6s | %10s |"  \
         "Model" "TP" "PP" "DP" "Memory" "TPS" "TFLOPS" "MFU" "Wall (s)"
     # Add wandb column only if any run has a URL
     has_wandb=false
@@ -355,7 +355,7 @@ REPORT="${OUTDIR}/report.md"
 
     # Separator
     printf "|-%s-|-%s-|-%s-|-%s-|-%s-|-%s-|-%s-|-%s-|-%s-|" \
-        "$(printf '%0.s-' $(seq 1 10))" \
+        "$(printf '%0.s-' $(seq 1 14))" \
         "$(printf '%0.s-' $(seq 1 3))" \
         "$(printf '%0.s-' $(seq 1 3))" \
         "$(printf '%0.s-' $(seq 1 5))" \
@@ -370,7 +370,7 @@ REPORT="${OUTDIR}/report.md"
     printf -- "-%s-|\n" "$(printf '%0.s-' $(seq 1 6))"
 
     for ((i = 0; i < NUM_RUNS; i++)); do
-        printf "| %-10s | %3s | %3s | %5s | %20s | %9s | %8s | %6s | %10s |" \
+        printf "| %-14s | %3s | %3s | %5s | %20s | %9s | %8s | %6s | %10s |" \
             "${R_MODEL[$i]}" \
             "${R_TP[$i]}" \
             "${R_PP[$i]}" \
