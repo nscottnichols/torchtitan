@@ -130,11 +130,12 @@ for model in "${MODELS[@]}"; do
             continue
         fi
 
-        # Adjust seq_len to be divisible by TP (required by parallelize_llama)
+        # seq_len must be divisible by TP * 2 * CP (seq_len_divisor in parallelize_llama)
+        divisor=$(( tp * 2 ))  # CP=1 for these benchmarks
         seq_len="${BENCH_SEQ_LEN}"
-        if (( seq_len % tp != 0 )); then
-            seq_len=$(( seq_len - (seq_len % tp) ))
-            echo "    [${model}] TP=${tp}: adjusted seq_len to ${seq_len} (must be divisible by TP)"
+        if (( seq_len % divisor != 0 )); then
+            seq_len=$(( seq_len - (seq_len % divisor) ))
+            echo "    [${model}] TP=${tp}: adjusted seq_len to ${seq_len} (must be divisible by ${divisor})"
         fi
 
         for pp in "${PP_DEGREES[@]}"; do
