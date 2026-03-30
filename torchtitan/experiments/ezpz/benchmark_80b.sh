@@ -34,6 +34,7 @@ fi
 # Configuration
 # ---------------------------------------------------------------------------
 BENCH_STEPS="${BENCH_STEPS:-10}"
+BENCH_SEQ_LEN="${BENCH_SEQ_LEN:-8192}"
 NGPU="${NGPU:-${NGPUS:-${WORLD_SIZE:-48}}}"
 TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
 OUTDIR="outputs/benchmarks/80b_${TIMESTAMP}"
@@ -115,7 +116,7 @@ mpu.initialize_model_parallel(
 
 cfg = _Cfg(
     data_file_list='${DATASET_PATH}',
-    seq_length=8192,
+    seq_length=${BENCH_SEQ_LEN},
     train_iters=10,
     micro_batch_size=1,
     global_batch_size=1,
@@ -180,6 +181,13 @@ for model in "${MODELS[@]}"; do
             continue
         fi
 
+        # Check seq_len is divisible by TP (required by parallelize_llama)
+        if (( BENCH_SEQ_LEN % tp != 0 )); then
+            echo "--- [${model}] TP=${tp} skipped (seq_len=${BENCH_SEQ_LEN} not divisible by TP) ---"
+            echo ""
+            continue
+        fi
+
         for pp in "${PP_DEGREES[@]}"; do
             # Check PP divides n_layers
             if (( n_layers % pp != 0 )); then
@@ -227,7 +235,7 @@ for model in "${MODELS[@]}"; do
                     --config "agpt_${model,,}" \
                     --training.steps "${BENCH_STEPS}" \
                     --training.local_batch_size "${pp}" \
-                    --training.seq_len 8192 \
+                    --training.seq_len "${BENCH_SEQ_LEN}" \
                     --activation_checkpoint.mode full \
                     --metrics.log_freq 1 \
                     --checkpoint.no-enable \
