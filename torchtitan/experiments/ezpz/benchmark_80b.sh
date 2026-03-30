@@ -93,25 +93,33 @@ from blendcorpus.data.gpt_dataset import build_gpt_datasets
 from blendcorpus import parallel_state as mpu
 from types import SimpleNamespace
 
+# Subclass so any attribute the blendcorpus package adds in the future
+# falls back to a sensible default instead of raising AttributeError.
+class _Cfg(SimpleNamespace):
+    _DEFAULTS = {
+        'mmap_warmup': False, 'data_impl': 'mmap', 'seed': 42,
+        'eval_iters': 0, 'gate_bias': False, 'num_workers': 0,
+    }
+    def __getattr__(self, name):
+        if name in self._DEFAULTS:
+            return self._DEFAULTS[name]
+        return None
+
 mpu.initialize_model_parallel(
     tensor_model_parallel_size=1,
     pipeline_model_parallel_size=1,
     sequence_parallel_size=1,
 )
 
-cfg = SimpleNamespace(
+cfg = _Cfg(
     data_file_list='${DATASET_PATH}',
     seq_length=8192,
     train_iters=10,
-    eval_iters=0,
-    seed=42,
-    data_impl='mmap',
     micro_batch_size=1,
     global_batch_size=1,
     tensor_model_parallel_size=1,
     pipeline_model_parallel_size=1,
     sequence_parallel_size=1,
-    num_workers=0,
     split='100,0,0',
     dataloader_type='single',
     shuffle=True,
