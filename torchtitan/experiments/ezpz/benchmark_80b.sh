@@ -43,7 +43,7 @@ OUTDIR="outputs/benchmarks/80b_${TIMESTAMP}"
 mkdir -p "${OUTDIR}"
 
 # Model configs to benchmark
-BENCH_MODELS="${BENCH_MODELS:-80B 80B_wide 80B_deep}"
+BENCH_MODELS="${BENCH_MODELS:-80B_alt 80B_wide 80B_deep_alt}"
 read -ra MODELS <<< "${BENCH_MODELS}"
 
 # Parallelism degrees to sweep (factors of 12 for Aurora's 12 tiles/node)
@@ -56,26 +56,26 @@ read -ra PP_DEGREES <<< "${BENCH_PP}"
 
 # Layer counts per model (must match __init__.py definitions)
 declare -A MODEL_LAYERS=(
-    ["80B"]=84
+    ["80B"]=84      ["80B_alt"]=84
     ["80B_wide"]=48
-    ["80B_deep"]=96
+    ["80B_deep"]=96  ["80B_deep_alt"]=96
 )
 
 # n_heads / n_kv_heads per model (for TP divisibility check)
 declare -A MODEL_NHEADS=(
-    ["80B"]=72
+    ["80B"]=72      ["80B_alt"]=72
     ["80B_wide"]=84
-    ["80B_deep"]=60
+    ["80B_deep"]=60  ["80B_deep_alt"]=60
 )
 declare -A MODEL_NKVHEADS=(
-    ["80B"]=12
+    ["80B"]=12      ["80B_alt"]=12
     ["80B_wide"]=12
-    ["80B_deep"]=12
+    ["80B_deep"]=12  ["80B_deep_alt"]=12
 )
 declare -A MODEL_HIDDEN_DIM=(
-    ["80B"]=25600
+    ["80B"]=25600    ["80B_alt"]=25596
     ["80B_wide"]=39936
-    ["80B_deep"]=28672
+    ["80B_deep"]=28672 ["80B_deep_alt"]=28668
 )
 
 DATASET_PATH="torchtitan/experiments/ezpz/data-lists/$(ezpz_get_machine_name)/books.txt"

@@ -273,6 +273,26 @@ agpt_configs = {
         vocab_size=256128,
         hidden_dim=28672,
     ),
+    # Variants with hidden_dim divisible by 12, for clean TP sharding
+    # across all factors of 12 (2, 3, 4, 6, 12).
+    "80B_alt": _build_llama3_config(
+        dim=9216,
+        n_layers=84,
+        n_heads=72,
+        n_kv_heads=12,
+        rope_theta=500000,
+        vocab_size=256128,
+        hidden_dim=25596,  # 25600 -> 25596 (multiple of 12)
+    ),
+    "80B_deep_alt": _build_llama3_config(
+        dim=7680,
+        n_layers=96,
+        n_heads=60,
+        n_kv_heads=12,
+        rope_theta=500000,
+        vocab_size=256128,
+        hidden_dim=28668,  # 28672 -> 28668 (multiple of 12)
+    ),
 }
 # agpt_configs["debugmodel"] = agpt_configs["debug"]
 agpt_configs["2b"] = agpt_configs["2B"]
@@ -284,6 +304,8 @@ agpt_configs["50b"] = agpt_configs["50B"]
 agpt_configs["80b"] = agpt_configs["80B"]
 agpt_configs["80b_wide"] = agpt_configs["80B_wide"]
 agpt_configs["80b_deep"] = agpt_configs["80B_deep"]
+agpt_configs["80b_alt"] = agpt_configs["80B_alt"]
+agpt_configs["80b_deep_alt"] = agpt_configs["80B_deep_alt"]
 
 
 def model_registry(flavor: str) -> FaultTolerantModelSpec:
