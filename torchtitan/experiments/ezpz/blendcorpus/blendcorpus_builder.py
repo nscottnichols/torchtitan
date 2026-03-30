@@ -173,10 +173,19 @@ class BlendCorpusDataLoader(BaseDataLoader):
         # for the files to be fully written to the parallel filesystem.
         rank = int(os.environ.get("RANK", 0))
         if rank == 0:
-            build_gpt_datasets(self._bc_cfg)
+            logger.info(
+                "Rank 0: building blendcorpus indices "
+                "(data=%s, cache=%s)...",
+                bc_cfg.data_file_list,
+                bc_cfg.data_cache_path,
+            )
+            train_ds, _, _ = build_gpt_datasets(self._bc_cfg)
+            logger.info("Rank 0: index files written, waiting for other ranks...")
         torch.distributed.barrier()
-
-        train_ds, _, _ = build_gpt_datasets(self._bc_cfg)
+        if rank != 0:
+            logger.info("Rank %d: loading blendcorpus index files...", rank)
+            train_ds, _, _ = build_gpt_datasets(self._bc_cfg)
+            logger.info("Rank %d: index files loaded.", rank)
         self._train_ds = train_ds
         self._build_pretraining_data_loader = build_pretraining_data_loader
         self._loader = build_pretraining_data_loader(train_ds, 0, self._bc_cfg)
