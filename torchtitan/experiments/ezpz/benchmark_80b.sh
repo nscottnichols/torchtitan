@@ -36,6 +36,7 @@ fi
 BENCH_STEPS="${BENCH_STEPS:-10}"
 BENCH_SEQ_LEN="${BENCH_SEQ_LEN:-8192}"
 FILTER_NONZERO_RANKS="${FILTER_NONZERO_RANKS:-0}"
+NO_COMPILE="${NO_COMPILE:-0}"
 NGPU="${NGPU:-${NGPUS:-${WORLD_SIZE:-48}}}"
 TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
 OUTDIR="outputs/benchmarks/80b_${TIMESTAMP}"
@@ -232,7 +233,7 @@ print('OK')
             # Disable torch.compile when PP > 1: XPU SDPA with GQA fails
             # during pipeline shape inference with FakeTensors.
             compile_args=()
-            if (( pp > 1 )); then
+            if (( pp > 1 || NO_COMPILE )); then
                 compile_args=("--compile.no-enable")
             fi
 
