@@ -85,75 +85,6 @@ DATASET_PATH="torchtitan/experiments/ezpz/data-lists/$(ezpz_get_machine_name)/bo
 echo "--- Cleaning up stale processes and cache ---"
 pkill -u "${USER}" -f "torchtitan.experiments.ezpz.train" 2>/dev/null && sleep 2 || true
 rm -rf .cache/blendcorpus/*.npy 2>/dev/null || true
-
-# ---------------------------------------------------------------------------
-# Pre-cache dataset indices (avoids Lustre race condition on multi-node)
-# ---------------------------------------------------------------------------
-# blendcorpus builds index files on rank 0; on parallel filesystems the
-# writes may not be visible to other nodes before they try to read them.
-# Build the indices on a single process for each model config before
-# launching multi-rank benchmarks.
-echo "--- Pre-caching dataset indices ---"
-for _precache_model in "${MODELS[@]}"; do
-    PRECACHE_LOG="${OUTDIR}/_precache_${_precache_model}.log"
-    echo -n "    ${_precache_model}... "
-    RANK=0 LOCAL_RANK=0 WORLD_SIZE=1 \
-        python3 -c "
-import os
-os.environ.update(RANK='0', LOCAL_RANK='0', WORLD_SIZE='1',
-                  MASTER_ADDR='localhost', MASTER_PORT='29500')
-import torch
-torch.distributed.init_process_group(backend='gloo', world_size=1, rank=0)
-from blendcorpus.data.config import set_config, get_config
-from blendcorpus.data.gpt_dataset import build_gpt_datasets
-from blendcorpus import parallel_state as mpu
-from types import SimpleNamespace
-
-# Subclass so any attribute the blendcorpus package adds in the future
-# falls back to a sensible default instead of raising AttributeError.
-class _Cfg(SimpleNamespace):
-    _DEFAULTS = {
-        'mmap_warmup': False, 'data_impl': 'mmap', 'seed': 42,
-        'eval_iters': 0, 'gate_bias': False, 'num_workers': 0,
-    }
-    def __getattr__(self, name):
-        if name in self._DEFAULTS:
-            return self._DEFAULTS[name]
-        return None
-
-mpu.initialize_model_parallel(
-    tensor_model_parallel_size=1,
-    pipeline_model_parallel_size=1,
-    sequence_parallel_size=1,
-)
-
-cfg = _Cfg(
-    data_file_list='${DATASET_PATH}',
-    seq_length=${BENCH_SEQ_LEN},
-    train_iters=10,
-    micro_batch_size=1,
-    global_batch_size=1,
-    tensor_model_parallel_size=1,
-    pipeline_model_parallel_size=1,
-    sequence_parallel_size=1,
-    split='100,0,0',
-    dataloader_type='single',
-    shuffle=True,
-    shuffle_sample_in_corpus=True,
-    blend_sample_in_corpus=False,
-    append_eod=True,
-    provide_attention_mask=False,
-    eod_token_id=None,
-    data_cache_path='$(pwd)/.cache/blendcorpus',
-)
-set_config(cfg)
-build_gpt_datasets(cfg)
-torch.distributed.destroy_process_group()
-print('OK')
-" > "${PRECACHE_LOG}" 2>&1 && echo "OK" || echo "WARN (see ${PRECACHE_LOG})"
-done
-# Give Lustre time to propagate index files across nodes
-sync && sleep 10
 echo ""
 
 # ---------------------------------------------------------------------------
@@ -228,10 +159,62 @@ for model in "${MODELS[@]}"; do
             label="${model}_tp${tp}_pp${pp}_dp${dp}"
             logfile="${OUTDIR}/${label}.log"
 
-            # Clear stale index cache before each run — different TP/DP configs
-            # produce different global_batch_size, causing blendcorpus to rebuild
-            # indices. Stale files from a prior config cause race conditions.
+            # Clear stale index cache and pre-build with MATCHING parameters
+            # so all ranks find the index files during multi-rank training.
             rm -rf .cache/blendcorpus/*.npy 2>/dev/null || true
+            global_bs=$(( dp * pp ))  # local_batch_size=pp in the training command
+            PRECACHE_LOG="${OUTDIR}/_precache_${label}.log"
+            echo -n "    [${label}] pre-caching indices (global_bs=${global_bs}, seq_len=${seq_len})... "
+            RANK=0 LOCAL_RANK=0 WORLD_SIZE=1 \
+                python3 -c "
+import os
+os.environ.update(RANK='0', LOCAL_RANK='0', WORLD_SIZE='1',
+                  MASTER_ADDR='localhost', MASTER_PORT='29500')
+import torch
+torch.distributed.init_process_group(backend='gloo', world_size=1, rank=0)
+from blendcorpus.data.config import set_config, get_config
+from blendcorpus.data.gpt_dataset import build_gpt_datasets
+from blendcorpus import parallel_state as mpu
+from types import SimpleNamespace
+class _Cfg(SimpleNamespace):
+    _DEFAULTS = {
+        'mmap_warmup': False, 'data_impl': 'mmap', 'seed': 42,
+        'eval_iters': 0, 'gate_bias': False, 'num_workers': 0,
+    }
+    def __getattr__(self, name):
+        if name in self._DEFAULTS:
+            return self._DEFAULTS[name]
+        return None
+mpu.initialize_model_parallel(
+    tensor_model_parallel_size=1,
+    pipeline_model_parallel_size=1,
+    sequence_parallel_size=1,
+)
+cfg = _Cfg(
+    data_file_list='${DATASET_PATH}',
+    seq_length=${seq_len},
+    train_iters=${BENCH_STEPS},
+    micro_batch_size=${pp},
+    global_batch_size=${global_bs},
+    tensor_model_parallel_size=1,
+    pipeline_model_parallel_size=1,
+    sequence_parallel_size=1,
+    split='100,0,0',
+    dataloader_type='single',
+    shuffle=True,
+    shuffle_sample_in_corpus=True,
+    blend_sample_in_corpus=False,
+    append_eod=True,
+    provide_attention_mask=False,
+    eod_token_id=None,
+    data_cache_path='$(pwd)/.cache/blendcorpus',
+)
+set_config(cfg)
+build_gpt_datasets(cfg)
+torch.distributed.destroy_process_group()
+print('OK')
+" > "${PRECACHE_LOG}" 2>&1 && echo "OK" || echo "WARN (see ${PRECACHE_LOG})"
+            sync && sleep 5
 
             echo "--- [${label}] running (module=ezpz.agpt config=agpt_${model,,}) ---"
             echo "    model=${model}  TP=${tp}  PP=${pp}  DP=${dp}  layers/stage=$(( n_layers / pp ))"
