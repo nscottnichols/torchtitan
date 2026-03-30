@@ -70,6 +70,11 @@ declare -A MODEL_NKVHEADS=(
     ["80B_wide"]=12
     ["80B_deep"]=12
 )
+declare -A MODEL_HIDDEN_DIM=(
+    ["80B"]=25600
+    ["80B_wide"]=39936
+    ["80B_deep"]=28672
+)
 
 DATASET_PATH="torchtitan/experiments/ezpz/data-lists/$(ezpz_get_machine_name)/books.txt"
 
@@ -110,11 +115,17 @@ for model in "${MODELS[@]}"; do
     n_layers="${MODEL_LAYERS[$model]}"
     n_heads="${MODEL_NHEADS[$model]}"
     n_kv_heads="${MODEL_NKVHEADS[$model]}"
+    hidden_dim="${MODEL_HIDDEN_DIM[$model]}"
 
     for tp in "${TP_DEGREES[@]}"; do
-        # Check TP divides n_heads and n_kv_heads
+        # Check TP divides n_heads, n_kv_heads, and hidden_dim
         if (( n_heads % tp != 0 || n_kv_heads % tp != 0 )); then
             echo "--- [${model}] TP=${tp} skipped (doesn't divide heads=${n_heads}/kv=${n_kv_heads}) ---"
+            echo ""
+            continue
+        fi
+        if (( hidden_dim % tp != 0 )); then
+            echo "--- [${model}] TP=${tp} skipped (doesn't divide hidden_dim=${hidden_dim}) ---"
             echo ""
             continue
         fi
