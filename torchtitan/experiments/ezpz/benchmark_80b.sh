@@ -37,13 +37,14 @@ BENCH_STEPS="${BENCH_STEPS:-10}"
 BENCH_SEQ_LEN="${BENCH_SEQ_LEN:-8192}"
 FILTER_NONZERO_RANKS="${FILTER_NONZERO_RANKS:-0}"
 NO_COMPILE="${NO_COMPILE:-0}"
+BENCH_TIMEOUT="${BENCH_TIMEOUT:-1800}"  # per-run timeout in seconds (default: 30min)
 NGPU="${NGPU:-${NGPUS:-${WORLD_SIZE:-48}}}"
 TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
 OUTDIR="outputs/benchmarks/80b_${TIMESTAMP}"
 mkdir -p "${OUTDIR}"
 
 # Model configs to benchmark
-BENCH_MODELS="${BENCH_MODELS:-80B_alt 80B_wide 80B_deep_alt}"
+BENCH_MODELS="${BENCH_MODELS:-80B 80B_alt 80B_wide 80B_deep 80B_deep_alt}"
 read -ra MODELS <<< "${BENCH_MODELS}"
 
 # Parallelism degrees to sweep (factors of 12 for Aurora's 12 tiles/node)
@@ -237,7 +238,8 @@ print('OK')
                 compile_args=("--compile.no-enable")
             fi
 
-            stdbuf -oL -eL \
+            timeout "${BENCH_TIMEOUT}" \
+                stdbuf -oL -eL \
                 env NGPU="${NGPU}" PYTHONUNBUFFERED=1 \
                 ezpz launch python3 -m torchtitan.experiments.ezpz.train \
                     --module ezpz.agpt \
@@ -256,10 +258,18 @@ print('OK')
                 2>&1 | if (( FILTER_NONZERO_RANKS )); then grep -v '^\[rank[1-9][0-9]*\]:'; else cat; fi > "${logfile}"
             exit_code=${PIPESTATUS[0]}
 
+            # Kill any leftover processes from this run (OOM, crash, timeout)
+            pkill -u "${USER}" -f "torchtitan.experiments.ezpz.train" 2>/dev/null || true
+            sleep 2
+
             # Check both exit code and presence of training output
             # (mpiexec can return 0 even when child ranks crash)
-            if (( exit_code != 0 )); then
+            if (( exit_code == 124 )); then
+                R_STATUS[$RUN_IDX]="TIMEOUT"
+            elif (( exit_code != 0 )); then
                 R_STATUS[$RUN_IDX]="FAIL(rc=${exit_code})"
+            elif grep -q 'OUT_OF_RESOURCES\|out of memory\|OOM' "${logfile}"; then
+                R_STATUS[$RUN_IDX]="OOM"
             elif grep -q 'Traceback\|Error\|Exception' "${logfile}" && ! grep -q 'loss:' "${logfile}"; then
                 R_STATUS[$RUN_IDX]="CRASH"
             elif ! grep -q 'loss:' "${logfile}"; then
