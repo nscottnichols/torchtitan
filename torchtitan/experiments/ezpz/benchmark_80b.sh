@@ -128,7 +128,7 @@ cfg = _Cfg(
     append_eod=True,
     provide_attention_mask=False,
     eod_token_id=None,
-    data_cache_path='.cache/blendcorpus',
+    data_cache_path='$(pwd)/.cache/blendcorpus',
 )
 set_config(cfg)
 build_gpt_datasets(cfg)

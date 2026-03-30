@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 import importlib
+import os
 from types import SimpleNamespace
 from typing import Any
 
@@ -155,7 +156,7 @@ class BlendCorpusDataLoader(BaseDataLoader):
                 if config.eod_token_id is not None
                 else getattr(tokenizer, "eos_id", None)
             ),
-            data_cache_path=config.data_cache_path,
+            data_cache_path=os.path.abspath(config.data_cache_path),
         )
 
         bc_mpu.initialize_model_parallel(
