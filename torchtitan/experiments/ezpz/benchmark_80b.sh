@@ -76,8 +76,9 @@ DATASET_PATH="torchtitan/experiments/ezpz/data-lists/$(ezpz_get_machine_name)/bo
 # ---------------------------------------------------------------------------
 # Kill stale python processes from previous runs
 # ---------------------------------------------------------------------------
-echo "--- Cleaning up stale processes ---"
+echo "--- Cleaning up stale processes and cache ---"
 pkill -u "${USER}" -f "torchtitan.experiments.ezpz.train" 2>/dev/null && sleep 2 || true
+rm -rf .cache/blendcorpus/*.npy 2>/dev/null || true
 
 # ---------------------------------------------------------------------------
 # Pre-cache dataset indices (avoids Lustre race condition on multi-node)
