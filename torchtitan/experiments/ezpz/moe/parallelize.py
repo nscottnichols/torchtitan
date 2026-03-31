@@ -414,8 +414,17 @@ def apply_fsdp(
             else:
                 efsdp_ep_size = fsdp_config["mesh"].size()
 
+            # Shard(1) shards the hidden dim instead of expert dim when
+            # there are more FSDP ranks than experts. But this requires
+            # the hidden dim to be evenly divisible by the world size.
+            # Fall back to Shard(0) if not (avoids uneven sharding error).
             if efsdp_ep_size > num_experts:
-                expert_shard_placement = Shard(1)
+                # Check if hidden dim (dim 1 of expert weights) is divisible
+                expert_w = next(iter(transformer_block.moe.experts.parameters()))
+                if expert_w.shape[1] % efsdp_ep_size == 0:
+                    expert_shard_placement = Shard(1)
+                else:
+                    expert_shard_placement = Shard(0)
             else:
                 expert_shard_placement = Shard(0)
 
