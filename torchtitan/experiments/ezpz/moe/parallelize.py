@@ -12,12 +12,16 @@ import torch.nn as nn
 
 from ezpz.models import summarize_model
 
+from typing import Any
+
 from torch.distributed.device_mesh import DeviceMesh
-from torch.distributed.tensor import Replicate, Shard
+from torch.distributed.fsdp import CPUOffloadPolicy, fully_shard, MixedPrecisionPolicy
+from torch.distributed.tensor import Partial, Replicate, Shard
 from torch.distributed.tensor.parallel import (
     ColwiseParallel,
     parallelize_module,
     PrepareModuleInput,
+    PrepareModuleInputOutput,
     RowwiseParallel,
     SequenceParallel,
 )
@@ -40,7 +44,22 @@ from torchtitan.distributed.tensor_parallel import maybe_enable_async_tp, NoPara
 # from torchtitan.models.moe import DeepSeekV3Model
 from torchtitan.experiments.ezpz.moe import moeModel
 from torchtitan.models.llama3.parallelize import apply_replicate
-from torchtitan.models.llama4.parallelize import apply_fsdp, apply_moe_ep_tp
+from torchtitan.distributed.dual_pipe_v import (
+    DualPipeExpertParallel,
+)
+from torchtitan.distributed.expert_parallel import (
+    BaseExpertParallel,
+    DeepEPExpertParallel,
+    ExpertParallel,
+    ExpertTensorParallel,
+    ReordererSequenceParallel,
+    TensorParallel,
+)
+from torchtitan.distributed.fsdp import get_fsdp_reshard_after_forward_policy
+from torchtitan.distributed.tensor_parallel import (
+    ColwiseParallelWithGradPlacement,
+)
+from torchtitan.models.llama3.parallelize import disable_fsdp_gradient_division
 from torchtitan.protocols import ModelConvertersContainer
 from torchtitan.tools.logging import logger
 
@@ -341,3 +360,181 @@ def apply_non_moe_tp(
         f"Applied {'Float8 tensorwise ' if enable_float8_tensorwise_tp else ''}"
         "Tensor Parallelism to the model"
     )
+
+
+# ---------------------------------------------------------------------------
+# Inlined from torchtitan.models.llama4.parallelize to avoid importing
+# ShardPlacementResult which doesn't exist in the Aurora PyTorch framework.
+# ---------------------------------------------------------------------------
+
+
+def apply_fsdp(
+    model: nn.Module,
+    dp_mesh: DeviceMesh,
+    param_dtype: torch.dtype,
+    reduce_dtype: torch.dtype,
+    pp_enabled: bool,
+    cpu_offload: bool = False,
+    reshard_after_forward_policy: str = "default",
+    ep_degree: int = 1,
+    edp_mesh: DeviceMesh | None = None,
+    gradient_divide_factor: int | None = None,
+):
+    mp_policy = MixedPrecisionPolicy(param_dtype=param_dtype, reduce_dtype=reduce_dtype)
+    fsdp_config: dict[str, Any] = {"mesh": dp_mesh, "mp_policy": mp_policy}
+    if cpu_offload:
+        fsdp_config["offload_policy"] = CPUOffloadPolicy()
+
+    reshard_after_forward = get_fsdp_reshard_after_forward_policy(
+        reshard_after_forward_policy, pp_enabled
+    )
+
+    if model.tok_embeddings is not None:
+        fully_shard(
+            model.tok_embeddings,
+            **fsdp_config,
+            reshard_after_forward=reshard_after_forward,
+        )
+    if model.norm is not None and model.output is not None:
+        fully_shard(
+            [model.norm, model.output],
+            **fsdp_config,
+            reshard_after_forward=reshard_after_forward_policy == "always",
+        )
+
+    for layer_id, transformer_block in model.layers.items():
+        if transformer_block.moe_enabled:
+            assert hasattr(transformer_block, "moe")
+            expert_params = set(transformer_block.moe.experts.parameters())
+            num_experts = transformer_block.moe.experts.num_experts
+
+            if ep_degree > 1:
+                assert edp_mesh is not None
+                efsdp_ep_size = edp_mesh["efsdp"].size() * ep_degree
+            else:
+                efsdp_ep_size = fsdp_config["mesh"].size()
+
+            if efsdp_ep_size > num_experts:
+                expert_shard_placement = Shard(1)
+            else:
+                expert_shard_placement = Shard(0)
+
+            if ep_degree == 1 and expert_shard_placement == Shard(0):
+                fully_shard(
+                    transformer_block,
+                    **fsdp_config,
+                    reshard_after_forward=reshard_after_forward,
+                )
+            elif ep_degree == 1:
+                def _experts_shard_placement_fn(
+                    param: nn.Parameter,
+                    _expert_params: set = expert_params,
+                ) -> Shard | None:
+                    if param in _expert_params:
+                        return Shard(1)
+                    return None
+
+                fully_shard(
+                    transformer_block,
+                    **fsdp_config,
+                    reshard_after_forward=reshard_after_forward,
+                    shard_placement_fn=_experts_shard_placement_fn,
+                )
+            else:
+                raise NotImplementedError(
+                    "EP > 1 with per-param FSDP mesh is not supported on this "
+                    "PyTorch version (missing ShardPlacementResult). "
+                    "Use ep_degree=1 or upgrade PyTorch."
+                )
+        else:
+            fully_shard(
+                transformer_block,
+                **fsdp_config,
+                reshard_after_forward=reshard_after_forward,
+            )
+
+    fully_shard(model, **fsdp_config)
+    disable_fsdp_gradient_division(model)
+
+
+def apply_moe_ep_tp(
+    model: nn.Module,
+    tp_mesh: DeviceMesh | None,
+    ep_mesh: DeviceMesh | None,
+    etp_mesh: DeviceMesh | None,
+    ep_etp_mesh: DeviceMesh | None,
+    dual_pipe_v: bool = False,
+    comm_backend: str = "standard",
+    hybridep_non_blocking_expert_capacity_factor: float | None = None,
+):
+    assert ep_mesh is not None or tp_mesh is not None
+
+    for transformer_block in model.layers.values():
+        if not transformer_block.moe_enabled:
+            continue
+
+        if tp_mesh is not None:
+            moe_layer_plan = {
+                "moe": PrepareModuleInputOutput(
+                    input_layouts=(Shard(1),),
+                    desired_input_layouts=(Replicate(),),
+                    use_local_input=False,
+                    output_layouts=(Partial(),),
+                    desired_output_layouts=(Shard(1),),
+                ),
+                "moe.router.gate": NoParallel(
+                    local_output_grad_placements=(Partial(),),
+                ),
+            }
+            if ep_mesh is not None and etp_mesh is None:
+                moe_layer_plan.update({"moe.reorderer": ReordererSequenceParallel()})
+            if transformer_block.moe.shared_experts is not None:
+                moe_layer_plan.update(
+                    {
+                        "moe.shared_experts.w1": ColwiseParallelWithGradPlacement(
+                            local_input_grad_placements=(Partial(),)
+                        ),
+                        "moe.shared_experts.w2": RowwiseParallel(
+                            output_layouts=Partial(),
+                        ),
+                        "moe.shared_experts.w3": ColwiseParallelWithGradPlacement(
+                            local_input_grad_placements=(Partial(),)
+                        ),
+                    }
+                )
+            parallelize_module(
+                module=transformer_block,
+                device_mesh=tp_mesh,
+                parallelize_plan=moe_layer_plan,
+            )
+
+        experts_mesh, experts_plan = None, None
+        if ep_mesh is None:
+            assert ep_etp_mesh is None
+            experts_mesh = tp_mesh
+            experts_plan = TensorParallel()
+        elif tp_mesh is None or etp_mesh is None:
+            assert ep_etp_mesh is None
+            experts_mesh = ep_mesh
+            if comm_backend in ("deepep", "hybridep"):
+                score_before_experts = transformer_block.moe.score_before_experts
+                experts_plan = DeepEPExpertParallel(
+                    score_before_experts=score_before_experts,
+                    comm_backend=comm_backend,
+                    hybridep_non_blocking_expert_capacity_factor=hybridep_non_blocking_expert_capacity_factor,
+                )
+                logger.info(f"Applying {comm_backend.upper()} to MoE layer")
+            else:
+                experts_plan = ExpertParallel()
+        else:
+            experts_mesh = ep_etp_mesh
+            experts_plan = ExpertTensorParallel()
+
+        if dual_pipe_v and isinstance(experts_plan, BaseExpertParallel):
+            experts_plan = DualPipeExpertParallel(experts_plan)
+
+        parallelize_module(
+            module=transformer_block.moe.experts,
+            device_mesh=experts_mesh,
+            parallelize_plan=experts_plan,
+        )
