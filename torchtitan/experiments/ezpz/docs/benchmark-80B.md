@@ -1,6 +1,6 @@
-# 80B Benchmark
+# AuroraGPT-80B Benchmark
 
-> Sam Foreman
+> Sam Foreman  
 > 2026-03-31
 
 ## AuroraGPT Dense Model Configs
