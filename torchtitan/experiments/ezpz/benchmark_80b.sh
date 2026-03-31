@@ -37,6 +37,7 @@ BENCH_STEPS="${BENCH_STEPS:-10}"
 BENCH_SEQ_LEN="${BENCH_SEQ_LEN:-8192}"
 FILTER_NONZERO_RANKS="${FILTER_NONZERO_RANKS:-0}"
 NO_COMPILE="${NO_COMPILE:-0}"
+BENCH_LOCAL_BS="${BENCH_LOCAL_BS:-1}"
 BENCH_TIMEOUT="${BENCH_TIMEOUT:-1800}"  # per-run timeout in seconds (default: 30min)
 NGPU="${NGPU:-${NGPUS:-${WORLD_SIZE:-48}}}"
 TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
@@ -166,7 +167,7 @@ for model in "${MODELS[@]}"; do
             # Clear stale index cache and pre-build with MATCHING parameters
             # so all ranks find the index files during multi-rank training.
             rm -rf .cache/blendcorpus/*.npy 2>/dev/null || true
-            global_bs=$(( dp * pp ))  # local_batch_size=pp in the training command
+            global_bs=$(( BENCH_LOCAL_BS * dp ))
             PRECACHE_LOG="${OUTDIR}/_precache_${label}.log"
             echo -n "    pre-caching indices (global_bs=${global_bs}, seq_len=${seq_len})... "
             RANK=0 LOCAL_RANK=0 WORLD_SIZE=1 \
@@ -198,7 +199,7 @@ cfg = _Cfg(
     data_file_list='${DATASET_PATH}',
     seq_length=${seq_len},
     train_iters=${BENCH_STEPS},
-    micro_batch_size=${pp},
+    micro_batch_size=${BENCH_LOCAL_BS},
     global_batch_size=${global_bs},
     tensor_model_parallel_size=1,
     pipeline_model_parallel_size=1,
@@ -246,7 +247,7 @@ print('OK')
                     --module ezpz.agpt \
                     --config "agpt_${model,,}" \
                     --training.steps "${BENCH_STEPS}" \
-                    --training.local_batch_size "${pp}" \
+                    --training.local_batch_size "${BENCH_LOCAL_BS}" \
                     --training.seq_len "${seq_len}" \
                     --activation_checkpoint.mode full \
                     --metrics.log_freq 1 \
