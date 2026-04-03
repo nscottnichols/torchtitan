@@ -10,7 +10,6 @@ import ezpz.distributed
 
 import torch
 import torch.nn as nn
-from torch.distributed._composable.replicate_with_fsdp import replicate
 from torch.distributed.device_mesh import DeviceMesh
 from torch.distributed.fsdp import CPUOffloadPolicy, fully_shard, MixedPrecisionPolicy
 from torch.distributed.tensor import Replicate, Shard
@@ -298,6 +297,8 @@ def apply_replicate(
     param_dtype: torch.dtype,
     reduce_dtype: torch.dtype,
 ):
+    from torch.distributed._composable.replicate_with_fsdp import replicate
+
     mp_policy = MixedPrecisionPolicy(param_dtype=param_dtype, reduce_dtype=reduce_dtype)
     replicate_config = {"mesh": dp_mesh, "mp_policy": mp_policy}
 
