@@ -7,9 +7,7 @@
 from typing import Literal
 
 from torchtitan.components.loss import build_cross_entropy_loss
-from torchtitan.distributed.pipeline_parallel import pipeline_llm
 from torchtitan.experiments.ezpz.agpt.parallelize import parallelize_llama
-from torchtitan.experiments.ft.diloco import fragment_llm
 from torchtitan.models.common import (
     compute_ffn_hidden_dim,
     Embedding,
@@ -309,6 +307,9 @@ agpt_configs["80b_deep_alt"] = agpt_configs["80B_deep_alt"]
 
 
 def model_registry(flavor: str) -> FaultTolerantModelSpec:
+    from torchtitan.distributed.pipeline_parallel import pipeline_llm
+    from torchtitan.experiments.ft.diloco import fragment_llm
+
     return FaultTolerantModelSpec(
         name="ezpz.agpt",
         flavor=flavor,
