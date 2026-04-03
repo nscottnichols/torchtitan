@@ -38,17 +38,12 @@ from torchtitan.distributed import ParallelDims
 from torchtitan.distributed.activation_checkpoint import apply_ac
 from torchtitan.distributed.compile import apply_compile_sparse
 from torchtitan.distributed.context_parallel import apply_cp_to_attention_module
-from torchtitan.distributed.dual_pipe_v import get_dual_pipe_v_flag
 from torchtitan.distributed.tensor_parallel import maybe_enable_async_tp, NoParallel
 
 # from torchtitan.models.moe import DeepSeekV3Model
 from torchtitan.experiments.ezpz.moe import moeModel
 from torchtitan.models.llama3.parallelize import apply_replicate
-from torchtitan.distributed.dual_pipe_v import (
-    DualPipeExpertParallel,
-)
 from torchtitan.distributed.expert_parallel import (
-    BaseExpertParallel,
     DeepEPExpertParallel,
     ExpertParallel,
     ExpertTensorParallel,
@@ -59,7 +54,6 @@ from torchtitan.distributed.fsdp import get_fsdp_reshard_after_forward_policy
 from torchtitan.distributed.tensor_parallel import (
     ColwiseParallelWithGradPlacement,
 )
-from torchtitan.models.llama3.parallelize import disable_fsdp_gradient_division
 from torchtitan.protocols import ModelConvertersContainer
 from torchtitan.tools.logging import logger
 
@@ -157,17 +151,12 @@ def parallelize_moe(
             )
 
     if parallel_dims.tp_enabled or parallel_dims.ep_enabled:
-        dual_pipe_v = get_dual_pipe_v_flag(
-            parallelism=parallelism, ac_config=ac_config, parallel_dims=parallel_dims
-        )
-
         apply_moe_ep_tp(
             model,
             tp_mesh=parallel_dims.get_optional_mesh("tp"),
             ep_mesh=parallel_dims.get_optional_mesh("ep"),
             etp_mesh=parallel_dims.get_optional_mesh("etp"),
             ep_etp_mesh=parallel_dims.get_optional_mesh(["ep", "etp"]),
-            dual_pipe_v=dual_pipe_v,
             comm_backend=comm_backend,
             hybridep_non_blocking_expert_capacity_factor=parallelism.hybridep_non_blocking_expert_capacity_factor,
         )
@@ -178,12 +167,10 @@ def parallelize_moe(
                 "Context Parallel with Tensor Parallel is not yet supported for DeepSeek-V3. "
                 "See https://github.com/pytorch/torchtitan/issues/2446"
             )
-        attn_backend = getattr(model.config.layer.attention, "attn_backend", "sdpa")
         apply_cp_to_attention_module(
             # pyrefly: ignore [missing-attribute, not-callable]
             [block.attention.inner_attention for block in model.layers.values()],
             parallel_dims.get_mesh("cp"),
-            attn_backend,
         )
 
     model_compile_enabled = (
@@ -472,7 +459,6 @@ def apply_moe_ep_tp(
     ep_mesh: DeviceMesh | None,
     etp_mesh: DeviceMesh | None,
     ep_etp_mesh: DeviceMesh | None,
-    dual_pipe_v: bool = False,
     comm_backend: str = "standard",
     hybridep_non_blocking_expert_capacity_factor: float | None = None,
 ):
@@ -538,9 +524,6 @@ def apply_moe_ep_tp(
         else:
             experts_mesh = ep_etp_mesh
             experts_plan = ExpertTensorParallel()
-
-        if dual_pipe_v and isinstance(experts_plan, BaseExpertParallel):
-            experts_plan = DualPipeExpertParallel(experts_plan)
 
         parallelize_module(
             module=transformer_block.moe.experts,
