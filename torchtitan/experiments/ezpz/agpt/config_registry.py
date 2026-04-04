@@ -84,7 +84,7 @@ def _base_config(flavor: str) -> FaultTolerantTrainer.Config:
             last_save_model_only=False,
         ),
         activation_checkpoint=ActivationCheckpointConfig(
-            mode="selective",
+            mode="full",
         ),
         comm=CommConfig(train_timeout_seconds=100),
         fault_tolerance=FaultTolerance(enable=False),
