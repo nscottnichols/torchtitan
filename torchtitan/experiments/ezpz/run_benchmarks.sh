@@ -45,7 +45,7 @@ BENCH_GAS="${BENCH_GAS:-1}"
 BENCH_TIMEOUT="${BENCH_TIMEOUT:-1800}"
 FILTER_NONZERO_RANKS="${FILTER_NONZERO_RANKS:-0}"
 NO_COMPILE="${NO_COMPILE:-0}"
-NGPU="${NGPU:-${NGPUS:-${WORLD_SIZE:-4}}}"
+# NGPU="${NGPU:-${NGPUS:-${WORLD_SIZE:-4}}}"
 TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
 OUTDIR="outputs/benchmarks/${TIMESTAMP}"
 mkdir -p "${OUTDIR}"
@@ -75,7 +75,7 @@ RUN_DATE="$(date -Iseconds)"
 MACHINE_NAME="$(hostname -s)"
 JOB_ID="${PBS_JOBID:-${SLURM_JOB_ID:-${COBALT_JOBID:-local}}}"
 NUM_NODES="${NHOSTS:-${SLURM_NNODES:-1}}"
-DEVICES_PER_NODE=$(( NGPU / NUM_NODES ))
+DEVICES_PER_NODE=$(( "${NGPUS}" / NUM_NODES ))
 
 # ---------------------------------------------------------------------------
 # Run benchmarks
@@ -84,7 +84,7 @@ declare -a WALL_TIMES STATUSES TPS_VALUES TFLOPS_VALUES MFU_VALUES MEMORY_VALUES
 
 echo "============================================================"
 echo " ezpz benchmarks — ${TIMESTAMP}"
-echo " steps=${BENCH_STEPS}  devices=${NGPU}  nodes=${NUM_NODES}"
+echo " steps=${BENCH_STEPS}  devices=${NGPUS}  nodes=${NHOSTS}"
 echo "============================================================"
 echo ""
 
@@ -111,7 +111,7 @@ for ((i = 0; i < NUM_CONFIGS; i++)); do
 
     timeout "${BENCH_TIMEOUT}" \
         stdbuf -oL -eL \
-        env NGPU="${NGPU}" PYTHONUNBUFFERED=1 \
+        env NGPU="${NGPUS}" PYTHONUNBUFFERED=1 \
         ezpz launch python3 -m torchtitan.experiments.ezpz.train \
             --module "${module}" \
             --config "${config}" \
@@ -185,7 +185,7 @@ REPORT="${OUTDIR}/report.md"
 
     # Metadata table
     _meta_keys=("Date" "Commit" "Machine" "Job ID" "Nodes" "Devices" "Devices/Node" "Steps")
-    _meta_vals=("${RUN_DATE}" "${GIT_COMMIT}" "${MACHINE_NAME}" "${JOB_ID}" "${NUM_NODES}" "${NGPU}" "${DEVICES_PER_NODE}" "${BENCH_STEPS}")
+    _meta_vals=("${RUN_DATE}" "${GIT_COMMIT}" "${MACHINE_NAME}" "${JOB_ID}" "${NUM_NODES}" "${NGPUS}" "${DEVICES_PER_NODE}" "${BENCH_STEPS}")
     _vw=5
     for _v in "${_meta_vals[@]}"; do
         (( ${#_v} > _vw )) && _vw=${#_v}
