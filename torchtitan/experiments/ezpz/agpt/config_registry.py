@@ -117,7 +117,8 @@ def ezpz_agpt_2b() -> FaultTolerantTrainer.Config:
     cfg = _base_config("2b")
     cfg.hf_assets_path = "./assets/hf/gemma-7b"
     cfg.debug.print_config = True
-    cfg.training.local_batch_size = 2
+    cfg.training.local_batch_size = 1
+    cfg.activation_checkpoint.mode = None
     cfg.training.seq_len = 8192
     cfg.training.dtype = "bfloat16"
     cfg.dataloader.dataset = "blendcorpus"
