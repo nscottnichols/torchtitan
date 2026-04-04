@@ -62,7 +62,7 @@ def agpt_8b() -> FaultTolerantTrainer.Config:
 
 def _base_config(flavor: str) -> FaultTolerantTrainer.Config:
     return FaultTolerantTrainer.Config(
-        hf_assets_path="./tests/assets/tokenizer",
+        hf_assets_path="./tests/assets/hf/gemma-7b",
         model_spec=model_registry(flavor),
         tokenizer=EZPZTokenizer.Config(backend="hf"),
         optimizer=OptimizersContainer.Config(lr=8e-4),
@@ -94,7 +94,7 @@ def _base_config(flavor: str) -> FaultTolerantTrainer.Config:
 
 def ezpz_agpt_debugmodel() -> FaultTolerantTrainer.Config:
     cfg = _base_config("debugmodel")
-    cfg.hf_assets_path = "./assets/test"
+    cfg.hf_assets_path = "./assets/hf/gemma-7b"
     cfg.metrics.enable_wandb = True
     cfg.debug.print_config = True
     cfg.training.local_batch_size = 2
