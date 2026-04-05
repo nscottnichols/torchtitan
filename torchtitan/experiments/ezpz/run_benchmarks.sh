@@ -20,6 +20,8 @@
 #   BENCH_SEQ_LEN   — sequence length (default: 8192)
 #   BENCH_LOCAL_BS  — local batch size (default: 2)
 #   BENCH_GAS       — gradient accumulation steps (default: 1)
+#   BENCH_TP        — tensor parallel degree (default: 1)
+#   BENCH_PP        — pipeline parallel degree (default: 1)
 #   BENCH_TIMEOUT   — per-run timeout in seconds (default: 1800)
 #   FILTER_NONZERO_RANKS — set to 1 to suppress output from non-rank-0 (default: 0)
 #   NO_COMPILE      — set to 1 to disable torch.compile (default: 0)
@@ -40,8 +42,10 @@ fi
 # ---------------------------------------------------------------------------
 BENCH_STEPS="${BENCH_STEPS:-10}"
 BENCH_SEQ_LEN="${BENCH_SEQ_LEN:-8192}"
-BENCH_LOCAL_BS="${BENCH_LOCAL_BS:-2}"
+BENCH_LOCAL_BS="${BENCH_LOCAL_BS:-1}"
 BENCH_GAS="${BENCH_GAS:-1}"
+BENCH_TP="${BENCH_TP:-1}"
+BENCH_PP="${BENCH_PP:-1}"
 BENCH_TIMEOUT="${BENCH_TIMEOUT:-1800}"
 FILTER_NONZERO_RANKS="${FILTER_NONZERO_RANKS:-0}"
 NO_COMPILE="${NO_COMPILE:-0}"
@@ -50,10 +54,12 @@ TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
 OUTDIR="outputs/benchmarks/${TIMESTAMP}"
 mkdir -p "${OUTDIR}"
 
-# Benchmark configs: parallel arrays of (label, module, config)
-LABELS=(    "agpt_2b"    "agpt_20b"   "agpt_80b"   "agpt_80b_alt"   "agpt_80b_wide"   "agpt_80b_deep"   "agpt_80b_deep_alt"   "moe_debugmodel"  "moe_10b_2b")
-MODULES=(   "ezpz.agpt"  "ezpz.agpt"  "ezpz.agpt"  "ezpz.agpt"      "ezpz.agpt"       "ezpz.agpt"       "ezpz.agpt"           "ezpz.moe"        "ezpz.moe")
-CONFIGS=(   "agpt_2b"    "agpt_20b"   "agpt_80b"   "agpt_80b_alt"   "agpt_80b_wide"   "agpt_80b_deep"   "agpt_80b_deep_alt"   "moe_debugmodel"  "moe_10b_2b")
+# Benchmark configs: parallel arrays of (label, module, config, tp)
+# Per-config TP overrides BENCH_TP; 0 means "use BENCH_TP default".
+LABELS=( "agpt_2b" "agpt_20b" "agpt_80b" "agpt_80b_alt" "agpt_80b_wide" "agpt_80b_deep" "agpt_80b_deep_alt" "moe_debugmodel" "moe_10b_2b")
+MODULES=("ezpz.agpt" "ezpz.agpt" "ezpz.agpt" "ezpz.agpt"     "ezpz.agpt"     "ezpz.agpt"     "ezpz.agpt"         "ezpz.moe"      "ezpz.moe")
+CONFIGS=("agpt_2b" "agpt_20b" "agpt_80b" "agpt_80b_alt" "agpt_80b_wide" "agpt_80b_deep" "agpt_80b_deep_alt" "moe_debugmodel" "moe_10b_2b")
+TPS=(     0         0          2           2               2               2                2                   0                0)
 
 NUM_CONFIGS="${#LABELS[@]}"
 
@@ -75,7 +81,7 @@ RUN_DATE="$(date -Iseconds)"
 MACHINE_NAME="$(hostname -s)"
 JOB_ID="${PBS_JOBID:-${SLURM_JOB_ID:-${COBALT_JOBID:-local}}}"
 NUM_NODES="${NHOSTS:-${SLURM_NNODES:-1}}"
-DEVICES_PER_NODE=$(( "${NGPUS}" / NUM_NODES ))
+DEVICES_PER_NODE=$(("${NGPUS}" / NUM_NODES))
 
 # ---------------------------------------------------------------------------
 # Run benchmarks
@@ -105,27 +111,37 @@ for ((i = 0; i < NUM_CONFIGS; i++)); do
     start_seconds=$SECONDS
 
     compile_args=()
-    if (( NO_COMPILE )); then
+    if ((NO_COMPILE)); then
         compile_args=("--compile.no-enable")
     fi
+
+    # Per-config TP (0 means use BENCH_TP default)
+    tp="${TPS[$i]}"
+    if ((tp == 0)); then tp="${BENCH_TP}"; fi
+
+    # Compute global batch size to enable gradient accumulation:
+    # GBS = DP * local_batch_size * GAS, where DP = NGPUS / TP / PP
+    global_bs=$((NGPUS * BENCH_LOCAL_BS * BENCH_GAS / tp / BENCH_PP))
 
     timeout "${BENCH_TIMEOUT}" \
         stdbuf -oL -eL \
         env NGPU="${NGPUS}" PYTHONUNBUFFERED=1 \
         ezpz launch python3 -m torchtitan.experiments.ezpz.train \
-            --module "${module}" \
-            --config "${config}" \
-            --training.steps "${BENCH_STEPS}" \
-            --training.local_batch_size "${BENCH_LOCAL_BS}" \
-            --training.gradient_accumulation_steps "${BENCH_GAS}" \
-            --training.seq_len "${BENCH_SEQ_LEN}" \
-            --metrics.log_freq 1 \
-            --checkpoint.no-enable \
-            --dataloader.dataset blendcorpus \
-            --dataloader.dataset_path "${DATASET_PATH}" \
-            "${compile_args[@]}" \
-            "$@" \
-        2>&1 | if (( FILTER_NONZERO_RANKS )); then grep -v '^\[rank[1-9][0-9]*\]:'; else cat; fi > "${logfile}" || true
+        --module "${module}" \
+        --config "${config}" \
+        --training.steps "${BENCH_STEPS}" \
+        --training.local_batch_size "${BENCH_LOCAL_BS}" \
+        --training.global_batch_size "${global_bs}" \
+        --training.seq_len "${BENCH_SEQ_LEN}" \
+        --parallelism.tensor_parallel_degree "${tp}" \
+        --parallelism.pipeline_parallel_degree "${BENCH_PP}" \
+        --metrics.log_freq 1 \
+        --checkpoint.no-enable \
+        --dataloader.dataset blendcorpus \
+        --dataloader.dataset_path "${DATASET_PATH}" \
+        "${compile_args[@]}" \
+        "$@" \
+        2>&1 | if ((FILTER_NONZERO_RANKS)); then grep -v '^\[rank[1-9][0-9]*\]:'; else cat; fi >"${logfile}" || true
     exit_code=${PIPESTATUS[0]}
 
     # Kill any leftover processes from this run
@@ -133,9 +149,9 @@ for ((i = 0; i < NUM_CONFIGS; i++)); do
     sleep 2
 
     # Determine run status
-    if (( exit_code == 124 )); then
+    if ((exit_code == 124)); then
         STATUSES[$i]="TIMEOUT"
-    elif (( exit_code != 0 )); then
+    elif ((exit_code != 0)); then
         STATUSES[$i]="FAIL(rc=${exit_code})"
     elif grep -q 'OUT_OF_RESOURCES\|out of memory\|OOM' "${logfile}"; then
         STATUSES[$i]="OOM"
@@ -147,7 +163,7 @@ for ((i = 0; i < NUM_CONFIGS; i++)); do
         STATUSES[$i]="OK"
     fi
 
-    elapsed=$(( SECONDS - start_seconds ))
+    elapsed=$((SECONDS - start_seconds))
     WALL_TIMES[$i]="${elapsed}"
 
     # Parse metrics from last log line containing "loss:"
@@ -188,7 +204,7 @@ REPORT="${OUTDIR}/report.md"
     _meta_vals=("${RUN_DATE}" "${GIT_COMMIT}" "${MACHINE_NAME}" "${JOB_ID}" "${NUM_NODES}" "${NGPUS}" "${DEVICES_PER_NODE}" "${BENCH_STEPS}")
     _vw=5
     for _v in "${_meta_vals[@]}"; do
-        (( ${#_v} > _vw )) && _vw=${#_v}
+        ((${#_v} > _vw)) && _vw=${#_v}
     done
 
     printf "| %-12s | %-${_vw}s |\n" "Field" "Value"
@@ -250,7 +266,7 @@ REPORT="${OUTDIR}/report.md"
 
     echo ""
     echo "Logs: \`${OUTDIR}/\`"
-} > "${REPORT}"
+} >"${REPORT}"
 
 # Print report to stdout
 echo "============================================================"

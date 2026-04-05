@@ -38,7 +38,7 @@ BENCH_SEQ_LEN="${BENCH_SEQ_LEN:-8192}"
 FILTER_NONZERO_RANKS="${FILTER_NONZERO_RANKS:-0}"
 NO_COMPILE="${NO_COMPILE:-0}"
 BENCH_LOCAL_BS="${BENCH_LOCAL_BS:-1}"
-BENCH_GAS="${BENCH_GAS:-1}"  # gradient accumulation steps
+BENCH_GAS="${BENCH_GAS:-1}"
 BENCH_TIMEOUT="${BENCH_TIMEOUT:-1800}"  # per-run timeout in seconds (default: 30min)
 NGPU="${NGPU:-${NGPUS:-${WORLD_SIZE:-48}}}"
 TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
@@ -241,6 +241,9 @@ print('OK')
                 compile_args=("--compile.no-enable")
             fi
 
+            # GBS = DP * local_batch_size * GAS
+            global_bs=$(( BENCH_LOCAL_BS * dp * BENCH_GAS ))
+
             timeout "${BENCH_TIMEOUT}" \
                 stdbuf -oL -eL \
                 env NGPU="${NGPU}" PYTHONUNBUFFERED=1 \
@@ -249,7 +252,7 @@ print('OK')
                     --config "agpt_${model,,}" \
                     --training.steps "${BENCH_STEPS}" \
                     --training.local_batch_size "${BENCH_LOCAL_BS}" \
-                    --training.gradient_accumulation_steps "${BENCH_GAS}" \
+                    --training.global_batch_size "${global_bs}" \
                     --training.seq_len "${seq_len}" \
                     --activation_checkpoint.mode full \
                     --metrics.log_freq 1 \
