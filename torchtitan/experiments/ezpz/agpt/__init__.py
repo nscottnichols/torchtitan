@@ -224,6 +224,15 @@ agpt_configs = {
         vocab_size=256128,
         hidden_dim=compute_ffn_hidden_dim(5120, multiple_of=1024),
     ),
+    "20B_flex_attn": _build_agpt_config(
+        dim=5120,
+        n_layers=64,
+        n_heads=40,
+        n_kv_heads=8,
+        rope_theta=500000,
+        vocab_size=256128,
+        hidden_dim=compute_ffn_hidden_dim(5120, multiple_of=1024),
+    ),
     "50B": _build_agpt_config(
         dim=8192,
         n_layers=56,
@@ -321,6 +330,7 @@ def _apply_varlen_attn(config: Llama3Model.Config) -> Llama3Model.Config:
 _apply_flex_attn(agpt_configs["debugmodel_flex_attn"])
 _apply_varlen_attn(agpt_configs["debugmodel_varlen_attn"])
 _apply_flex_attn(agpt_configs["2B_flex_attn"])
+_apply_flex_attn(agpt_configs["20B_flex_attn"])
 
 # Case-insensitive aliases
 agpt_configs["2b"] = agpt_configs["2B"]
@@ -328,6 +338,7 @@ agpt_configs["2b_flex_attn"] = agpt_configs["2B_flex_attn"]
 agpt_configs["7b"] = agpt_configs["7B"]
 agpt_configs["8b"] = agpt_configs["8B"]
 agpt_configs["20b"] = agpt_configs["20B"]
+agpt_configs["20b_flex_attn"] = agpt_configs["20B_flex_attn"]
 agpt_configs["50b"] = agpt_configs["50B"]
 agpt_configs["80b"] = agpt_configs["80B"]
 agpt_configs["80b_wide"] = agpt_configs["80B_wide"]
