@@ -8,6 +8,7 @@ import json
 import os
 from dataclasses import is_dataclass
 from typing import Any
+import ezpz
 
 from torchtitan.components.checkpoint import CheckpointManager
 from torchtitan.components.lr_scheduler import LRSchedulersContainer
@@ -28,7 +29,7 @@ from torchtitan.experiments.ezpz.blendcorpus.blendcorpus_builder import (
     BlendCorpusDataLoader,
 )
 from torchtitan.experiments.ezpz.blendcorpus.build_tokenizer import EZPZTokenizer
-from torchtitan.experiments.ft.trainer import FaultTolerantTrainer
+from torchtitan.experiments.ezpz.trainer import FaultTolerantTrainer
 from torchtitan.hf_datasets.text_datasets import HuggingFaceTextDataLoader
 from torchtitan.protocols.model_converter import ModelConvertersContainer
 
@@ -95,13 +96,16 @@ def _config_from_json(base_fn) -> FaultTolerantTrainer.Config:
 # cfg.checkpoint.enable = True
 # cfg.checkpoint.interval = 50
 def moe_debugmodel() -> FaultTolerantTrainer.Config:
+    dset_path = f"torchtitan/experiments/ezpz/data-lists/{ezpz.distributed.get_machine().lower()}/books.txt"
     return FaultTolerantTrainer.Config(
-        hf_assets_path="./tests/assets/tokenizer",
+        hf_assets_path="./assets/hf/gemma-7b",
         debug=DebugConfig(print_config=True),
         metrics=MetricsProcessor.Config(log_freq=1, enable_wandb=True),
         model_spec=model_registry("debugmodel"),
         tokenizer=EZPZTokenizer.Config(backend="hf"),
-        dataloader=BlendCorpusDataLoader.Config(dataset="blendcorpus"),
+        dataloader=BlendCorpusDataLoader.Config(
+            dataset="blendcorpus", dataset_path=dset_path
+        ),
         optimizer=OptimizersContainer.Config(lr=8e-4),
         lr_scheduler=LRSchedulersContainer.Config(
             warmup_steps=2,
@@ -130,7 +134,7 @@ def moe_debugmodel() -> FaultTolerantTrainer.Config:
 
 def moe_debugmodel_hf() -> FaultTolerantTrainer.Config:
     return FaultTolerantTrainer.Config(
-        hf_assets_path="./tests/assets/tokenizer",
+        hf_assets_path="./assets/hf/gemma-7b",
         debug=DebugConfig(print_config=True),
         metrics=MetricsProcessor.Config(log_freq=1, enable_wandb=True),
         model_spec=model_registry("debugmodel"),
@@ -175,7 +179,7 @@ def moe_debugmodel_flex_attn_hf() -> FaultTolerantTrainer.Config:
 
 def moe_small() -> FaultTolerantTrainer.Config:
     return FaultTolerantTrainer.Config(
-        hf_assets_path="./tests/assets/tokenizer",
+        hf_assets_path="./assets/hf/gemma-7b",
         debug=DebugConfig(print_config=True),
         metrics=MetricsProcessor.Config(log_freq=1, enable_wandb=True),
         model_spec=model_registry("small"),

@@ -17,7 +17,7 @@ from torchtitan.experiments.ezpz.blendcorpus.blendcorpus_builder import (
 )
 from torchtitan.experiments.ezpz.blendcorpus.build_tokenizer import EZPZTokenizer
 from torchtitan.experiments.ft.config.job_config import FaultTolerance
-from torchtitan.experiments.ft.trainer import FaultTolerantTrainer
+from torchtitan.experiments.ezpz.trainer import FaultTolerantTrainer
 
 from . import model_registry
 
@@ -133,6 +133,14 @@ def ezpz_agpt_2b() -> FaultTolerantTrainer.Config:
 
 def ezpz_agpt_2b_flex_attn() -> FaultTolerantTrainer.Config:
     return agpt("2b_flex_attn", local_batch_size=2)
+
+
+def ezpz_agpt_20b_flex_attn() -> FaultTolerantTrainer.Config:
+    return agpt("20b_flex_attn")
+
+
+def agpt_20b_flex_attn() -> FaultTolerantTrainer.Config:
+    return agpt("20b_flex_attn")
 
 
 def ezpz_agpt_7b() -> FaultTolerantTrainer.Config:
