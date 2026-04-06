@@ -4,13 +4,14 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-import json
 import os
 import time
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import cast
+
+import ezpz
 
 import torch
 from torch.distributed.elastic.multiprocessing.errors import record
@@ -112,15 +113,22 @@ class FaultTolerantTrainer(Trainer):
         )
         self.model_config = model_config
 
-        logger.info(
-            f"Building {model_spec.name} {model_spec.flavor} "
-            f"with {json.dumps(model_config.to_dict(), indent=2, ensure_ascii=False)}"
-        )
+        # logger.info(
+        #     f"Building {model_spec.name} {model_spec.flavor} "
+        #     f"with {json.dumps(model_config.to_dict(), indent=2, ensure_ascii=False)}"
+        # )
         with (
             torch.device("meta"),
             utils.set_default_dtype(TORCH_DTYPE_MAP[config.training.dtype]),
         ):
             model = model_config.build()
+
+        # if ezpz.dist
+        # if ezpz.distributed.asni
+        if ezpz.distributed.verify_wandb():
+            import wandb
+            if wandb.run is not None:
+                wandb.run.watch(model, log="all")
 
         # Build the collection of model converters. No-op if converters empty
         model_compile_enabled = (
@@ -159,10 +167,23 @@ class FaultTolerantTrainer(Trainer):
             self.metrics_processor.num_flops_per_token,
         ) = model_config.get_nparams_and_flops(model, config.training.seq_len)
 
+        heading = 80 * "="
         logger.info(
-            f"{color.blue}Model {model_spec.name} {model_spec.flavor} "
-            f"{color.red}size: {model_param_count:,} total parameters{color.reset}"
+            "\n".join([
+                "\n",
+                f"{heading}",
+                f"{color.blue}Model: {model_spec.name} {model_spec.flavor} ",
+                f"{color.red}config: {model_param_count:,} total parameters{color.reset}",
+                f"{heading}",
+                "\n",
+            ])
         )
+        # logger.info(
+        #     "\n" + 80 * "="
+        #     f"{color.blue}Model {model_spec.name} {model_spec.flavor} "
+        #     f"{color.red}size: {model_param_count:,} total parameters{color.reset}"
+        #
+        # )
 
         # move sharded model to CPU/GPU and initialize weights via DTensor
         buffer_device: torch.device | None
