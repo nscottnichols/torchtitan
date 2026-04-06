@@ -100,9 +100,6 @@ for ((i = 0; i < NUM_CONFIGS; i++)); do
     config="${CONFIGS[$i]}"
     logfile="${OUTDIR}/${label}.log"
 
-    # Clear stale index cache between runs
-    rm -rf .cache/blendcorpus/*.npy 2>/dev/null || true
-
     echo "--- [${label}] running (module=${module} config=${config}) ---"
     echo "    started @ $(tstamp)"
     echo "    logfile: ${logfile}"
@@ -216,8 +213,7 @@ REPORT="${OUTDIR}/report.md"
 
     echo "## Results"
     echo ""
-    printf "| %-14s | %5s | %20s | %7s | %8s | %6s | %10s |" \
-        "Config" "Steps" "Memory" "TPS" "TFLOPS" "MFU" "Wall (s)"
+
     # Add wandb column only if any run has a URL
     has_wandb=false
     for ((i = 0; i < NUM_CONFIGS; i++)); do
@@ -226,27 +222,47 @@ REPORT="${OUTDIR}/report.md"
             break
         fi
     done
+
+    # Compute Config column width from longest label
+    cw=6  # minimum ("Config")
+    for ((i = 0; i < NUM_CONFIGS; i++)); do
+        ((${#LABELS[$i]} > cw)) && cw=${#LABELS[$i]}
+    done
+
+    # Build wandb shortlink column values: [run_id](url)
+    declare -a WANDB_CELLS
+    ww=3  # minimum ("W&B")
+    for ((i = 0; i < NUM_CONFIGS; i++)); do
+        if [[ -n "${WANDB_VALUES[$i]}" ]]; then
+            run_id="${WANDB_VALUES[$i]##*/}"
+            WANDB_CELLS[$i]="[${run_id}](${WANDB_VALUES[$i]})"
+        else
+            WANDB_CELLS[$i]=""
+        fi
+        ((${#WANDB_CELLS[$i]} > ww)) && ww=${#WANDB_CELLS[$i]}
+    done
+
+    # Header
+    printf "| %-${cw}s | %5s | %20s | %7s | %8s | %6s | %10s |" \
+        "Config" "Steps" "Memory" "TPS" "TFLOPS" "MFU" "Wall (s)"
     if $has_wandb; then
-        printf " %-6s |" "W&B"
+        printf " %-${ww}s |" "W&B"
     fi
     printf " %-6s |\n" "Status"
 
     # Separator
+    _sep() { printf '%0.s-' $(seq 1 "$1"); }
     printf "|-%s-|-%s-|-%s-|-%s-|-%s-|-%s-|-%s-|" \
-        "$(printf '%0.s-' $(seq 1 14))" \
-        "$(printf '%0.s-' $(seq 1 5))" \
-        "$(printf '%0.s-' $(seq 1 20))" \
-        "$(printf '%0.s-' $(seq 1 7))" \
-        "$(printf '%0.s-' $(seq 1 8))" \
-        "$(printf '%0.s-' $(seq 1 6))" \
-        "$(printf '%0.s-' $(seq 1 10))"
+        "$(_sep "${cw}")" "$(_sep 5)" "$(_sep 20)" \
+        "$(_sep 7)" "$(_sep 8)" "$(_sep 6)" "$(_sep 10)"
     if $has_wandb; then
-        printf -- "-%s-|" "$(printf '%0.s-' $(seq 1 6))"
+        printf -- "-%s-|" "$(_sep "${ww}")"
     fi
-    printf -- "-%s-|\n" "$(printf '%0.s-' $(seq 1 6))"
+    printf -- "-%s-|\n" "$(_sep 6)"
 
+    # Rows
     for ((i = 0; i < NUM_CONFIGS; i++)); do
-        printf "| %-14s | %5s | %20s | %7s | %8s | %6s | %10s |" \
+        printf "| %-${cw}s | %5s | %20s | %7s | %8s | %6s | %10s |" \
             "${LABELS[$i]}" \
             "${BENCH_STEPS}" \
             "${MEMORY_VALUES[$i]}" \
@@ -255,11 +271,7 @@ REPORT="${OUTDIR}/report.md"
             "${MFU_VALUES[$i]}" \
             "${WALL_TIMES[$i]}"
         if $has_wandb; then
-            if [[ -n "${WANDB_VALUES[$i]}" ]]; then
-                printf " [link](%s) |" "${WANDB_VALUES[$i]}"
-            else
-                printf " %-6s |" ""
-            fi
+            printf " %-${ww}s |" "${WANDB_CELLS[$i]}"
         fi
         printf " %-6s |\n" "${STATUSES[$i]}"
     done
