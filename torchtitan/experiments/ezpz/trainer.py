@@ -335,8 +335,11 @@ class FaultTolerantTrainer(Trainer):
         self.step = 0
         self.ntokens_seen = 0
 
-        # FT addition: pass ft_manager to CheckpointManager
-        self.checkpointer = config.checkpoint.build(
+        # Build checkpoint manager.
+        # When fault tolerance is enabled and config.checkpoint uses
+        # FTCheckpointManager.Config, ft_manager is passed through.
+        # Otherwise the base CheckpointManager is used without it.
+        ckpt_kwargs: dict = dict(
             dataloader=self.dataloader,
             model_parts=self.model_parts,
             optimizers=self.optimizers,
@@ -348,8 +351,13 @@ class FaultTolerantTrainer(Trainer):
                 else None
             ),
             base_folder=config.dump_folder,
-            ft_manager=self.ft_manager,
         )
+        # FTCheckpointManager accepts ft_manager; base CheckpointManager does not
+        from torchtitan.experiments.ft.checkpoint import FTCheckpointManager
+
+        if isinstance(config.checkpoint, FTCheckpointManager.Config):
+            ckpt_kwargs["ft_manager"] = self.ft_manager
+        self.checkpointer = config.checkpoint.build(**ckpt_kwargs)
 
         loss_parallel_enabled = (
             parallel_dims.tp_enabled and not config.parallelism.disable_loss_parallel
