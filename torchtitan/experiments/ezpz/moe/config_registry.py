@@ -123,7 +123,7 @@ def _base_config(flavor: str) -> FaultTolerantTrainer.Config:
 def moe(
     flavor: str,
     local_batch_size: int = 1,
-    activation_checkpoint_mode: Literal["none", "full", "selective"] = "selective",
+    activation_checkpoint_mode: Literal["none", "full", "selective"] = "full",
     seq_len: int = 8192,
     dtype: Literal["bfloat16", "float32"] = "bfloat16",
     compile: bool = True,
