@@ -86,6 +86,7 @@ def agpt(
     cfg.metrics.enable_wandb = True
     if compile:
         cfg.compile = CompileConfig(enable=True)
+    cfg.parallelism.fsdp_reshard_after_forward = "never"
     cfg.checkpoint.enable = True
     cfg.checkpoint.interval = checkpoint_interval
     return cfg
