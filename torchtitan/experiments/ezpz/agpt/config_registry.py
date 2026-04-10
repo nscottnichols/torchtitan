@@ -67,6 +67,7 @@ def agpt(
     seq_len: int = 8192,
     dtype: Literal["bfloat16", "float32"] = "bfloat16",
     compile: bool = True,
+    fsdp_reshard_after_forward: Literal["default", "always", "never"] = "default",
     checkpoint_interval: int = 50,
     hf_assets_path: str = "./assets/hf/gemma-7b",
     dataset_path: str | None = None,
@@ -86,7 +87,7 @@ def agpt(
     cfg.metrics.enable_wandb = True
     if compile:
         cfg.compile = CompileConfig(enable=True)
-    cfg.parallelism.fsdp_reshard_after_forward = "never"
+    cfg.parallelism.fsdp_reshard_after_forward = fsdp_reshard_after_forward
     cfg.checkpoint.enable = True
     cfg.checkpoint.interval = checkpoint_interval
     return cfg
