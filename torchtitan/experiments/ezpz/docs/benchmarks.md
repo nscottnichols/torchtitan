@@ -338,18 +338,39 @@ LBS=1, GAS=1, compile=True, AC=full, fsdp_reshard_after_forward=default
 
 All runs with compile + AC=full + LBS=1.
 
+### Parallelism
+
 | Config | TPS | TFLOPS | MFU | Memory | Notes |
 |--------|-----|--------|-----|--------|-------|
-| **FSDP (reshard=default)** | **352** | **52.2** | **17.5%** | **70%** | **Baseline / best** |
+| **FSDP (reshard=default)** | **352** | **52.2** | **17.5%** | **70%** | **Baseline** |
 | FSDP reshard=never | OOM | — | — | — | Unsharded params exceed 64GB |
+| FSDP reshard=always | 354 | 52.6 | 17.6% | 68% | Neutral |
 | HSDP (replicate=2 shard=12) | 348 | 51.7 | 17.3% | 85% | Higher memory, no throughput gain |
 | TP=2 | 273 | 41.0 | 13.7% | 54% | TP allreduce overhead per layer too high |
 | TP=2 + reshard=never | 303 | 45.0 | 15.1% | 79% | Better than TP=2 alone, still worse than baseline |
 
+### Gradient Accumulation
+
+| Config | TPS | TFLOPS | MFU | Memory | Notes |
+|--------|-----|--------|-----|--------|-------|
+| GAS=1 (baseline) | 352 | 52.2 | 17.5% | 70% | |
+| GAS=2 | 357 | 53.1 | 17.8% | 70% | +1.4% |
+| **GAS=2 + workers=4 + no loss_parallel + gc=1000** | **358** | **53.3** | **17.9%** | **70%** | **Best: +1.7%** |
+
+### Activation Checkpointing
+
+| Config | TPS | TFLOPS | MFU | Memory | Notes |
+|--------|-----|--------|-----|--------|-------|
+| AC=full (baseline) | 352 | 52.2 | 17.5% | 70% | |
+| AC=memory_budget(0.85) | OOM | — | — | — | Solver doesn't respect budget |
+| AC=memory_budget(0.65) | OOM | — | — | — | Same: always allocates 54.68 GiB |
+
 ### Key Findings
 
-1. **The baseline is already optimal** for 2 nodes — FSDP with default reshard is the best config
-2. **`reshard=never` OOMs** on the 20B model (works for 2B) — keeping 21B params unsharded exceeds 64GB
-3. **TP=2 hurts** even more than on 2B (273 vs 352 tps) — 64 layers of TP allreduces are expensive
-4. **HSDP is neutral** at 2 nodes — cross-node FSDP traffic isn't the bottleneck at this scale
-5. **The 20B model needs more nodes** to improve MFU — at 2 nodes, per-device memory is the binding constraint
+1. **GAS=2 is the only measurable win** (+1.7%) — amortizes optimizer step overhead
+2. **`reshard=never` OOMs** on the 20B model — keeping 21B params unsharded exceeds 64GB
+3. **`reshard=always`** saves 2% memory but no throughput gain
+4. **TP=2 hurts** even more than on 2B (273 vs 352 tps) — 64 layers of TP allreduces are expensive
+5. **HSDP is neutral** at 2 nodes — cross-node FSDP traffic isn't the bottleneck
+6. **`memory_budget` AC is broken** for 20B on XPU — solver ignores the budget target and always allocates the same 54.68 GiB, causing OOM at any budget setting
+7. **The 20B model needs more nodes** to improve MFU — at 2 nodes, per-device memory is the binding constraint
