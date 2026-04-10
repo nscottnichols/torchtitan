@@ -1,8 +1,8 @@
 #!/bin/bash --login
-#PBS -N agpt-2b-sophiag-olmo-mix-n256
-#PBS -l select=256
+#PBS -N agpt-2b-sophiag-olmo-mix-n512
+#PBS -l select=512
 #PBS -l walltime=06:00:00
-#PBS -l filesystems=home:flare
+#PBS -l filesystems=home:tegu
 #PBS -A AuroraGPT
 #PBS -q prod
 #PBS -k doe

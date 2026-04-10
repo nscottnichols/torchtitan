@@ -1,8 +1,8 @@
 #!/bin/bash --login
-#PBS -N agpt-2b-sophiag-olmo-mix-n256
-#PBS -l select=256
-#PBS -l walltime=06:00:00
-#PBS -l filesystems=home:flare
+#PBS -N agpt-20b-sophiag-olmo-mix-n1024
+#PBS -l select=1024
+#PBS -l walltime=12:00:00
+#PBS -l filesystems=home:tegu
 #PBS -A AuroraGPT
 #PBS -q prod
 #PBS -k doe
@@ -19,7 +19,7 @@ fi
 
 
 # ---- Configuration ----
-MODEL="2b"
+MODEL="20b"
 NNODES="${NHOSTS:-$(wc -l < "${PBS_NODEFILE}")}"
 SEQ_LEN="${SEQ_LEN:-8192}"
 TP="${TP:-1}"
@@ -30,7 +30,7 @@ GAS="${GAS:-1}"
 GBS=$(( NGPUS * LBS * GAS / (TP * PP * CP) ))
 
 TRAIN_TOKENS="${TRAIN_TOKENS:-4673780159710}"
-# 4,673,780,159,710 tokens / (6144 * 8192) = 92,859 steps
+# 4,673,780,159,710 tokens / (12288 * 8192) = 46,429 steps
 TRAINING_STEPS=$(( TRAIN_TOKENS / (GBS * SEQ_LEN) ))
 
 OPTIMIZER="${OPTIMIZER:-sophiag}"

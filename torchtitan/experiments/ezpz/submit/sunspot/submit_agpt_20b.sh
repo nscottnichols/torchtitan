@@ -1,8 +1,8 @@
 #!/bin/bash --login
-#PBS -N agpt-2b-sophiag-olmo-mix-n256
+#PBS -N agpt-20b-sophiag-olmo-mix-n256
 #PBS -l select=256
-#PBS -l walltime=06:00:00
-#PBS -l filesystems=home:flare
+#PBS -l walltime=12:00:00
+#PBS -l filesystems=home:tegu
 #PBS -A AuroraGPT
 #PBS -q prod
 #PBS -k doe
@@ -19,7 +19,7 @@ fi
 
 
 # ---- Configuration ----
-MODEL="2b"
+MODEL="20b"
 NNODES="${NHOSTS:-$(wc -l < "${PBS_NODEFILE}")}"
 SEQ_LEN="${SEQ_LEN:-8192}"
 TP="${TP:-1}"
