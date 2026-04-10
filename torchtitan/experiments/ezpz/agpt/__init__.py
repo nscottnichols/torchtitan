@@ -21,11 +21,24 @@ from torchtitan.models.common import (
     RoPE,
     TransformerBlock,
 )
+from torch.nn.attention import SDPBackend
+
 from torchtitan.models.common.attention import (
     FlexAttention,
     ScaledDotProductAttention,
     VarlenAttention,
 )
+
+
+class XPUScaledDotProductAttention(ScaledDotProductAttention):
+    """SDPA with OVERRIDEABLE backend for XPU-optimized fused attention."""
+
+    sdpa_backends = [
+        SDPBackend.OVERRIDEABLE,
+        SDPBackend.CUDNN_ATTENTION,
+        SDPBackend.FLASH_ATTENTION,
+        SDPBackend.MATH,
+    ]
 from torchtitan.models.common.config_utils import make_ffn_config, make_gqa_config
 from torchtitan.models.common.param_init import depth_scaled_std
 from torchtitan.models.llama3.model import Llama3Model, Llama3TransformerBlock
@@ -90,7 +103,7 @@ def _build_agpt_layers(
                     inner_attention=(
                         inner_attention
                         if inner_attention is not None
-                        else ScaledDotProductAttention.Config()
+                        else XPUScaledDotProductAttention.Config()
                     ),
                     mask_type=mask_type,
                     rope_backend=rope_backend,
