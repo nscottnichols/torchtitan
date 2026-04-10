@@ -12,10 +12,14 @@
 cd "${PBS_O_WORKDIR}" || exit 1
 
 source <(curl -fsSL https://bit.ly/ezpz-utils) && ezpz_setup_env
-if [[ "$(ps aux | grep -E "$USER.+palsd")" ]]; then
-    log_message INFO "Detected running 'palsd' process; killing and continuing..."
-    ezpz_kill_mpi
+# Kill stale palsd processes from previous runs, but spare our own process tree
+_my_pids=$(ps -o pid= --ppid $$ 2>/dev/null | tr '\n' '|')
+_stale_palsd=$(ps aux | grep -E "$USER.+palsd" | grep -v grep | grep -v -E "^\S+\s+($$|${_my_pids%|})\s" | awk '{print $2}')
+if [[ -n "$_stale_palsd" ]]; then
+    log_message INFO "Killing stale palsd processes: $_stale_palsd"
+    echo "$_stale_palsd" | xargs -r kill 2>/dev/null || true
 fi
+unset _my_pids _stale_palsd
 
 
 # ---- Configuration ----
