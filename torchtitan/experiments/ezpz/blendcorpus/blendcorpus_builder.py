@@ -1,9 +1,10 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import importlib
 import os
 from types import SimpleNamespace
 from typing import Any
 
+import ezpz
 import torch
 
 from torchtitan.components.dataloader import BaseDataLoader
@@ -45,7 +46,9 @@ class BlendCorpusDataLoader(BaseDataLoader):
     class Config(BaseDataLoader.Config):
         num_workers: int = 0
         persistent_workers: bool = False
-        pin_memory: bool = True
+        pin_memory: bool = field(
+            default_factory=lambda: ezpz.get_torch_device_type() == "cuda"
+        )
         prefetch_factor: int | None = None
         infinite: bool = True
 
@@ -144,6 +147,7 @@ class BlendCorpusDataLoader(BaseDataLoader):
             pipeline_model_parallel_size=int(pp_degree),
             sequence_parallel_size=int(cp_degree),
             num_workers=int(config.num_workers),
+            pin_memory=bool(config.pin_memory),
             split=config.split,
             dataloader_type=config.dataloader_type,
             shuffle=bool(config.shuffle),
