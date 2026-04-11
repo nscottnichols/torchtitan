@@ -6,6 +6,7 @@
 
 from collections.abc import Callable
 from copy import deepcopy
+from dataclasses import dataclass
 from functools import partial
 from typing import Literal
 
@@ -31,7 +32,23 @@ from torchtitan.models.common.attention import (
 
 
 class XPUScaledDotProductAttention(ScaledDotProductAttention):
-    """SDPA with OVERRIDEABLE backend for XPU-optimized fused attention."""
+    """SDPA with OVERRIDEABLE backend for XPU-optimized fused attention.
+
+    Adds OVERRIDEABLE to the backend priority list for the XPU fused
+    attention kernel. On single-device the OVERRIDEABLE backend is 23x
+    faster than MATH and avoids materializing the N×N attention matrix.
+
+    Note: On XPU, the sdpa_kernel context manager and
+    torch.backends.cuda.enable_math_sdp are not respected inside
+    FSDP-wrapped modules (PyTorch XPU bug). The MATH backend is always
+    used inside FSDP regardless of this setting. TP is required for
+    models where the MATH attention matrix exceeds device memory
+    (e.g., 80B with 72 heads at seq_len=8192 = 9 GiB per tile).
+    """
+
+    @dataclass(kw_only=True, slots=True)
+    class Config(ScaledDotProductAttention.Config):
+        pass
 
     sdpa_backends = [
         SDPBackend.OVERRIDEABLE,
