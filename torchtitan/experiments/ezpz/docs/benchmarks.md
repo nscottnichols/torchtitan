@@ -374,3 +374,64 @@ All runs with compile + AC=full + LBS=1.
 5. **HSDP is neutral** at 2 nodes — cross-node FSDP traffic isn't the bottleneck
 6. **`memory_budget` AC is broken** for 20B on XPU — solver ignores the budget target and always allocates the same 54.68 GiB, causing OOM at any budget setting
 7. **The 20B model needs more nodes** to improve MFU — at 2 nodes, per-device memory is the binding constraint
+
+## AGPT 80B Throughput Optimization (2026-04-11)
+
+**Platform:** Sunspot (Intel Data Center GPU Max 1550, 64GB HBM per tile)
+**Nodes:** 16 (192 XPU tiles, 12 per node)
+**Model:** agpt_80b (80.8B params, 84 layers, 72 heads, 12 KV heads, dim=9216)
+**Sequence length:** 8192 | **Precision:** bfloat16
+**Dataset:** c4_test (blendcorpus blocked by Lustre cache race at 192 ranks)
+
+### Key Constraint: SDPA MATH Backend
+
+The SDPA `MATH` backend materializes the full `N × N` attention score matrix.
+For the 80B model with 72 heads: `72 × 8192 × 8192 × 2 bytes = 9 GiB` per tile.
+This single allocation exceeds available memory regardless of node count.
+**TP is mandatory** to split heads and reduce this allocation.
+
+### Best Config
+
+```
+TP=2, LBS=1, compile=True, AC=full, fsdp_reshard_after_forward=default
+```
+
+**~108 tps / 59.6 TFLOPS / 20.0% MFU** at 75% memory.
+
+### Feasibility
+
+| Nodes | TP | Status | Notes |
+|-------|-----|--------|-------|
+| 2 (24 tiles) | 1 | OOM | SIGTERM during first step |
+| 8 (96 tiles) | 1 | OOM | 9 GiB attention matrix allocation |
+| 16 (192 tiles) | 1 | OOM | Same 9 GiB allocation (per-tile, not total) |
+| 16 (192 tiles) | 4 | OK | 2.25 GiB attention matrix fits |
+| 16 (192 tiles) | 2 | OK | 4.5 GiB attention matrix fits |
+
+### Throughput (16 nodes / 192 tiles)
+
+All runs with AC=full + LBS=1.
+
+| Config | TPS | TFLOPS | MFU | Memory | Notes |
+|--------|-----|--------|-----|--------|-------|
+| TP=4 no compile | 47 | 25.4 | 8.7% | 44% | Eager baseline |
+| TP=4 compile | 54 | 29.7 | 10.0% | 46% | TP overhead dominates |
+| **TP=2 compile** | **108** | **59.6** | **20.0%** | **75%** | **Best: 2x faster than TP=4** |
+| TP=2 LBS=2 compile | OOM | — | — | — | 75% too tight for LBS=2 |
+
+### Blockers
+
+1. **Blendcorpus Lustre race** — at 192 ranks across 16 nodes, rank 0 writes
+   cache index files but other ranks can't see them via Lustre metadata even
+   after barriers. Needed to fall back to `c4_test` dataset.
+2. **No FSDP-only path** — the SDPA MATH backend's 9 GiB attention matrix
+   makes TP mandatory, adding communication overhead.
+3. **TP=6 seq_len incompatibility** — 8192 % 6 != 0, so TP=6 fails the
+   `seq_len_divisor` assertion.
+
+### Key Findings
+
+1. **TP=2 is optimal** — halving TP degree from 4→2 doubles throughput by halving allreduces per step (84 layers × 2 allreduces vs × 4)
+2. **Compile helps less with TP** — only +15% vs +50% for pure FSDP, because TP communication can't be compiled away
+3. **80B requires TP** due to the 9 GiB MATH attention matrix — no amount of nodes/FSDP sharding fixes a per-tile allocation
+4. **Blendcorpus needs a multi-node fix** — the Lustre cache race is a fundamental blocker for >2 node training with blendcorpus
