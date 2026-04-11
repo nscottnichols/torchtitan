@@ -688,6 +688,20 @@ def _10b_2b() -> moeModel.Config:
     )
 
 
+def _10b_2b_sdpa() -> moeModel.Config:
+    """10B_2B with SDPA instead of FlexAttention.
+
+    Avoids FlexAttention Triton compilation and the fp32 autocast
+    issue on XPU (torch.autocast doesn't support fp32 on XPU).
+    """
+    cfg = _10b_2b()
+    sdpa_cfg = ScaledDotProductAttention.Config()
+    for layer_cfg in cfg.layers:
+        layer_cfg.attention.inner_attention = sdpa_cfg
+        layer_cfg.attention.mask_type = "causal"
+    return cfg
+
+
 moe_configs = {
     "debugmodel": _debugmodel,
     "debugmodel_flex_attn": _debugmodel_flex_attn,
@@ -696,6 +710,7 @@ moe_configs = {
     "236B": _236b,
     "671B": _671b,
     "10B_2B": _10b_2b,
+    "10B_2B_sdpa": _10b_2b_sdpa,
 }
 
 moe_configs["debugmodel_hf"] = moe_configs["debugmodel"]

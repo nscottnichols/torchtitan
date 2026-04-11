@@ -235,6 +235,16 @@ def moe_10b_2b() -> FaultTolerantTrainer.Config:
     return cfg
 
 
+def moe_10b_2b_sdpa() -> FaultTolerantTrainer.Config:
+    cfg = moe("10B_2B_sdpa", local_batch_size=1, seq_len=4096)
+    cfg.optimizer.lr = 2.2e-4
+    cfg.lr_scheduler.decay_type = "cosine"
+    cfg.lr_scheduler.min_lr_factor = 0.1
+    cfg.training.steps = 1000
+    cfg.checkpoint.interval = 100
+    return cfg
+
+
 def moe_debugmodel_from_json() -> FaultTolerantTrainer.Config:
     return _config_from_json(moe_debugmodel)
 
