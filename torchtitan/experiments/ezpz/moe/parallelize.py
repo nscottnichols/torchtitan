@@ -185,7 +185,16 @@ def parallelize_moe(
         )
 
     if model_compile_enabled:
-        apply_compile_sparse(model, compile_config, parallel_dims.ep_enabled)
+        # Upstream apply_compile_sparse uses fullgraph=True which fails on
+        # XPU after 00b7f569 removed maybe_enable_amp — MoE routing's
+        # dynamic shapes cause recompilation that fullgraph=True forbids.
+        # Apply compile per-block without fullgraph instead.
+        import torch
+
+        torch._dynamo.config.skip_fwd_side_effects_in_bwd_under_checkpoint = True
+        for layer_id, block in model.layers.named_children():
+            block.compile(backend=compile_config.backend)
+            model.layers.register_module(layer_id, block)
 
     dp_mesh_names = (
         ["dp_replicate", "fsdp"] if parallel_dims.dp_replicate_enabled else ["fsdp"]
@@ -211,7 +220,6 @@ def parallelize_moe(
         reshard_after_forward_policy=parallelism.fsdp_reshard_after_forward,
         ep_degree=parallel_dims.ep,
         edp_mesh=edp_mesh,
-        gradient_divide_factor=parallel_dims.fsdp_gradient_divide_factor,
     )
     disable_fsdp_gradient_division(model)
 
