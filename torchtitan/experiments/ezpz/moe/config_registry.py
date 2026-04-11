@@ -151,6 +151,14 @@ def moe(
     return cfg
 
 
+def moe_500m() -> FaultTolerantTrainer.Config:
+    return moe("500M", local_batch_size=4, seq_len=4096)
+
+
+def moe_2b() -> FaultTolerantTrainer.Config:
+    return moe("2B", local_batch_size=2, seq_len=4096)
+
+
 def moe_debugmodel() -> FaultTolerantTrainer.Config:
     return moe("debugmodel", local_batch_size=8, seq_len=2048)
 

@@ -628,6 +628,124 @@ def _671b() -> moeModel.Config:
     )
 
 
+def _500m() -> moeModel.Config:
+    """~500M active params. Halfway between debugmodel (48M) and 10B_2B."""
+    dim = 512
+    n_layers = 12
+    vocab_size = 32000
+    n_heads = 16
+    moe_hidden_dim = 512
+    num_shared_experts = 2
+    dense_hidden_dim = 2048
+    rope_dim = 64
+    num_experts = 16
+    n_dense_layers = 1
+
+    layers = _build_moe_layers(
+        n_layers=n_layers,
+        n_dense_layers=n_dense_layers,
+        dim=dim,
+        n_heads=n_heads,
+        q_lora_rank=0,
+        kv_lora_rank=512,
+        qk_nope_head_dim=128,
+        qk_rope_head_dim=rope_dim,
+        v_head_dim=128,
+        mscale=0.70,
+        dense_hidden_dim=dense_hidden_dim,
+        moe_hidden_dim=moe_hidden_dim,
+        num_experts=num_experts,
+        num_shared_experts=num_shared_experts,
+        router_top_k=3,
+        router_score_func="softmax",
+        score_before_experts=False,
+    )
+    return moeModel.Config(
+        vocab_size=vocab_size,
+        dim=dim,
+        tok_embeddings=Embedding.Config(
+            num_embeddings=vocab_size, embedding_dim=dim, param_init=_EMBEDDING_INIT
+        ),
+        norm=RMSNorm.Config(normalized_shape=dim, param_init=_NORM_INIT),
+        output=Linear.Config(
+            in_features=dim,
+            out_features=vocab_size,
+            param_init=_output_linear_init(dim),
+        ),
+        rope=RoPE.Config(
+            dim=rope_dim,
+            max_seq_len=4096 * 4,
+            theta=10000.0,
+            backend="complex",
+            scaling="yarn",
+            rope_factor=40.0,
+            beta_fast=32.0,
+            beta_slow=1.0,
+            original_seq_len=4096,
+        ),
+        layers=layers,
+    )
+
+
+def _2b() -> moeModel.Config:
+    """~2B active params. Between small and 10B_2B."""
+    dim = 1024
+    n_layers = 18
+    vocab_size = 32000
+    n_heads = 16
+    moe_hidden_dim = 1024
+    num_shared_experts = 2
+    dense_hidden_dim = 4096
+    rope_dim = 64
+    num_experts = 24
+    n_dense_layers = 1
+
+    layers = _build_moe_layers(
+        n_layers=n_layers,
+        n_dense_layers=n_dense_layers,
+        dim=dim,
+        n_heads=n_heads,
+        q_lora_rank=0,
+        kv_lora_rank=512,
+        qk_nope_head_dim=128,
+        qk_rope_head_dim=rope_dim,
+        v_head_dim=128,
+        mscale=0.70,
+        dense_hidden_dim=dense_hidden_dim,
+        moe_hidden_dim=moe_hidden_dim,
+        num_experts=num_experts,
+        num_shared_experts=num_shared_experts,
+        router_top_k=3,
+        router_score_func="softmax",
+        score_before_experts=False,
+    )
+    return moeModel.Config(
+        vocab_size=vocab_size,
+        dim=dim,
+        tok_embeddings=Embedding.Config(
+            num_embeddings=vocab_size, embedding_dim=dim, param_init=_EMBEDDING_INIT
+        ),
+        norm=RMSNorm.Config(normalized_shape=dim, param_init=_NORM_INIT),
+        output=Linear.Config(
+            in_features=dim,
+            out_features=vocab_size,
+            param_init=_output_linear_init(dim),
+        ),
+        rope=RoPE.Config(
+            dim=rope_dim,
+            max_seq_len=4096 * 4,
+            theta=10000.0,
+            backend="complex",
+            scaling="yarn",
+            rope_factor=40.0,
+            beta_fast=32.0,
+            beta_slow=1.0,
+            original_seq_len=4096,
+        ),
+        layers=layers,
+    )
+
+
 def _10b_2b() -> moeModel.Config:
     dim = 2048
     n_layers = 27
@@ -705,6 +823,8 @@ def _10b_2b_sdpa() -> moeModel.Config:
 moe_configs = {
     "debugmodel": _debugmodel,
     "debugmodel_flex_attn": _debugmodel_flex_attn,
+    "500M": _500m,
+    "2B": _2b,
     "small": _small,
     "16B": _16b,
     "236B": _236b,
