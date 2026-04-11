@@ -421,17 +421,38 @@ All runs with AC=full + LBS=1.
 
 ### Blockers
 
-1. **Blendcorpus Lustre race** — at 192 ranks across 16 nodes, rank 0 writes
-   cache index files but other ranks can't see them via Lustre metadata even
-   after barriers. Needed to fall back to `c4_test` dataset.
-2. **No FSDP-only path** — the SDPA MATH backend's 9 GiB attention matrix
-   makes TP mandatory, adding communication overhead.
+1. **Blendcorpus Lustre race** — **FIXED** by reinstalling from `deps/blendcorpus`
+   which has `_load_with_retry` (30 retries × 2s). The installed `site-packages`
+   version lacked retry logic entirely.
+2. **SDPA MATH backend inside FSDP** — the `OVERRIDEABLE` (XPU fused) backend
+   works in isolation (0.15 GB vs 9 GiB) but is **not used inside FSDP**. The
+   `sdpa_kernel` context manager and `torch.backends.cuda.enable_math_sdp(False)`
+   are both ignored by the XPU dispatch inside FSDP-wrapped modules. This is a
+   **PyTorch XPU bug**. TP remains the only workaround.
 3. **TP=6 seq_len incompatibility** — 8192 % 6 != 0, so TP=6 fails the
    `seq_len_divisor` assertion.
+
+### OVERRIDEABLE Backend Investigation (2026-04-11)
+
+Extensive investigation into why `OVERRIDEABLE` isn't used inside FSDP:
+
+| Approach | Result |
+|----------|--------|
+| `XPUScaledDotProductAttention` class variable | Config ownership bug — `build()` created parent class |
+| Added explicit `Config` class | Correct class created, OVERRIDEABLE in backend list |
+| `sdpa_kernel(OVERRIDEABLE)` in forward | Ignored inside FSDP |
+| `sdpa_kernel(OVERRIDEABLE)` only, no fallback | Still 9 GiB allocation |
+| `torch.backends.cuda.enable_math_sdp(False)` | Only affects CUDA, not XPU |
+| Override `forward()` entirely | Same 9 GiB — XPU dispatch ignores all hints |
+| Microbenchmark (no FSDP) | Works: 0.15 GB, 23x faster |
+
+**Conclusion:** XPU's FSDP dispatch path bypasses the `sdpa_kernel` context
+manager entirely. The MATH backend is hardcoded in the FSDP code path.
+This requires an upstream PyTorch XPU fix.
 
 ### Key Findings
 
 1. **TP=2 is optimal** — halving TP degree from 4→2 doubles throughput by halving allreduces per step (84 layers × 2 allreduces vs × 4)
 2. **Compile helps less with TP** — only +15% vs +50% for pure FSDP, because TP communication can't be compiled away
-3. **80B requires TP** due to the 9 GiB MATH attention matrix — no amount of nodes/FSDP sharding fixes a per-tile allocation
-4. **Blendcorpus needs a multi-node fix** — the Lustre cache race is a fundamental blocker for >2 node training with blendcorpus
+3. **80B requires TP** due to the MATH attention matrix bug — no amount of nodes/FSDP sharding fixes a per-tile allocation
+4. **Blendcorpus fixed** — reinstalling from local `deps/blendcorpus` provides retry logic for Lustre metadata propagation
