@@ -6,11 +6,11 @@
 #
 # Usage:
 #   # Inside a PBS job or interactive session with ezpz available:
-#   bash torchtitan/experiments/ezpz/benchmark_80b.sh
+#   bash torchtitan/experiments/ezpz/scripts/benchmark_80b.sh
 #
 #   # Override defaults:
 #   BENCH_STEPS=5 BENCH_TP="4 8" BENCH_PP="1 2 4" \
-#       bash torchtitan/experiments/ezpz/benchmark_80b.sh
+#       bash torchtitan/experiments/ezpz/scripts/benchmark_80b.sh
 #
 # Environment variables:
 #   BENCH_STEPS   — training iterations per run (default: 10)

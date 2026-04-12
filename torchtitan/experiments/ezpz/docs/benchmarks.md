@@ -1,6 +1,6 @@
 # Benchmarks
 
-We provide the [torchtitan/experiments/ezpz/run_benchmarks.sh](../run_benchmarks.sh)
+We provide the [torchtitan/experiments/ezpz/scripts/run_benchmarks.sh](../scripts/run_benchmarks.sh)
 which will:
 
 1. Run through each of the AuroraGPT model configs:

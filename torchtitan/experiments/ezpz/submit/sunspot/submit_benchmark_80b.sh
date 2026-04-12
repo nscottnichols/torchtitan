@@ -18,4 +18,4 @@
 
 cd "${PBS_O_WORKDIR}" || exit 1
 
-exec bash torchtitan/experiments/ezpz/benchmark_80b.sh "$@"
+exec bash torchtitan/experiments/ezpz/scripts/benchmark_80b.sh "$@"

@@ -10,10 +10,10 @@
 # generates a summary report with timing/throughput numbers.
 #
 # Usage:
-#   BENCH_STEPS=5 bash torchtitan/experiments/ezpz/run_benchmarks.sh
+#   BENCH_STEPS=5 bash torchtitan/experiments/ezpz/scripts/run_benchmarks.sh
 #
 # Extra CLI args are forwarded to every run:
-#   bash torchtitan/experiments/ezpz/run_benchmarks.sh --parallelism.tp_degree 2
+#   bash torchtitan/experiments/ezpz/scripts/run_benchmarks.sh --parallelism.tp_degree 2
 #
 # Environment variables:
 #   BENCH_STEPS     — training iterations per run (default: 10)
