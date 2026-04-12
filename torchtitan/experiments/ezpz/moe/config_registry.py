@@ -159,6 +159,14 @@ def moe_2b() -> FaultTolerantTrainer.Config:
     return moe("2B", local_batch_size=2, seq_len=4096)
 
 
+def moe_4b() -> FaultTolerantTrainer.Config:
+    return moe("4B", local_batch_size=1, seq_len=4096)
+
+
+def moe_7b() -> FaultTolerantTrainer.Config:
+    return moe("7B", local_batch_size=1, seq_len=4096)
+
+
 def moe_debugmodel() -> FaultTolerantTrainer.Config:
     return moe("debugmodel", local_batch_size=8, seq_len=2048)
 
