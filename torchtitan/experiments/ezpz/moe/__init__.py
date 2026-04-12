@@ -19,6 +19,7 @@ from torchtitan.models.common import (
     RoPE,
     TransformerBlock,
 )
+from torchtitan.experiments.ezpz.agpt import _default_inner_attention
 from torchtitan.models.common.attention import FlexAttention, ScaledDotProductAttention
 from torchtitan.models.common.config_utils import (
     make_experts_config,
@@ -151,7 +152,7 @@ def _make_moe_attn_config(
         inner_attention=(
             inner_attention
             if inner_attention is not None
-            else ScaledDotProductAttention.Config()
+            else _default_inner_attention()
         ),
         mask_type=mask_type,
     )
@@ -938,7 +939,7 @@ def _10b_2b_sdpa() -> moeModel.Config:
     issue on XPU (torch.autocast doesn't support fp32 on XPU).
     """
     cfg = _10b_2b()
-    sdpa_cfg = ScaledDotProductAttention.Config()
+    sdpa_cfg = _default_inner_attention()
     for layer_cfg in cfg.layers:
         layer_cfg.attention.inner_attention = sdpa_cfg
         layer_cfg.attention.mask_type = "causal"

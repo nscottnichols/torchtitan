@@ -12,6 +12,12 @@ Dense transformer training benchmarks across ALCF machines.
 | 2026-04-12 | [Smoke test (n2)](aurora/20260412-035148-smoke-n2.md) | debugmodel, 2b | 2 | 2b at 20% MFU, 59.6 TFLOPS |
 | 2026-04-12 | [LR Finder (n2)](../lr-finder/agpt/aurora/20260412-144400-lr-finder-n2.md) | 2b, 20b x {AdamW,Muon,SophiaG} | 2 | AdamW most tolerant; SophiaG needs 10x lower LR |
 
+### Polaris
+
+| Date | Report | Configs | Nodes | Key Result |
+|------|--------|---------|-------|------------|
+| 2026-04-12 | [Smoke test (n2)](polaris/20260412-160749-smoke-n2.md) | debugmodel, 2b | 2 | PASS: debugmodel 8% MFU, 2b 7.4% MFU |
+
 ### Sunspot
 
 See [80B results](../../benchmark-results-80B.md) (Sunspot section).

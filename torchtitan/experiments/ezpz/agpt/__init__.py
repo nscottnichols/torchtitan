@@ -10,7 +10,9 @@ from dataclasses import dataclass
 from functools import partial
 from typing import Literal
 
+import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from torchtitan.components.loss import build_cross_entropy_loss
 from torchtitan.experiments.ezpz.agpt.parallelize import parallelize_llama
@@ -22,7 +24,7 @@ from torchtitan.models.common import (
     RoPE,
     TransformerBlock,
 )
-from torch.nn.attention import SDPBackend
+from torch.nn.attention import sdpa_kernel, SDPBackend
 
 from torchtitan.models.common.attention import (
     FlexAttention,
@@ -31,7 +33,43 @@ from torchtitan.models.common.attention import (
 )
 
 
-class XPUScaledDotProductAttention(ScaledDotProductAttention):
+class EzpzScaledDotProductAttention(ScaledDotProductAttention):
+    """SDPA that avoids ``set_priority=True`` in the ``sdpa_kernel`` context.
+
+    Works around a torch._dynamo bug in PyTorch 2.11 where
+    ``sdpa_kernel(..., set_priority=True)`` passes FX proxy nodes to
+    ``int()`` during fake tensor tracing, causing
+    ``RuntimeError('Invalid backend')``.
+    """
+
+    @dataclass(kw_only=True, slots=True)
+    class Config(ScaledDotProductAttention.Config):
+        pass
+
+    # pyrefly: ignore [bad-override]
+    def forward(
+        self,
+        q: torch.Tensor,
+        k: torch.Tensor,
+        v: torch.Tensor,
+        *,
+        scale: float | None = None,
+        enable_gqa: bool = False,
+        is_causal: bool = True,
+        **kwargs,
+    ) -> torch.Tensor:
+        q, k, v = q.transpose(1, 2), k.transpose(1, 2), v.transpose(1, 2)
+        # Avoid set_priority=True — triggers a torch._dynamo bug in
+        # PyTorch 2.11 where FX proxy nodes are incorrectly passed to
+        # int() during fake tensor tracing.
+        with sdpa_kernel(self.sdpa_backends):
+            out = F.scaled_dot_product_attention(
+                q, k, v, scale=scale, is_causal=is_causal, enable_gqa=enable_gqa
+            )
+        return out.transpose(1, 2)
+
+
+class XPUScaledDotProductAttention(EzpzScaledDotProductAttention):
     """SDPA with OVERRIDEABLE backend for XPU-optimized fused attention.
 
     Adds OVERRIDEABLE to the backend priority list for the XPU fused
@@ -47,7 +85,7 @@ class XPUScaledDotProductAttention(ScaledDotProductAttention):
     """
 
     @dataclass(kw_only=True, slots=True)
-    class Config(ScaledDotProductAttention.Config):
+    class Config(EzpzScaledDotProductAttention.Config):
         pass
 
     sdpa_backends = [
@@ -56,6 +94,8 @@ class XPUScaledDotProductAttention(ScaledDotProductAttention):
         SDPBackend.FLASH_ATTENTION,
         SDPBackend.MATH,
     ]
+
+
 from torchtitan.models.common.config_utils import make_ffn_config, make_gqa_config
 from torchtitan.models.common.param_init import depth_scaled_std
 from torchtitan.models.llama3.model import Llama3Model, Llama3TransformerBlock
@@ -63,6 +103,9 @@ from torchtitan.models.llama3.state_dict_adapter import Llama3StateDictAdapter
 from torchtitan.protocols.model_spec import FaultTolerantModelSpec
 
 __all__ = [
+    "EzpzScaledDotProductAttention",
+    "XPUScaledDotProductAttention",
+    "_default_inner_attention",
     "model_registry",
     "parallelize_llama",
 ]
@@ -89,6 +132,13 @@ def _depth_init(layer_id: int) -> dict[str, Callable]:
         "weight": partial(nn.init.trunc_normal_, std=depth_scaled_std(0.02, layer_id)),
         "bias": nn.init.zeros_,
     }
+
+
+def _default_inner_attention() -> ScaledDotProductAttention.Config:
+    """Return the right SDPA config for the current device."""
+    if hasattr(torch, "xpu") and torch.xpu.is_available():
+        return XPUScaledDotProductAttention.Config()
+    return EzpzScaledDotProductAttention.Config()
 
 
 def _build_agpt_layers(
@@ -120,7 +170,7 @@ def _build_agpt_layers(
                     inner_attention=(
                         inner_attention
                         if inner_attention is not None
-                        else XPUScaledDotProductAttention.Config()
+                        else _default_inner_attention()
                     ),
                     mask_type=mask_type,
                     rope_backend=rope_backend,
