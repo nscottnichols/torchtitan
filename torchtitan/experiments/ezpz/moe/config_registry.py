@@ -156,15 +156,15 @@ def moe_500m() -> FaultTolerantTrainer.Config:
 
 
 def moe_2b() -> FaultTolerantTrainer.Config:
-    return moe("2B", local_batch_size=2, seq_len=4096)
+    return moe("2B", local_batch_size=16, seq_len=4096)
 
 
 def moe_4b() -> FaultTolerantTrainer.Config:
-    return moe("4B", local_batch_size=1, seq_len=4096)
+    return moe("4B", local_batch_size=16, seq_len=4096)
 
 
 def moe_7b() -> FaultTolerantTrainer.Config:
-    return moe("7B", local_batch_size=1, seq_len=4096)
+    return moe("7B", local_batch_size=2, seq_len=4096, activation_checkpoint_mode="none")
 
 
 def moe_debugmodel() -> FaultTolerantTrainer.Config:
@@ -252,7 +252,8 @@ def moe_10b_2b() -> FaultTolerantTrainer.Config:
 
 
 def moe_10b_2b_sdpa() -> FaultTolerantTrainer.Config:
-    cfg = moe("10B_2B_sdpa", local_batch_size=1, seq_len=4096)
+    cfg = moe("10B_2B_sdpa", local_batch_size=2, seq_len=4096,
+              activation_checkpoint_mode="none")
     cfg.optimizer.lr = 2.2e-4
     cfg.lr_scheduler.decay_type = "cosine"
     cfg.lr_scheduler.min_lr_factor = 0.1

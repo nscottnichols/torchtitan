@@ -456,3 +456,55 @@ This requires an upstream PyTorch XPU fix.
 2. **Compile helps less with TP** — only +15% vs +50% for pure FSDP, because TP communication can't be compiled away
 3. **80B requires TP** due to the MATH attention matrix bug — no amount of nodes/FSDP sharding fixes a per-tile allocation
 4. **Blendcorpus fixed** — reinstalling from local `deps/blendcorpus` provides retry logic for Lustre metadata propagation
+
+## MoE Throughput Optimization (2026-04-12)
+
+**Platform:** Sunspot (Intel Data Center GPU Max 1550, 64GB HBM per tile)
+**Nodes:** 2 (24 XPU tiles, 12 per node)
+**Configs:** MoE variants from debugmodel to 10B_2B
+
+### Model Configs
+
+| Config | Total | Active | Ratio | Layers | Experts | TopK | Heads | Dim |
+|--------|-------|--------|-------|--------|---------|------|-------|-----|
+| debugmodel | 0.05B | 0.04B | 89.8% | 6 | 8 | 3 | 16 | 256 |
+| 500M | 0.25B | 0.14B | 55.4% | 12 | 16 | 3 | 16 | 512 |
+| 2B | 1.61B | 0.49B | 30.3% | 18 | 24 | 3 | 16 | 1024 |
+| 4B | 2.89B | 0.81B | 27.9% | 22 | 24 | 3 | 12 | 1536 |
+| 7B | 7.54B | 1.57B | 20.8% | 24 | 36 | 3 | 24 | 2048 |
+| 10B_2B | 9.41B | 1.98B | 21.1% | 27 | 36 | 3 | 16 | 2048 |
+
+### LBS Scaling (compile enabled, seq_len=4096)
+
+| Config | LBS | TPS | TFLOPS | MFU | Memory | vs default |
+|--------|-----|-----|--------|-----|--------|------------|
+| 2B | 2 (old default) | 3,860 | 19.3 | 6.5% | 5% | — |
+| 2B | 8 | 6,441 | 32.2 | 10.8% | 13% | +67% |
+| **2B** | **16 (new default)** | **7,012** | **35.1** | **11.8%** | **24%** | **+82%** |
+| 2B | 32 | 7,227 | 36.1 | 12.1% | 47% | +87% |
+| 2B | 64 | 7,402 | 37.0 | 12.4% | 93% | +92% |
+| 4B | 1 (old default) | 1,470 | 9.8 | 3.3% | 6% | — |
+| 4B | 4 | 3,734 | 24.7 | 8.3% | 11% | +154% |
+| **4B** | **16 (new default)** | **5,236** | **34.7** | **11.6%** | **32%** | **+256%** |
+| 7B | 1 AC=none | 660 | 9.0 | 3.0% | 32% | — |
+| 10B_2B_sdpa | 1 AC=none | 572 | 8.0 | 2.7% | 34% | — |
+| **10B_2B_sdpa** | **2 AC=none (new default)** | **979** | **13.8** | **4.6%** | **56%** | **+71%** |
+
+### Key Findings
+
+1. **LBS is the biggest lever** — default LBS=1-2 wastes 90%+ of memory.
+   Increasing LBS gives 67-256% throughput gains across all MoE configs.
+2. **Sweet spots:** 2B→LBS=16, 4B→LBS=16, 10B→LBS=2
+3. **AC=full is incompatible with MoE** — routing produces different-shaped
+   expert tensors on recomputation (e.g. 2048x206 vs 207x1280). Only AC=none
+   works. `determinism-check=none` suppresses the check but causes RuntimeError
+   from shape mismatch.
+4. **Per-block compile without fullgraph** works but has long warmup (10-20 min
+   for 7B/10B). Upstream `fullgraph=True` in `apply_compile_sparse` is
+   incompatible with MoE dynamic routing after `00b7f569` removed
+   `maybe_enable_amp`.
+5. **FlexAttention crashes on XPU** for MoE models due to `torch.autocast(
+   dtype=torch.float32)` in the MoE router. Use SDPA variants instead.
+6. **Reported MFU is misleadingly low** for MoE — it's computed against total
+   params but only top_k experts are active. Corrected for active params, the
+   2B at LBS=16 achieves ~39% active-MFU, comparable to dense models.
