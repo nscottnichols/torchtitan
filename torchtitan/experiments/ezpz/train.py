@@ -438,6 +438,10 @@ def main(args: list[str] | None = None) -> None:
             ), "Must enable checkpointing when creating a seed checkpoint."
             trainer.checkpointer.save(curr_step=0, last_step=True)
             logger.info("Created seed checkpoint")
+        elif config.lr_finder.enable:
+            from torchtitan.experiments.ezpz.lr_finder import run_lr_finder
+
+            run_lr_finder(trainer)
         else:
             trainer.train()
     except Exception:

@@ -21,6 +21,7 @@ from torchtitan.components.loss import IGNORE_INDEX
 from torchtitan.components.quantization import QuantizationConverter
 from torchtitan.config import TORCH_DTYPE_MAP
 from torchtitan.distributed import ParallelDims, utils as dist_utils
+from torchtitan.experiments.ezpz.lr_finder import LRFinderConfig
 from torchtitan.experiments.ft.config.job_config import FaultTolerance
 from torchtitan.experiments.ft.manager import FTManager, maybe_semi_sync_training
 from torchtitan.experiments.ft.optimizer import FTOptimizersContainer
@@ -38,6 +39,7 @@ class FaultTolerantTrainer(Trainer):
     @dataclass(kw_only=True, slots=True)
     class Config(Trainer.Config):
         fault_tolerance: FaultTolerance = field(default_factory=FaultTolerance)
+        lr_finder: LRFinderConfig = field(default_factory=LRFinderConfig)
 
     ft_manager: FTManager
 
@@ -492,7 +494,7 @@ class FaultTolerantTrainer(Trainer):
 
         # log metrics
         if not self.metrics_processor.should_log(self.step):
-            return
+            return float(loss.detach().item())
 
         if parallel_dims.dp_cp_enabled:
             loss = loss.detach()
@@ -536,6 +538,10 @@ class FaultTolerantTrainer(Trainer):
             float(grad_norm.item()),
             extra_metrics=extra_metrics,
         )
+
+        if isinstance(global_avg_loss, torch.Tensor):
+            return float(global_avg_loss.item())
+        return float(global_avg_loss)
 
     @record
     def train(self):
