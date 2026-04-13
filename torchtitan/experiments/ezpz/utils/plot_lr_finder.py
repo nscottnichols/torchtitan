@@ -27,9 +27,9 @@ import numpy as np
 
 
 OPTIMIZER_COLORS = {
-    "adamw": "#2196F3",
-    "muon": "#FF9800",
-    "sophiag": "#F44336",
+    "adamw": "#1E88E5",
+    "muon": "#D32F2F",
+    "sophiag": "#388E3C",
 }
 
 OPTIMIZER_LABELS = {
@@ -129,11 +129,14 @@ def plot_single_model(
     ax.set_ylim(min_loss * 0.95, y_upper)
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    out_path = output_dir / f"lr_finder_{model}.png"
-    fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    out_png = output_dir / f"lr_finder_{model}.png"
+    out_svg = output_dir / f"lr_finder_{model}.svg"
+    fig.savefig(out_png, dpi=150, bbox_inches="tight")
+    fig.savefig(out_svg, bbox_inches="tight")
     plt.close(fig)
-    print(f"Saved: {out_path}")
-    return out_path
+    print(f"Saved: {out_png}")
+    print(f"Saved: {out_svg}")
+    return out_png
 
 
 def plot_comparison(
@@ -190,11 +193,14 @@ def plot_comparison(
     fig.tight_layout()
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    out_path = output_dir / "lr_finder_comparison.png"
-    fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    out_png = output_dir / "lr_finder_comparison.png"
+    out_svg = output_dir / "lr_finder_comparison.svg"
+    fig.savefig(out_png, dpi=150, bbox_inches="tight")
+    fig.savefig(out_svg, bbox_inches="tight")
     plt.close(fig)
-    print(f"Saved: {out_path}")
-    return out_path
+    print(f"Saved: {out_png}")
+    print(f"Saved: {out_svg}")
+    return out_png
 
 
 def plot_optimal_lr_summary(
@@ -251,11 +257,14 @@ def plot_optimal_lr_summary(
     ax.grid(True, alpha=0.3, axis="y")
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    out_path = output_dir / "lr_finder_optimal_lr.png"
-    fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    out_png = output_dir / "lr_finder_optimal_lr.png"
+    out_svg = output_dir / "lr_finder_optimal_lr.svg"
+    fig.savefig(out_png, dpi=150, bbox_inches="tight")
+    fig.savefig(out_svg, bbox_inches="tight")
     plt.close(fig)
-    print(f"Saved: {out_path}")
-    return out_path
+    print(f"Saved: {out_png}")
+    print(f"Saved: {out_svg}")
+    return out_png
 
 
 def main() -> None:
