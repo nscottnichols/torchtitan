@@ -17,7 +17,7 @@ Dense transformer training benchmarks across ALCF machines.
 
 | Date | Report | Configs | Nodes | Key Result |
 |------|--------|---------|-------|------------|
-| 2026-04-12 | [Smoke test (n2)](polaris/20260412-160749-smoke-n2.md) | debugmodel, 2b | 2 | PASS: debugmodel 8% MFU, 2b 7.4% MFU |
+| 2026-04-12 | [Smoke test (n2)](polaris/20260412-160749-smoke-n2.md) | debugmodel, 2b, 20b, 80b | 2 | 20b PASS 3.4% MFU; 80b OOM on A100-40GB |
 
 ### Sunspot
 

@@ -20,4 +20,4 @@ MoE training benchmarks using DeepSeek-style MLA + MoE architecture across ALCF 
 
 | Date | Report | Configs | Nodes | Key Result |
 |------|--------|---------|-------|------------|
-| 2026-04-12 | [Smoke test (n2)](polaris/20260412-185037-smoke-n2.md) | debugmodel, 2b | 2 | PASS: 2b at 22.5% MFU, 70 TFLOPS |
+| 2026-04-12 | [Smoke test (n2)](polaris/20260412-185037-smoke-n2.md) | debugmodel, 500M, 2b, 4b, 7b, 10b_2b_sdpa | 2 | All pass; 2b best at 22.5% MFU; 7B+ memory-bound |
