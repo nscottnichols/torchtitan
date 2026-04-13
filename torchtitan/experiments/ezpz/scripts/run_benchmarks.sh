@@ -12,30 +12,42 @@
 # Usage:
 #   BENCH_STEPS=5 bash torchtitan/experiments/ezpz/scripts/run_benchmarks.sh
 #
+# Run only specific configs:
+#   BENCH_CONFIGS="agpt_2b agpt_20b moe_2b" bash torchtitan/experiments/ezpz/scripts/run_benchmarks.sh
+#
+# Per-config TP override (config:tp format):
+#   BENCH_CONFIGS="agpt_2b agpt_80b:2 moe_7b" bash torchtitan/experiments/ezpz/scripts/run_benchmarks.sh
+#
 # Extra CLI args are forwarded to every run:
 #   bash torchtitan/experiments/ezpz/scripts/run_benchmarks.sh --parallelism.tp_degree 2
 #
 # Environment variables:
+#   BENCH_CONFIGS   — space-separated configs to run (default: all agpt + moe)
+#                     Format: "config_name" or "config_name:tp_degree"
+#                     Module is inferred: agpt_* -> ezpz.agpt, moe_* -> ezpz.moe
 #   BENCH_STEPS     — training iterations per run (default: 10)
 #   BENCH_SEQ_LEN   — sequence length (default: 8192)
-#   BENCH_LOCAL_BS  — local batch size (default: 2)
+#   BENCH_LOCAL_BS  — local batch size (default: 1)
 #   BENCH_GAS       — gradient accumulation steps (default: 1)
-#   BENCH_TP        — tensor parallel degree (default: 1)
+#   BENCH_TP        — default tensor parallel degree (default: 1)
 #   BENCH_PP        — pipeline parallel degree (default: 1)
 #   BENCH_TIMEOUT   — per-run timeout in seconds (default: 1800)
 #   FILTER_NONZERO_RANKS — set to 1 to suppress output from non-rank-0 (default: 0)
 #   NO_COMPILE      — set to 1 to disable torch.compile (default: 0)
+#   BENCH_OUTDIR    — override output directory (default: outputs/benchmarks/TIMESTAMP)
 
-set -uo pipefail
+set -o pipefail
 
 # ---------------------------------------------------------------------------
-# Environment setup (same pattern as run_train.sh)
+# Environment setup (set +u needed: lmod/ezpz reference unset vars)
 # ---------------------------------------------------------------------------
+set +u
 source <(curl -fsSL https://bit.ly/ezpz-utils) && ezpz_setup_env
 
 if ! command -v ezpz >/dev/null; then
     uv pip install --no-cache --link-mode=copy "git+https://github.com/saforem2/ezpz"
 fi
+set -u
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -49,17 +61,50 @@ BENCH_PP="${BENCH_PP:-1}"
 BENCH_TIMEOUT="${BENCH_TIMEOUT:-1800}"
 FILTER_NONZERO_RANKS="${FILTER_NONZERO_RANKS:-0}"
 NO_COMPILE="${NO_COMPILE:-0}"
-# NGPU="${NGPU:-${NGPUS:-${WORLD_SIZE:-4}}}"
 TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
-OUTDIR="outputs/benchmarks/${TIMESTAMP}"
+OUTDIR="${BENCH_OUTDIR:-outputs/benchmarks/${TIMESTAMP}}"
 mkdir -p "${OUTDIR}"
 
-# Benchmark configs: parallel arrays of (label, module, config, tp)
-# Per-config TP overrides BENCH_TP; 0 means "use BENCH_TP default".
-LABELS=( "agpt_2b" "agpt_20b" "agpt_80b" "agpt_80b_alt" "agpt_80b_wide" "agpt_80b_deep" "agpt_80b_deep_alt" "moe_debugmodel" "moe_10b_2b")
-MODULES=("ezpz.agpt" "ezpz.agpt" "ezpz.agpt" "ezpz.agpt"     "ezpz.agpt"     "ezpz.agpt"     "ezpz.agpt"         "ezpz.moe"      "ezpz.moe")
-CONFIGS=("agpt_2b" "agpt_20b" "agpt_80b" "agpt_80b_alt" "agpt_80b_wide" "agpt_80b_deep" "agpt_80b_deep_alt" "moe_debugmodel" "moe_10b_2b")
-TPS=(     0         0          2           2               2               2                2                   0                0)
+# Default: all registered agpt + moe configs
+DEFAULT_CONFIGS="agpt_debugmodel agpt_2b agpt_7b agpt_8b agpt_20b agpt_50b"
+DEFAULT_CONFIGS+=" agpt_80b:2 agpt_80b_alt:2 agpt_80b_wide:2 agpt_80b_deep:2 agpt_80b_deep_alt:2"
+DEFAULT_CONFIGS+=" moe_debugmodel moe_500m moe_2b moe_4b moe_7b moe_10b_2b moe_10b_2b_sdpa"
+
+BENCH_CONFIGS="${BENCH_CONFIGS:-${DEFAULT_CONFIGS}}"
+read -ra CONFIG_SPECS <<< "${BENCH_CONFIGS}"
+
+# ---------------------------------------------------------------------------
+# Parse config specs into parallel arrays
+# ---------------------------------------------------------------------------
+declare -a LABELS MODULES CONFIGS TPS_OVERRIDES
+
+for ((i = 0; i < ${#CONFIG_SPECS[@]}; i++)); do
+    spec="${CONFIG_SPECS[$i]}"
+
+    # Parse config:tp format
+    if [[ "${spec}" == *:* ]]; then
+        config="${spec%%:*}"
+        tp_override="${spec##*:}"
+    else
+        config="${spec}"
+        tp_override=0
+    fi
+
+    # Infer module from config prefix
+    if [[ "${config}" == agpt_* ]]; then
+        module="ezpz.agpt"
+    elif [[ "${config}" == moe_* ]]; then
+        module="ezpz.moe"
+    else
+        echo "WARNING: unknown config prefix for '${config}', assuming ezpz.agpt"
+        module="ezpz.agpt"
+    fi
+
+    LABELS[$i]="${config}"
+    MODULES[$i]="${module}"
+    CONFIGS[$i]="${config}"
+    TPS_OVERRIDES[$i]="${tp_override}"
+done
 
 NUM_CONFIGS="${#LABELS[@]}"
 
@@ -78,7 +123,7 @@ echo ""
 # ---------------------------------------------------------------------------
 GIT_COMMIT="$(git rev-parse --short HEAD 2>/dev/null || echo 'unknown')"
 RUN_DATE="$(date -Iseconds)"
-MACHINE_NAME="$(hostname -s)"
+MACHINE_NAME="$(ezpz_get_machine_name 2>/dev/null || hostname -s)"
 JOB_ID="${PBS_JOBID:-${SLURM_JOB_ID:-${COBALT_JOBID:-local}}}"
 NUM_NODES="${NHOSTS:-${SLURM_NNODES:-1}}"
 DEVICES_PER_NODE=$(("${NGPUS}" / NUM_NODES))
@@ -90,7 +135,8 @@ declare -a WALL_TIMES STATUSES TPS_VALUES TFLOPS_VALUES MFU_VALUES MEMORY_VALUES
 
 echo "============================================================"
 echo " ezpz benchmarks — ${TIMESTAMP}"
-echo " steps=${BENCH_STEPS}  devices=${NGPUS}  nodes=${NHOSTS}"
+echo " steps=${BENCH_STEPS}  devices=${NGPUS}  nodes=${NUM_NODES}"
+echo " configs: ${BENCH_CONFIGS}"
 echo "============================================================"
 echo ""
 
@@ -113,7 +159,7 @@ for ((i = 0; i < NUM_CONFIGS; i++)); do
     fi
 
     # Per-config TP (0 means use BENCH_TP default)
-    tp="${TPS[$i]}"
+    tp="${TPS_OVERRIDES[$i]}"
     if ((tp == 0)); then tp="${BENCH_TP}"; fi
 
     # Compute global batch size to enable gradient accumulation:
