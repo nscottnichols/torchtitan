@@ -132,6 +132,21 @@ projection shape doesn't match the TP sharding pattern.
 blocked on `aurora_frameworks-2025.3.1` (missing `ShardPlacementResult`).
 MoE scaling requires a newer PyTorch version.
 
+## Context Parallelism (CP > 1) on agpt
+
+**Symptoms:** With compile: `TorchRuntimeError: Dynamo failed to run FX node
+with fake tensors: call_function scaled_dot_product_attention`. Without
+compile: `RuntimeError: aten.add.Tensor got mixed torch.Tensor and DTensor`.
+
+**Affected:** All agpt configs with `--parallelism.context_parallel_degree > 1`.
+
+**Root cause:** The agpt attention implementation doesn't convert all tensors
+(e.g. RoPE embeddings) to DTensors on the CP mesh. When CP shards Q/K/V
+along the sequence dimension, the non-sharded tensors remain as regular
+`torch.Tensor`, causing DTensor/Tensor mixing errors.
+
+**Workaround:** Use CP=1 (default). For longer sequences, increase TP instead.
+
 ## 80B TP=2 on Aurora
 
 **Symptoms:** `torch.OutOfMemoryError` or `UR_RESULT_ERROR_OUT_OF_RESOURCES`
