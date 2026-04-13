@@ -128,8 +128,9 @@ LoRA-based KV projection with asymmetric sharding. When TP shards q and k
 across heads, the v tensor from `wkv_b` remains replicated because its
 projection shape doesn't match the TP sharding pattern.
 
-**Workaround:** Use TP=1 for MoE models. For scaling, use expert parallelism
-(`--parallelism.expert_parallel_degree`) instead of tensor parallelism.
+**Workaround:** Use TP=1 for MoE models. Expert parallelism (EP>1) is also
+blocked on `aurora_frameworks-2025.3.1` (missing `ShardPlacementResult`).
+MoE scaling requires a newer PyTorch version.
 
 ## 80B TP=2 on Aurora
 
