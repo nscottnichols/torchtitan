@@ -20,6 +20,20 @@ was required in ezpz.
 
 ---
 
+## 2026-04-13 (8th sync)
+
+**Upstream commits:**
+
+- `878041cb` — [Bugfix] Reenable llvm with triton pin update (#2873)
+
+**Files changed:** `models/common/attention.py` — removed `DISABLE_LLVM_OPT=1`
+env var workaround. The upstream Triton pin (pytorch/pytorch#179586) fixed
+the LLVM change that caused FlexAttention failures.
+
+**Changes required in ezpz:** None. We don't use FlexAttention on XPU.
+
+---
+
 ## 2026-04-13 (7th sync)
 
 **Upstream commits:**
