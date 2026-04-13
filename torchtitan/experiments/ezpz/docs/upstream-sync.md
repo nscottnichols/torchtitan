@@ -20,6 +20,28 @@ was required in ezpz.
 
 ---
 
+## 2026-04-13 (7th sync)
+
+**Upstream commits:**
+
+- `5c02bb54` — Enable 2 tier compilation with flex attention (#2929)
+- `9f055b43` — [AutoDev] Default FlexAttn max_autotune to False (#2935)
+
+**Files changed in `models/common/`:**
+
+- `models/common/attention.py` — `FlexAttention.inductor_configs` changed:
+  `wrap_inductor_compiled_regions` True (was False),
+  `max_autotune` False (was True),
+  `coordinate_descent_tuning` False (was True).
+
+**Changes required in ezpz:** None. Our agpt configs use
+`XPUScaledDotProductAttention` (not FlexAttention), and MoE configs use
+`ScaledDotProductAttention` via the `_sdpa` variants. FlexAttention is only
+used by `moe_debugmodel_flex_attn` and `moe_10b_2b` (non-SDPA), which are
+not run on XPU.
+
+---
+
 ## 2026-04-12 (6th sync)
 
 **Upstream commits:**
