@@ -20,6 +20,22 @@ was required in ezpz.
 
 ---
 
+## 2026-04-12 (6th sync)
+
+**Upstream commits:**
+
+- `dba7154b` — [GraphTrainer][AutoDev] Add remove_identity_slice_pass graph pass (#2920)
+- `b9e8d1d1` — [GraphTrainer][AutoDev] Add remove_identity_view_pass graph pass (#2919)
+- `314577bc` — [GraphTrainer][AutoDev] Add remove_detach_pass graph pass (#2917)
+
+**Files changed:** `experiments/graph_trainer/passes.py`, `experiments/graph_trainer/tests/test_passes.py` only.
+
+No changes to `models/`, `distributed/`, or `trainer.py`.
+
+**Changes required in ezpz:** None. Clean merge.
+
+---
+
 ## 2026-04-11 (5th sync)
 
 **Upstream commits:**
