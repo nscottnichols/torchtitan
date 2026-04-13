@@ -111,12 +111,20 @@ __all__ = [
 ]
 
 
-_LINEAR_INIT = {
-    "weight": partial(nn.init.trunc_normal_, std=0.02),
-    "bias": nn.init.zeros_,
-}
 _NORM_INIT = {"weight": nn.init.ones_}
 _EMBEDDING_INIT = {"weight": partial(nn.init.normal_, std=1.0)}
+
+
+def _linear_init(dim: int) -> dict[str, Callable]:
+    """Weight init with std = sqrt(2/(5*d)), following Megatron-DeepSpeed.
+
+    Reference: https://arxiv.org/pdf/2312.16903
+    """
+    s = (2.0 / (5 * dim)) ** 0.5
+    return {
+        "weight": partial(nn.init.trunc_normal_, std=s),
+        "bias": nn.init.zeros_,
+    }
 
 
 def _output_linear_init(dim: int) -> dict[str, Callable]:
@@ -127,9 +135,12 @@ def _output_linear_init(dim: int) -> dict[str, Callable]:
     }
 
 
-def _depth_init(layer_id: int) -> dict[str, Callable]:
+def _depth_init(dim: int, layer_id: int) -> dict[str, Callable]:
+    base_std = (2.0 / (5 * dim)) ** 0.5
     return {
-        "weight": partial(nn.init.trunc_normal_, std=depth_scaled_std(0.02, layer_id)),
+        "weight": partial(
+            nn.init.trunc_normal_, std=depth_scaled_std(base_std, layer_id)
+        ),
         "bias": nn.init.zeros_,
     }
 
@@ -153,6 +164,7 @@ def _build_agpt_layers(
     rope_backend: Literal["complex", "cos_sin"] = "complex",
 ) -> list[TransformerBlock.Config]:
     """Build a list of per-layer TransformerBlock configs with depth-scaled inits."""
+    linear_init = _linear_init(dim)
     layers = []
     for layer_id in range(n_layers):
         layers.append(
@@ -165,8 +177,8 @@ def _build_agpt_layers(
                     dim=dim,
                     n_heads=n_heads,
                     n_kv_heads=n_kv_heads,
-                    wqkv_param_init=_LINEAR_INIT,
-                    wo_param_init=_depth_init(layer_id),
+                    wqkv_param_init=linear_init,
+                    wo_param_init=_depth_init(dim, layer_id),
                     inner_attention=(
                         inner_attention
                         if inner_attention is not None
@@ -178,8 +190,8 @@ def _build_agpt_layers(
                 feed_forward=make_ffn_config(
                     dim=dim,
                     hidden_dim=hidden_dim,
-                    w1_param_init=_LINEAR_INIT,
-                    w2w3_param_init=_depth_init(layer_id),
+                    w1_param_init=linear_init,
+                    w2w3_param_init=_depth_init(dim, layer_id),
                 ),
             )
         )
