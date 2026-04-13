@@ -15,7 +15,10 @@ MoE training benchmarks using DeepSeek-style MLA + MoE architecture across ALCF 
 
 ### Sunspot
 
-*No reports yet.*
+| Date | Report | Configs | Nodes | Key Result |
+|------|--------|---------|-------|------------|
+| 2026-04-12 | [Scaling Study](../../scaling-study.md) | moe_2b, moe_7b at 1-64N | 1-64 | 2b 47% efficiency at 64N; 7b OOM at 32N+ |
+| 2026-04-13 | [Benchmark (n2)](sunspot/20260413-benchmark-n2.md) | All 7 MoE configs | 2 | 9.7% MFU (debugmodel); compile hurts MoE |
 
 ### Polaris
 
