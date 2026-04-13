@@ -24,13 +24,13 @@
 | agpt_2b         | 1.99B  | 1  | 1   | 46.80GiB (73.14%) | 5,609  | 62.76  | 21.05% | — | OK |
 | agpt_7b         | 7.4B   | 1  | 2   | —                 | —      | —      | —      | — | CRASH |
 | agpt_8b         | 8.7B   | 1  | 8   | —                 | —      | —      | —      | — | CRASH |
-| agpt_20b        | 21.5B  | 1  | 1   | 44.54GiB (69.61%) | 351    | 52.29  | 17.53% | — | OK |
-| agpt_50b        | 47.5B  | 1  | 1   | —                 | —      | —      | —      | [link](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/3x4x3yf0) | OOM |
+| agpt_20b        | 21.5B  | 1  | 1   | 44.54GiB (69.61%) | 351    | 52.29  | 17.53% | [link](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/dbjmn0u1) | OK |
+| agpt_50b        | 47.5B  | 1  | 1   | —                 | —      | —      | —      | [link](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/s1pxhdem) | OOM |
 | agpt_80b        | 80.8B  | 2  | 1   | —                 | —      | —      | —      | — | CRASH |
 | agpt_80b_alt    | 80.8B  | 2  | 1   | —                 | —      | —      | —      | — | CRASH |
-| agpt_80b_wide   | 80.8B  | 2  | 1   | 60.75GiB (94.94%) | 44     | 22.54  | 7.56%  | [link](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/wpdkfojt) | OOM |
-| agpt_80b_deep   | 80.8B  | 2  | 1   | 58.84GiB (91.95%) | 83     | 45.49  | 15.26% | [link](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/4xa9e2ik) | OK |
-| agpt_80b_deep_alt | 80.8B | 2 | 1   | 58.95GiB (92.14%) | 78     | 42.34  | 14.20% | [link](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/wv8e6twk) | OK |
+| agpt_80b_wide   | 80.8B  | 2  | 1   | 60.75GiB (94.94%) | 44     | 22.47  | 7.54%  | [link](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/qzkgwxvi) | OOM |
+| agpt_80b_deep   | 80.8B  | 2  | 1   | 58.84GiB (91.95%) | 83     | 45.31  | 15.20% | [link](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/gm1xl33f) | OK |
+| agpt_80b_deep_alt | 80.8B | 2 | 1   | 58.95GiB (92.14%) | 77     | 42.33  | 14.20% | [link](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/6oz4n5yt) | OK |
 
 TPS, TFLOPS, and MFU are from step 20.
 

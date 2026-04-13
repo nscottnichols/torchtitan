@@ -20,13 +20,13 @@
 
 | Config        | Total Params | Active Params | LBS | TPS    | TFLOPS | MFU    | Memory            | AC   | Status |
 |---------------|-------------|---------------|-----|--------|--------|--------|-------------------|------|--------|
-| moe_debugmodel| 0.05B       | 0.04B         | 8   | 16,796 | 28.91  | 9.70%  | —                 | full | OK |
-| moe_500m      | 0.25B       | 0.14B         | 4   | 7,228  | 27.16  | 9.11%  | —                 | full | OK |
-| moe_2b        | 1.61B       | 0.49B         | 16  | 3,569  | 25.93  | 8.70%  | —                 | full | OK |
-| moe_4b        | 2.89B       | 0.81B         | 16  | 2,414  | 21.00  | 7.04%  | —                 | full | OK |
-| moe_7b        | 7.54B       | 1.57B         | 2   | 1,099  | 19.86  | 6.66%  | 33.18GiB (51.85%) | none | OK |
-| moe_10b_2b    | 9.41B       | 1.98B         | 1   | —      | —      | —      | —                 | none | CRASH (timeout) |
-| moe_10b_2b_sdpa| 9.41B      | 1.98B         | 2   | 969    | 16.91  | 5.67%  | 35.82GiB (55.98%) | none | OK |
+| moe_debugmodel| 0.05B       | 0.04B         | 8   | 16,796 | 28.91  | 9.70%  | —                 | full | [link](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/rb5by48n) | OK |
+| moe_500m      | 0.25B       | 0.14B         | 4   | 7,228  | 27.16  | 9.11%  | —                 | full | [link](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/ay8ea2xq) | OK |
+| moe_2b        | 1.61B       | 0.49B         | 16  | 3,569  | 25.93  | 8.70%  | —                 | full | [link](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/oazxwiv3) | OK |
+| moe_4b        | 2.89B       | 0.81B         | 16  | 2,414  | 21.00  | 7.04%  | —                 | full | [link](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/y4b5rg8a) | OK |
+| moe_7b        | 7.54B       | 1.57B         | 2   | 1,099  | 19.86  | 6.66%  | 33.18GiB (51.85%) | none | [link](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/tb31cp8u) | OK |
+| moe_10b_2b    | 9.41B       | 1.98B         | 1   | —      | —      | —      | —                 | none | [link](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/0tar231b) | CRASH (timeout) |
+| moe_10b_2b_sdpa| 9.41B      | 1.98B         | 2   | 987    | 17.22  | 5.77%  | 35.78GiB (55.92%) | none | [link](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/z0xmmnqa) | OK |
 
 ## Key Findings
 
