@@ -115,3 +115,37 @@ forward, causing mismatched tensor shapes.
 
 **Trade-off:** Disabling AC increases memory usage significantly. The moe 7B
 config uses 35 GiB (89%) with AC=none on Polaris A100-40GB.
+
+## MoE + Tensor Parallelism (TP > 1)
+
+**Symptoms:** `AssertionError: q, k, v must have the same placements, but got
+q=(Shard(dim=2),), k=(Shard(dim=2),), v=(Replicate())`
+
+**Affected:** All MoE configs with `--parallelism.tensor_parallel_degree > 1`.
+
+**Root cause:** The MoE MLA (Multi-head Latent Attention) implementation uses
+LoRA-based KV projection with asymmetric sharding. When TP shards q and k
+across heads, the v tensor from `wkv_b` remains replicated because its
+projection shape doesn't match the TP sharding pattern.
+
+**Workaround:** Use TP=1 for MoE models. For scaling, use expert parallelism
+(`--parallelism.expert_parallel_degree`) instead of tensor parallelism.
+
+## 80B TP=2 on Aurora
+
+**Symptoms:** `torch.OutOfMemoryError` or `UR_RESULT_ERROR_OUT_OF_RESOURCES`
+on step 2. Step 1 completes at 60.75 GiB (94.94%) but step 2 needs 5.25 GiB
+with only 5.19 GiB free (missed by 60 MiB).
+
+**Affected:** All 80B variants at TP=2 on Aurora with `aurora_frameworks-2025.3.1`.
+
+**Not affected:** Sunspot (benchmark ran 80B TP=2 at 93.49%, 85 TPS).
+
+**Tried and failed:**
+- `PYTORCH_XPU_ALLOC_CONF=expandable_segments:True`
+- `--training.gc_freq 1`
+- `--metrics.no-enable_wandb`
+- `--training.enable_cpu_offload`
+- Same code at benchmark commit (c6ff706)
+
+**Workaround:** Use TP=4 with 80B_wide (68 TPS, 11.79% MFU). Or run on Sunspot.
