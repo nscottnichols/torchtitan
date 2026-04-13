@@ -22,7 +22,7 @@
 #   LRF_FRACTION   — fraction of steps to sweep (default: 0.1)
 #   LRF_BETA       — EMA smoothing factor (default: 0.98)
 
-set -uo pipefail
+set -o pipefail
 
 # ---------------------------------------------------------------------------
 # Defaults
@@ -43,13 +43,15 @@ CONFIG_PREFIX="${LRF_MODULE##*.}_"
 # Environment setup
 # ---------------------------------------------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../../.." && pwd)"
 cd "${REPO_ROOT}" || exit 1
 
-if [[ -z "${VIRTUAL_ENV:-}" ]]; then
-    echo "Setting up environment..."
-    source <(curl -fsSL https://bit.ly/ezpz-utils) && ezpz_setup_env
+set +u
+source <(curl -fsSL https://bit.ly/ezpz-utils) && ezpz_setup_env
+if ! command -v ezpz >/dev/null; then
+    uv pip install --no-cache --link-mode=copy "git+https://github.com/saforem2/ezpz"
 fi
+set -u
 
 # ---------------------------------------------------------------------------
 # Sweep
