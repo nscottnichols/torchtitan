@@ -23,4 +23,9 @@ Dense transformer training benchmarks across ALCF machines.
 
 ### Sunspot
 
-See [80B results](../../benchmark-results-80B.md) (Sunspot section).
+| Date | Report | Configs | Nodes | Key Result |
+|------|--------|---------|-------|------------|
+| 2026-03-30 | [80B results](../../benchmark-results-80B.md) | 80B variants x TP={2,3,6,12} | 2 | TP=2 best: 85 TPS, 15.5% MFU |
+| 2026-04-12 | [LR Finder (n2)](../lr-finder/agpt/sunspot/20260412-lr-finder-n2.md) | 2B x {AdamW,Muon,SophiaG} | 2 | Reproduces Aurora; SophiaG blow-up more violent |
+| 2026-04-12 | [Scaling Study](../../scaling-study.md) | 2b, 20b, 80b at 1-64N | 1-64 | 20b 87% efficiency at 64N; 80b OK at 4-32N |
+| 2026-04-13 | [Benchmark (n2)](sunspot/20260413-benchmark-n2.md) | All 11 agpt configs | 2 | 80b_deep best 80B variant: 83 TPS, 15.2% MFU |
