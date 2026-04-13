@@ -103,10 +103,12 @@ def plot_single_model(
             linewidths=1.5,
         )
 
-        # Derivative-based suggested LR
+        # Derivative-based suggested LR (use blow-up closest to min loss)
         blow_ups = find_optimal_lr(lrs.tolist(), losses.tolist())
         if blow_ups:
-            suggested = blow_ups[0] / 10
+            min_lr = lrs[min_idx]
+            best_blowup = min(blow_ups, key=lambda b: abs(np.log10(b) - np.log10(min_lr)))
+            suggested = best_blowup / 10
             ax.axvline(
                 x=suggested,
                 color=color,
@@ -201,7 +203,9 @@ def plot_comparison(
 
             blow_ups = find_optimal_lr(lrs.tolist(), losses.tolist())
             if blow_ups:
-                suggested = blow_ups[0] / 10
+                min_lr = lrs[min_idx]
+                best_blowup = min(blow_ups, key=lambda b: abs(np.log10(b) - np.log10(min_lr)))
+                suggested = best_blowup / 10
                 ax.axvline(
                     x=suggested,
                     color=color,
@@ -262,7 +266,10 @@ def plot_optimal_lr_summary(
                 lrs, losses = results[model][opt]
                 blow_ups = find_optimal_lr(lrs.tolist(), losses.tolist())
                 if blow_ups:
-                    optimal_lrs.append(blow_ups[0] / 10)
+                    # Use the blow-up closest to the global min loss
+                    min_lr = lrs[np.argmin(losses)]
+                    best = min(blow_ups, key=lambda b: abs(np.log10(b) - np.log10(min_lr)))
+                    optimal_lrs.append(best / 10)
                 else:
                     min_idx = np.argmin(losses)
                     optimal_lrs.append(lrs[min_idx])
