@@ -169,6 +169,7 @@ See the script for configuration options (models, optimizers, steps).
 | Date | Report | Models | Optimizers | Nodes | Machine | Key Result |
 |------|--------|--------|-----------|-------|---------|------------|
 | 2026-04-12 | [LR Finder](agpt/aurora/20260412-144400-lr-finder-n2.md) | 2B, 20B | AdamW, Muon, SophiaG | 2 | Aurora | AdamW most tolerant; SophiaG 10x lower LR |
+| 2026-04-13 | [LR Finder](agpt/polaris/20260413-015510-lr-finder-n2.md) | 2B, 20B | AdamW, Muon, SophiaG | 2 | Polaris | Reproduces Aurora; cross-hardware LR consistency confirmed |
 
 ### moe (Sparse)
 
