@@ -25,6 +25,8 @@ import ambivalent
 import matplotlib.pyplot as plt
 import numpy as np
 
+from torchtitan.experiments.ezpz.lr_finder import find_optimal_lr
+
 
 OPTIMIZER_COLORS = {
     "adamw": "#1E88E5",
@@ -89,13 +91,8 @@ def plot_single_model(
 
         min_idx = np.argmin(losses)
         ax.plot(lrs, losses, color=color, linewidth=2, label=label, alpha=0.9)
-        ax.axvline(
-            x=lrs[min_idx],
-            color=color,
-            linestyle="--",
-            alpha=0.5,
-            linewidth=1,
-        )
+
+        # Mark min loss point
         ax.scatter(
             [lrs[min_idx]],
             [losses[min_idx]],
@@ -105,15 +102,44 @@ def plot_single_model(
             edgecolors="white",
             linewidths=1.5,
         )
-        ax.annotate(
-            f"{label}: {lrs[min_idx]:.2e}",
-            xy=(lrs[min_idx], losses[min_idx]),
-            xytext=(10, 10),
-            textcoords="offset points",
-            fontsize=9,
-            color=color,
-            fontweight="bold",
-        )
+
+        # Derivative-based suggested LR
+        blow_ups = find_optimal_lr(lrs.tolist(), losses.tolist())
+        if blow_ups:
+            suggested = blow_ups[0] / 10
+            ax.axvline(
+                x=suggested,
+                color=color,
+                linestyle=":",
+                alpha=0.6,
+                linewidth=1.5,
+            )
+            ax.annotate(
+                f"{label}: {suggested:.1e}",
+                xy=(suggested, losses[min_idx]),
+                xytext=(10, 10),
+                textcoords="offset points",
+                fontsize=9,
+                color=color,
+                fontweight="bold",
+            )
+        else:
+            ax.axvline(
+                x=lrs[min_idx],
+                color=color,
+                linestyle="--",
+                alpha=0.5,
+                linewidth=1,
+            )
+            ax.annotate(
+                f"{label}: {lrs[min_idx]:.1e}",
+                xy=(lrs[min_idx], losses[min_idx]),
+                xytext=(10, 10),
+                textcoords="offset points",
+                fontsize=9,
+                color=color,
+                fontweight="bold",
+            )
 
     ax.set_xscale("log")
     ax.set_xlabel("Learning Rate")
@@ -163,9 +189,6 @@ def plot_comparison(
 
             min_idx = np.argmin(losses)
             ax.plot(lrs, losses, color=color, linewidth=2, label=label, alpha=0.9)
-            ax.axvline(
-                x=lrs[min_idx], color=color, linestyle="--", alpha=0.5, linewidth=1
-            )
             ax.scatter(
                 [lrs[min_idx]],
                 [losses[min_idx]],
@@ -175,6 +198,17 @@ def plot_comparison(
                 edgecolors="white",
                 linewidths=1.5,
             )
+
+            blow_ups = find_optimal_lr(lrs.tolist(), losses.tolist())
+            if blow_ups:
+                suggested = blow_ups[0] / 10
+                ax.axvline(
+                    x=suggested,
+                    color=color,
+                    linestyle=":",
+                    alpha=0.6,
+                    linewidth=1.5,
+                )
 
         ax.set_xscale("log")
         ax.set_xlabel("Learning Rate")
@@ -226,8 +260,12 @@ def plot_optimal_lr_summary(
         for model in models:
             if opt in results[model]:
                 lrs, losses = results[model][opt]
-                min_idx = np.argmin(losses)
-                optimal_lrs.append(lrs[min_idx])
+                blow_ups = find_optimal_lr(lrs.tolist(), losses.tolist())
+                if blow_ups:
+                    optimal_lrs.append(blow_ups[0] / 10)
+                else:
+                    min_idx = np.argmin(losses)
+                    optimal_lrs.append(lrs[min_idx])
             else:
                 optimal_lrs.append(0)
 
@@ -249,10 +287,10 @@ def plot_optimal_lr_summary(
                 )
 
     ax.set_yscale("log")
-    ax.set_ylabel("Optimal LR (at min loss)")
+    ax.set_ylabel("Suggested LR (blow-up / 10)")
     ax.set_xticks(x)
     ax.set_xticklabels([f"agpt {m}" for m in models])
-    ax.set_title("Optimal Learning Rate by Model & Optimizer")
+    ax.set_title("Suggested Learning Rate by Model & Optimizer")
     ax.legend()
     ax.grid(True, alpha=0.3, axis="y")
 
@@ -279,7 +317,7 @@ def main() -> None:
         "--output-dir",
         type=Path,
         default=Path(
-            "torchtitan/experiments/ezpz/docs/experiments/lr-finder/figures"
+            "torchtitan/experiments/ezpz/docs/experiments/lr-finder/agpt/sunspot/figures"
         ),
         help="Directory to save plots",
     )
