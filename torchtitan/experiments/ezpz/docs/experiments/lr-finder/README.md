@@ -122,6 +122,15 @@ and NVIDIA A100). The optimizer is the dominant factor, not the hardware.
 
 ### LR Finder Curves
 
+#### Aurora (Intel Max 1550, 2 nodes / 24 XPUs)
+
+![Comparison](agpt/aurora/figures/lr_finder_comparison.png)
+
+| | |
+|---|---|
+| ![2B](agpt/aurora/figures/lr_finder_2b.png) | ![20B](agpt/aurora/figures/lr_finder_20b.png) |
+| ![Optimal LR](agpt/aurora/figures/lr_finder_optimal_lr.png) | |
+
 #### Sunspot (Intel Max 1550, 2 nodes / 24 XPUs)
 
 ![Comparison](agpt/sunspot/figures/lr_finder_comparison.png)
