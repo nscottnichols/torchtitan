@@ -20,6 +20,24 @@ was required in ezpz.
 
 ---
 
+## 2026-04-14 (9th sync)
+
+**Upstream commits:**
+
+- `6f7a6a79` — [CI] Fix torchvision::nms error in RL integration tests (#2959)
+- `4f73d027` — [AutoDev] Restrict agent to only read actionable board items (#2953)
+- `f5ecda7e` — [GraphTrainer] Enable regional_inductor for GraphTrainer (#2869)
+- `b245fcaa` — [RL] Two small fixes in `inference_example.py` (#2944)
+- `c630d30f` — [rl] Add torchcomms installation to setup instructions and remove xformers (#2943)
+
+**Files changed:** `experiments/graph_trainer/`, `experiments/rl/`, CI workflows only.
+
+No changes to `models/`, `distributed/`, or `trainer.py`.
+
+**Changes required in ezpz:** None. Clean merge.
+
+---
+
 ## 2026-04-13 (8th sync)
 
 **Upstream commits:**
