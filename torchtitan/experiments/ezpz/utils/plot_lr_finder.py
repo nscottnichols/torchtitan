@@ -152,9 +152,11 @@ def plot_single_model(
 
     # Clip y-axis to avoid blow-up dominating the plot
     all_losses = np.concatenate([v[1] for v in optimizers.values()])
-    min_loss = all_losses.min()
-    y_upper = min(all_losses.max(), min_loss * 5)
-    ax.set_ylim(min_loss * 0.95, y_upper)
+    finite_losses = all_losses[np.isfinite(all_losses)]
+    if len(finite_losses) > 0:
+        min_loss = finite_losses.min()
+        y_upper = min(finite_losses.max(), min_loss * 5)
+        ax.set_ylim(min_loss * 0.95, y_upper)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     out_png = output_dir / f"lr_finder_{model}.png"
@@ -223,9 +225,11 @@ def plot_comparison(
 
         # Clip y-axis
         all_losses = np.concatenate([v[1] for v in optimizers.values()])
-        min_loss = all_losses.min()
-        y_upper = min(all_losses.max(), min_loss * 5)
-        ax.set_ylim(min_loss * 0.95, y_upper)
+        finite_losses = all_losses[np.isfinite(all_losses)]
+        if len(finite_losses) > 0:
+            min_loss = finite_losses.min()
+            y_upper = min(finite_losses.max(), min_loss * 5)
+            ax.set_ylim(min_loss * 0.95, y_upper)
 
     fig.suptitle("LR Finder — Optimizer Comparison", fontsize=14, fontweight="bold")
     fig.tight_layout()
