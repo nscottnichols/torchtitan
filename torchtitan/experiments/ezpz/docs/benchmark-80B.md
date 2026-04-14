@@ -43,9 +43,10 @@
 with additional compile/no-compile variants, see the
 [80B Throughput Leaderboard](experiments/agpt/aurora/80b-throughput-leaderboard.md).
 
-**Note:** 80B TP=2 no longer fits on some Aurora nodes (OOM on step 2,
-missed by 60 MiB). See [known-issues.md](known-issues.md#80b-tp2-on-aurora).
-The April 4 run above succeeded on nodes `x4201c1s1b0n0`.
+**Note:** 80B TP=2 no longer works on Aurora as of 2026-04-12 (OOM on step 2,
+missed by 60 MiB on all tested nodes). Likely a system-level regression
+between April 4 and April 12 — see
+[known-issues.md](known-issues.md#80b-tp2-on-aurora-regression-since-2026-04-04).
 
 Logs:
 `outputs/benchmarks/20260404_212401/`

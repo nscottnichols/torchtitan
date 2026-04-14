@@ -147,15 +147,30 @@ along the sequence dimension, the non-sharded tensors remain as regular
 
 **Workaround:** Use CP=1 (default). For longer sequences, increase TP instead.
 
-## 80B TP=2 on Aurora
+## 80B TP=2 on Aurora (regression since ~2026-04-04)
 
 **Symptoms:** `torch.OutOfMemoryError` or `UR_RESULT_ERROR_OUT_OF_RESOURCES`
 on step 2. Step 1 completes at 60.75 GiB (94.94%) but step 2 needs 5.25 GiB
-with only 5.19 GiB free (missed by 60 MiB).
+with only 5.19 GiB free (missed by 60 MiB). Memory numbers are identical
+across all tested nodes.
 
-**Affected:** All 80B variants at TP=2 on Aurora with `aurora_frameworks-2025.3.1`.
+**Affected:** All 80B variants at TP=2 on Aurora, tested 2026-04-12/13 on
+4 different node pairs (`x4216c5s*`, `x4704c1s*`, `x4219c2s*`, `x4310c3s*`).
 
-**Not affected:** Sunspot (benchmark ran 80B TP=2 at 93.49%, 85 TPS).
+**Previously worked:** 80B TP=2 ran successfully on Aurora on 2026-04-04
+(nodes `x4201c1s1b0n0`, 89 TPS with compile=on). Also works on Sunspot
+(85 TPS, 2026-03-30).
+
+**Likely cause:** An undiagnosed regression between 2026-04-04 and 2026-04-12,
+likely at the system level (framework libraries, Level Zero driver, or XPU
+runtime) rather than in torchtitan code. Evidence:
+- 4 different node pairs all fail with identical memory numbers
+  (42.82 GiB allocated, 12.36 GiB reserved, 5.19 GiB free) — rules out
+  node-specific hardware issues
+- Same torchtitan code at the benchmark commit (c6ff706) also OOMs —
+  rules out a code regression
+- The `aurora_frameworks-2025.3.1` module version string is unchanged but
+  the underlying libraries may have been updated in place
 
 **Tried and failed:**
 - `PYTORCH_XPU_ALLOC_CONF=expandable_segments:True`
@@ -165,3 +180,7 @@ with only 5.19 GiB free (missed by 60 MiB).
 - Same code at benchmark commit (c6ff706)
 
 **Workaround:** Use TP=4 with 80B_wide (68 TPS, 11.79% MFU). Or run on Sunspot.
+
+**To investigate:** Compare the exact library versions (Level Zero, PyTorch
+internals, IPEX) between the April 4 working environment and the current one.
+Check if `aurora_frameworks-2025.3.1` was patched in place between those dates.
