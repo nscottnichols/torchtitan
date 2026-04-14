@@ -170,7 +170,7 @@ See the script for configuration options (models, optimizers, steps).
 |------|--------|--------|-----------|-------|---------|------------|
 | 2026-04-12 | [LR Finder](agpt/aurora/20260412-144400-lr-finder-n2.md) | 2B, 20B | AdamW, Muon, SophiaG | 2 | Aurora | AdamW most tolerant; SophiaG 10x lower LR |
 | 2026-04-13 | [LR Finder](agpt/polaris/20260413-015510-lr-finder-n2.md) | 2B, 20B | AdamW, Muon, SophiaG | 2 | Polaris | Reproduces Aurora; cross-hardware LR consistency confirmed |
-| 2026-04-12 | [LR Finder](agpt/sunspot/20260412-lr-finder-n2.md) | 2B | AdamW, Muon, SophiaG | 2 | Sunspot | Reproduces Aurora; SophiaG blow-up more violent (910 vs 295) |
+| 2026-04-12 | [LR Finder](agpt/sunspot/20260412-lr-finder-n2.md) | 2B, 20B | AdamW, Muon, SophiaG | 2 | Sunspot | All 6 sweeps complete; SophiaG 20B blow-up at 7,145 |
 
 ### moe (Sparse)
 
