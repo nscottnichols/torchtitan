@@ -21,6 +21,9 @@
 #   LRF_MAX_LR     — maximum learning rate (default: 1.0)
 #   LRF_FRACTION   — fraction of steps to sweep (default: 0.1)
 #   LRF_BETA       — EMA smoothing factor (default: 0.98)
+#   LRF_WARMUP     — warmup fraction before sweep (default: 0.0)
+#   LRF_SMOOTH     — derivative smoothing fraction (default: 0.05)
+#   LRF_GAS        — gradient accumulation steps (default: 1)
 
 set -o pipefail
 
@@ -35,6 +38,9 @@ LRF_INIT_LR="${LRF_INIT_LR:-1e-6}"
 LRF_MAX_LR="${LRF_MAX_LR:-1.0}"
 LRF_FRACTION="${LRF_FRACTION:-0.1}"
 LRF_BETA="${LRF_BETA:-0.98}"
+LRF_WARMUP="${LRF_WARMUP:-0.0}"
+LRF_SMOOTH="${LRF_SMOOTH:-0.05}"
+LRF_GAS="${LRF_GAS:-1}"
 
 # Derive config prefix from module name (ezpz.agpt -> agpt, ezpz.moe -> moe)
 CONFIG_PREFIX="${LRF_MODULE##*.}_"
@@ -68,6 +74,7 @@ echo "  Models:     ${LRF_MODELS}"
 echo "  Optimizers: ${LRF_OPTIMIZERS}"
 echo "  Steps:      ${LRF_STEPS} (finder iters: $(python3 -c "print(max(1,int(${LRF_STEPS}*${LRF_FRACTION})))"))"
 echo "  LR range:   ${LRF_INIT_LR} -> ${LRF_MAX_LR}"
+echo "  Warmup:     ${LRF_WARMUP}  GAS: ${LRF_GAS}  Smooth: ${LRF_SMOOTH}"
 echo "============================================================"
 
 for model in ${LRF_MODELS}; do
@@ -88,6 +95,13 @@ for model in ${LRF_MODELS}; do
 
         start_seconds=$SECONDS
 
+        # Compute GBS for gradient accumulation
+        gas_args=()
+        if ((LRF_GAS > 1)); then
+            gbs=$((NGPUS * LRF_GAS))
+            gas_args=("--training.global_batch_size" "${gbs}")
+        fi
+
         ezpz launch python3 -m torchtitan.experiments.ezpz.train \
             --module "${LRF_MODULE}" \
             --config "${config}" \
@@ -98,6 +112,9 @@ for model in ${LRF_MODELS}; do
             --lr_finder.max_lr "${LRF_MAX_LR}" \
             --lr_finder.fraction "${LRF_FRACTION}" \
             --lr_finder.beta "${LRF_BETA}" \
+            --lr_finder.warmup_fraction "${LRF_WARMUP}" \
+            --lr_finder.smooth_frac "${LRF_SMOOTH}" \
+            "${gas_args[@]}" \
             "${opt_args[@]}"
         rc=$?
 
