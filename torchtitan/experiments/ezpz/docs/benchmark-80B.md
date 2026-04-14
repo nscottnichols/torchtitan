@@ -39,10 +39,9 @@
 | 80B_deep_alt | 24   | 2  | 1  | 12 | 12  | 58.95GiB(92.14%) | 82  | 44.78  | 15.02 | [link](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/8p4jlzir) | ✅     |
 | 80B_wide     | 24   | 2  | 1  | 12 | 12  | 60.75GiB(94.94%) | 44  | 22.62  | 7.58  | [link](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/n8tskhu0) | ✅     |
 
-**Note:** These runs used `compile=off`. With `compile=on` (tested 2026-04-12/13),
-80B_wide at TP=4 achieves 68 TPS / 11.79% MFU — see the
-[80B Throughput Leaderboard](experiments/agpt/aurora/80b-throughput-leaderboard.md)
-for the full TP sweep with compile.
+**Note:** These runs used `compile=on` (model + loss). For the full TP sweep
+with additional compile/no-compile variants, see the
+[80B Throughput Leaderboard](experiments/agpt/aurora/80b-throughput-leaderboard.md).
 
 **Note:** 80B TP=2 no longer fits on some Aurora nodes (OOM on step 2,
 missed by 60 MiB). See [known-issues.md](known-issues.md#80b-tp2-on-aurora).
