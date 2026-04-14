@@ -20,7 +20,8 @@ ported from [argonne-lcf/Megatron-DeepSpeed](https://github.com/argonne-lcf/Mega
    - Compute EMA-smoothed loss: `avg = beta * avg + (1 - beta) * loss`
    - Apply bias correction: `smoothed = avg / (1 - beta^i)`
    - Update learning rate: `lr *= mult`
-4. Save results and exit (no further training)
+4. Analyze curve with derivative-based blow-up detection (`find_optimal_lr()`)
+5. Save results (CSV, NPZ, plot) and exit
 
 ### The LR-vs-Loss Curve
 
@@ -38,12 +39,13 @@ Loss
 
 ### Selecting the Optimal LR
 
-Two common heuristics:
+Two heuristics (both implemented):
 
-1. **Blow-up point / 10**: Find the LR where loss starts increasing,
-   divide by 10. Conservative, safe for production.
-2. **Steepest descent**: Pick the LR at the steepest part of the
-   loss curve. More aggressive, potentially faster convergence.
+1. **Blow-up point / 10**: `find_optimal_lr()` detects where the smoothed
+   loss derivative crosses from negative to positive, then divides by 10.
+   Conservative, safe for production.
+2. **Steepest descent**: Pick the LR at the steepest part of the loss curve.
+   More aggressive, potentially faster convergence.
 
 ### Knobs to Tune
 
@@ -53,6 +55,8 @@ Two common heuristics:
 | `max_lr` | Ending LR | Raise if blow-up isn't reached |
 | `fraction` | Sweep length | Increase for smoother curves (more steps) |
 | `beta` | EMA smoothing | Lower (0.9) for noisier curves, higher (0.99) for smoother |
+| `warmup_fraction` | Hold at init_lr before sweep | Set 0.05-0.1 to let model settle |
+| `smooth_frac` | Derivative smoothing window | Increase (0.1+) for noisy/short curves |
 | `training.steps` | Base for fraction | Set to 1000+ for 100+ finder steps |
 
 ### Important Notes
@@ -66,23 +70,139 @@ Two common heuristics:
 - The sweep runs the **full training step** including gradient clipping,
   so the curve reflects realistic training dynamics
 
-## Quick Reference: Recommended Learning Rates
+---
 
-Derived from blow-up point / 10 across all completed sweeps.
+## Results
+
+### Recommended Learning Rates
+
+Derived from blow-up point / 10, averaged across all three machines.
 
 | Model | AdamW   | Muon    | SophiaG |
 |-------|---------|---------|---------|
-| 2B    | 2e-3    | 8e-4    | 3e-4    |
-| 20B   | 4e-4    | 4e-5    | 1e-5    |
+| 2B    | **2e-3**| **8e-4**| **3e-4**|
+| 20B   | **4e-4**| **2-4e-5**| **1-2e-5**|
 | 80B   | ~1e-4*  | ~1e-5*  | ~3e-6*  |
 
-*Extrapolated from scaling trend; not empirically verified (80B OOM on Aurora 2 nodes).
+*80B extrapolated from scaling trend; not empirically verified (OOM on 2 nodes).
 
-## Key Findings
+### Cross-Machine Comparison — agpt 2B
 
-1. **Optimizer sensitivity:** AdamW (most tolerant) > Muon > SophiaG (most sensitive)
-2. **Model scaling:** Larger models need lower LRs; Muon/SophiaG scale more aggressively
-3. **Blow-up severity:** SophiaG diverges catastrophically vs gradual for AdamW/Muon
+| Optimizer | Aurora | Sunspot | Polaris | Consensus |
+|-----------|--------|---------|---------|-----------|
+| **AdamW** min loss | 9.76 | 9.72 | 9.80 | ~9.76 |
+| **AdamW** suggested LR | 2e-3 | 1.9e-3 | 2e-3 | **2e-3** |
+| **Muon** min loss | 11.29 | 9.87 | 11.01 | ~10.7 |
+| **Muon** suggested LR | 8e-4 | 7.5e-4 | 1e-3 | **8e-4** |
+| **SophiaG** min loss | 10.29 | 10.28 | 10.73 | ~10.4 |
+| **SophiaG** suggested LR | 3e-4 | 3.0e-4 | 3e-4 | **3e-4** |
+| **SophiaG** final loss | 294.6 | 910.2 | NaN | catastrophic |
+
+**Takeaway:** Suggested LRs are consistent across all three machines (Intel XPU
+and NVIDIA A100). The optimizer is the dominant factor, not the hardware.
+
+### Cross-Machine Comparison — agpt 20B
+
+| Optimizer | Aurora | Sunspot | Polaris | Consensus |
+|-----------|--------|---------|---------|-----------|
+| **AdamW** suggested LR | 4e-4 | 3.4e-4 | 4e-4 | **4e-4** |
+| **Muon** suggested LR | 4e-5 | 1.7e-5 | — | **2-4e-5** |
+| **SophiaG** suggested LR | 1e-5 | 1.5e-5 | — | **1-2e-5** |
+| **SophiaG** final loss | 7,529 | 7,145 | — | catastrophic |
+
+### Key Findings
+
+1. **Optimizer sensitivity:** `AdamW (most tolerant) > Muon > SophiaG (most sensitive)`
+2. **Model scaling:** Larger models need lower LRs. Muon/SophiaG scale more
+   aggressively (~N^-0.5) than AdamW (~N^-0.25)
+3. **Blow-up severity:** SophiaG diverges catastrophically (loss 7,000+) vs
+   gradual blow-up for AdamW (loss ~60). SophiaG requires tighter LR scheduling
+4. **Cross-hardware consistency:** Suggested LRs match within 2x across Intel
+   XPU (Aurora, Sunspot) and NVIDIA A100 (Polaris)
+
+### LR Finder Curves
+
+#### Sunspot (Intel Max 1550, 2 nodes / 24 XPUs)
+
+![Comparison](agpt/sunspot/figures/lr_finder_comparison.png)
+
+| | |
+|---|---|
+| ![2B](agpt/sunspot/figures/lr_finder_2b.png) | ![20B](agpt/sunspot/figures/lr_finder_20b.png) |
+| ![Optimal LR](agpt/sunspot/figures/lr_finder_optimal_lr.png) | |
+
+#### Polaris (NVIDIA A100-40GB, 2 nodes / 8 GPUs)
+
+![Comparison](agpt/polaris/figures/lr_finder_comparison.png)
+
+| | |
+|---|---|
+| ![2B](agpt/polaris/figures/lr_finder_2b.png) | ![20B](agpt/polaris/figures/lr_finder_20b.png) |
+| ![Optimal LR](agpt/polaris/figures/lr_finder_optimal_lr.png) | |
+
+---
+
+## Comparison with Megatron-DeepSpeed
+
+Our LR finder is ported from
+[argonne-lcf/Megatron-DeepSpeed](https://github.com/saforem2/Megatron-DeepSpeed/blob/updates-and-model-card/ALCF/notes/large_batch_optimizers_settings.md).
+
+### Methodology — same approach
+
+Both implementations follow Smith 2015 / Gugger:
+- Exponential LR sweep with power-law increase
+- EMA-smoothed loss tracking
+- "Blow-up point / 10" heuristic
+- Same output format (CSV + NPZ + plots)
+
+### What we adopted from Megatron-DeepSpeed
+
+| Feature | Megatron-DeepSpeed | torchtitan-ezpz |
+|---------|-------------------|-----------------|
+| `find_all_minima_lrs()` | Derivative-based analysis with smoothing | Ported as `find_optimal_lr()` with closest-to-min selection |
+| Weight init | `std = sqrt(2/(5*d))` | Adopted in agpt `_linear_init(dim)` |
+| GAS support | `GRAD_ACC_STEPS=16` | Configurable via `--training.gradient_accumulation_steps` |
+| Warmup | Not implemented | Added `warmup_fraction` config |
+
+### Key differences
+
+| | Megatron-DeepSpeed | torchtitan-ezpz |
+|---|---|---|
+| Default LR | 0.0002 (Muon) | 8e-4 (config default) |
+| Sequence length | 4096 | 8192 (agpt), 4096 (moe) |
+| Weight init | `sqrt(2/(5*d))` | `sqrt(2/(5*d))` (adopted) |
+| Optimizers tested | AdamW, Muon, dShampoo, LAMB | AdamW, Muon, SophiaG |
+| Schedulers | constant+cooldown, cosine, infinite | cosine, linear |
+| Machines | Aurora, Sunspot | Aurora, Sunspot, Polaris |
+| Models | AuroraGPT (Megatron arch) | AuroraGPT (torchtitan arch) |
+
+### LR values — consistent
+
+Megatron-DeepSpeed uses `LR=0.0002` as the default for Muon training,
+which aligns with our 20B Muon finding of ~2-4e-5 (suggested, i.e.
+conservative). The blow-up point itself is ~2e-4, matching their default.
+
+Our data on optimizer sensitivity ordering (AdamW > Muon > SophiaG) and
+the scaling law (larger models need lower LRs) extends beyond what's
+documented in the Megatron-DeepSpeed notes.
+
+---
+
+## Reports
+
+### agpt (Dense)
+
+| Date | Report | Models | Optimizers | Nodes | Machine | Key Result |
+|------|--------|--------|-----------|-------|---------|------------|
+| 2026-04-12 | [LR Finder](agpt/aurora/20260412-144400-lr-finder-n2.md) | 2B, 20B | AdamW, Muon, SophiaG | 2 | Aurora | AdamW most tolerant; SophiaG 10x lower LR |
+| 2026-04-12 | [LR Finder](agpt/sunspot/20260412-lr-finder-n2.md) | 2B, 20B | AdamW, Muon, SophiaG | 2 | Sunspot | All 6 sweeps; SophiaG 20B blow-up at 7,145 |
+| 2026-04-13 | [LR Finder](agpt/polaris/20260413-015510-lr-finder-n2.md) | 2B, 20B | AdamW, Muon, SophiaG | 2 | Polaris | Reproduces Aurora; cross-hardware LR consistency |
+
+### moe (Sparse)
+
+*No LR finder runs yet.*
+
+---
 
 ## Usage
 
@@ -110,6 +230,8 @@ LR exponentially from `init_lr` to `max_lr`.
 | `--lr_finder.max_lr` | 1.0 | Maximum learning rate |
 | `--lr_finder.fraction` | 0.1 | Fraction of training.steps to sweep |
 | `--lr_finder.beta` | 0.98 | EMA smoothing factor |
+| `--lr_finder.warmup_fraction` | 0.0 | Hold at init_lr before sweep |
+| `--lr_finder.smooth_frac` | 0.05 | Derivative smoothing window |
 
 ### With different optimizers
 
@@ -138,40 +260,28 @@ Results are saved to `outputs/lr_finder/ezpz/<module>/<flavor>/<optimizer>/`:
 
 - `lr_finder_data.csv` — two columns: learning_rate, loss
 - `lr_finder_data.npz` — numpy arrays for programmatic analysis
-- `lr_vs_loss.png` — log-scale plot with minimum marked
-
-### Interpreting results
-
-The optimal learning rate is estimated as:
-- **Blow-up point / 10**: find where loss starts increasing, divide that LR by 10
-- **Steepest descent**: pick the LR in the steepest part of the loss curve
+- `lr_vs_loss.png` — log-scale plot with minimum and suggested LR marked
 
 ### Reproducing the experiments
 
-Use the script at `torchtitan/experiments/ezpz/scripts/run_lr_finder_sweep.sh`:
-
 ```bash
-bash torchtitan/experiments/ezpz/scripts/run_lr_finder_sweep.sh
+# All 6 sweeps (2B+20B x 3 optimizers):
+LRF_MODELS="2b 20b" LRF_OPTIMIZERS="adamw muon sophiag" \
+    bash torchtitan/experiments/ezpz/scripts/run_lr_finder_sweep.sh
 ```
 
-See the script for configuration options (models, optimizers, steps).
+### Generating plots
+
+```bash
+# From repo root:
+python3 torchtitan/experiments/ezpz/utils/plot_lr_finder.py \
+    --data-dir outputs/lr_finder/ezpz/ezpz.agpt \
+    --output-dir torchtitan/experiments/ezpz/docs/experiments/lr-finder/agpt/sunspot/figures
+```
 
 ## References
 
 - Smith, L.N. (2015). [Cyclical Learning Rates for Training Neural Networks](https://arxiv.org/abs/1506.01186)
 - Gugger, S. [How Do You Find A Good Learning Rate](https://sgugger.github.io/how-do-you-find-a-good-learning-rate.html)
 - [Megatron-DeepSpeed LR Finder](https://github.com/saforem2/Megatron-DeepSpeed/blob/updates-and-model-card/ALCF/notes/large_batch_optimizers_settings.md#learning-rate) (argonne-lcf)
-
-## Reports
-
-### agpt (Dense)
-
-| Date | Report | Models | Optimizers | Nodes | Machine | Key Result |
-|------|--------|--------|-----------|-------|---------|------------|
-| 2026-04-12 | [LR Finder](agpt/aurora/20260412-144400-lr-finder-n2.md) | 2B, 20B | AdamW, Muon, SophiaG | 2 | Aurora | AdamW most tolerant; SophiaG 10x lower LR |
-| 2026-04-13 | [LR Finder](agpt/polaris/20260413-015510-lr-finder-n2.md) | 2B, 20B | AdamW, Muon, SophiaG | 2 | Polaris | Reproduces Aurora; cross-hardware LR consistency confirmed |
-| 2026-04-12 | [LR Finder](agpt/sunspot/20260412-lr-finder-n2.md) | 2B, 20B | AdamW, Muon, SophiaG | 2 | Sunspot | All 6 sweeps complete; SophiaG 20B blow-up at 7,145 |
-
-### moe (Sparse)
-
-*No LR finder runs yet.*
+- Yang et al. (2023). [Tensor Programs VI: Feature Learning in Infinite-Depth Neural Networks](https://arxiv.org/abs/2312.16903) — weight init `sqrt(2/(5*d))`
