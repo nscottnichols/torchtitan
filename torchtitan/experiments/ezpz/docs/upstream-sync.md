@@ -20,6 +20,19 @@ was required in ezpz.
 
 ---
 
+## 2026-04-14 (10th sync)
+
+**Upstream commits:**
+
+- `b35ca339` — [GraphTrainer][AutoDev] Extract remove-noop graph passes into dedicated module (#2952)
+- `6d8c7e90` — [GraphTrainer] Update bitwise hash (#2962)
+
+**Files changed:** `experiments/graph_trainer/` only (pass refactoring).
+
+**Changes required in ezpz:** None. Clean merge.
+
+---
+
 ## 2026-04-14 (9th sync)
 
 **Upstream commits:**
