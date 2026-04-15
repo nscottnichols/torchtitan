@@ -76,39 +76,35 @@ Two heuristics (both implemented):
 
 ### Recommended Learning Rates
 
-Derived from blow-up point / 10, averaged across all three machines.
+Latest results using `sqrt(2/(5*d))` weight init and 5% warmup (Sunspot 2026-04-14).
 
 | Model | AdamW   | Muon    | SophiaG |
 |-------|---------|---------|---------|
-| 2B    | **2e-3**| **8e-4**| **3e-4**|
-| 20B   | **4e-4**| **2-4e-5**| **1-2e-5**|
-| 80B   | ~1e-4*  | ~1e-5*  | ~3e-6*  |
+| 2B    | **1.3e-3**| **2.4e-3**| **3.1e-4**|
+| 20B   | **4.0e-4**| **1.7e-4**| **1.8e-5**|
+| 80B   | ~1e-4*  | ~2e-5*  | ~2e-6*  |
 
 *80B extrapolated from scaling trend; not empirically verified (OOM on 2 nodes).
 
 ### Cross-Machine Comparison — agpt 2B
 
-| Optimizer | Aurora | Sunspot | Polaris | Consensus |
-|-----------|--------|---------|---------|-----------|
-| **AdamW** min loss | 9.76 | 9.72 | 9.80 | ~9.76 |
-| **AdamW** suggested LR | 2e-3 | 1.9e-3 | 2e-3 | **2e-3** |
-| **Muon** min loss | 11.29 | 9.87 | 11.01 | ~10.7 |
-| **Muon** suggested LR | 8e-4 | 7.5e-4 | 1e-3 | **8e-4** |
-| **SophiaG** min loss | 10.29 | 10.28 | 10.73 | ~10.4 |
-| **SophiaG** suggested LR | 3e-4 | 3.0e-4 | 3e-4 | **3e-4** |
-| **SophiaG** final loss | 294.6 | 910.2 | NaN | catastrophic |
-
-**Takeaway:** Suggested LRs are consistent across all three machines (Intel XPU
-and NVIDIA A100). The optimizer is the dominant factor, not the hardware.
+| Optimizer | Aurora (std=0.02) | Sunspot (sqrt(2/5d)) | Polaris (std=0.02) |
+|-----------|--------|---------|---------|
+| **AdamW** suggested LR | 2e-3 | 1.3e-3 | 2e-3 |
+| **Muon** suggested LR | 8e-4 | **2.4e-3** | 1e-3 |
+| **SophiaG** suggested LR | 3e-4 | 3.1e-4 | 3e-4 |
 
 ### Cross-Machine Comparison — agpt 20B
 
-| Optimizer | Aurora | Sunspot | Polaris | Consensus |
-|-----------|--------|---------|---------|-----------|
-| **AdamW** suggested LR | 4e-4 | 3.4e-4 | 4e-4 | **4e-4** |
-| **Muon** suggested LR | 4e-5 | 1.7e-5 | — | **2-4e-5** |
-| **SophiaG** suggested LR | 1e-5 | 1.5e-5 | — | **1-2e-5** |
-| **SophiaG** final loss | 7,529 | 7,145 | — | catastrophic |
+| Optimizer | Aurora (std=0.02) | Sunspot (sqrt(2/5d)) | Polaris (std=0.02) |
+|-----------|--------|---------|---------|
+| **AdamW** suggested LR | 4e-4 | 4.0e-4 | 4e-4 |
+| **Muon** suggested LR | 4e-5 | **1.7e-4** | — |
+| **SophiaG** suggested LR | 1e-5 | 1.8e-5 | — |
+
+**Takeaway:** AdamW and SophiaG are robust to weight init changes. Muon is
+sensitive — `sqrt(2/(5*d))` init allows 3-10x higher LRs vs fixed `std=0.02`.
+This is because Muon's orthogonal momentum amplifies gradient scale differences.
 
 ### Key Findings
 
