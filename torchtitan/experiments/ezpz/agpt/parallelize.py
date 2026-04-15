@@ -100,6 +100,12 @@ def parallelize_llama(
 
     if model_compile_enabled:
         apply_compile(model, compile_config)
+        # apply_compile unconditionally sets capture_scalar_outputs=True
+        # (needed for MoE dynamic shapes). For dense models this is harmless
+        # for model layers, but breaks the separately-compiled loss_fn when
+        # loss_parallel + ignore_index produce unbacked symbols in
+        # cross_entropy. Reset it for dense models.
+        torch._dynamo.config.capture_scalar_outputs = False
 
     names = ["dp_replicate", "fsdp"] if parallel_dims.dp_replicate_enabled else ["fsdp"]
     dp_mesh = parallel_dims.get_mesh(names)
