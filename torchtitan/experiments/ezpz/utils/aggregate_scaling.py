@@ -20,7 +20,42 @@ import sys
 from pathlib import Path
 
 
-MODELS = ["agpt_2b", "agpt_20b", "agpt_80b", "moe_2b", "moe_7b"]
+MODELS = [
+    "agpt_2b",
+    "agpt_20b",
+    "agpt_80b",
+    "agpt_80b_wide",
+    "moe_2b",
+    "moe_7b",
+    "moe_10b_2b",
+]
+
+
+def _find_results_files(base_dir: Path) -> list[Path]:
+    """Find all results.json files under base_dir.
+
+    Handles both flat layout (n4/results.json) and group layout
+    (n4/light/results.json, n4/heavy/results.json).
+    """
+    files: list[Path] = []
+    for subdir in sorted(base_dir.iterdir()):
+        if not subdir.is_dir() or not subdir.name.startswith("n"):
+            continue
+
+        # Direct results.json in n<N>/
+        direct = subdir / "results.json"
+        if direct.exists():
+            files.append(direct)
+
+        # Group subdirs (light/, heavy/) in n<N>/
+        for group_dir in sorted(subdir.iterdir()):
+            if not group_dir.is_dir():
+                continue
+            group_file = group_dir / "results.json"
+            if group_file.exists():
+                files.append(group_file)
+
+    return files
 
 
 def load_results(base_dir: Path) -> dict[int, dict[str, dict]]:
@@ -30,19 +65,13 @@ def load_results(base_dir: Path) -> dict[int, dict[str, dict]]:
     """
     data: dict[int, dict[str, dict]] = {}
 
-    for subdir in sorted(base_dir.iterdir()):
-        if not subdir.is_dir() or not subdir.name.startswith("n"):
-            continue
-
-        results_file = subdir / "results.json"
-        if not results_file.exists():
-            continue
-
+    for results_file in _find_results_files(base_dir):
         with open(results_file) as f:
             job_data = json.load(f)
 
         nodes = job_data["nodes"]
-        data[nodes] = {}
+        if nodes not in data:
+            data[nodes] = {}
 
         for result in job_data["results"]:
             model = result["model"]
@@ -55,6 +84,9 @@ def load_multi_results(
     dirs: list[Path],
 ) -> dict[int, dict[str, list[dict]]]:
     """Load results from multiple run directories.
+
+    Handles both flat (n4/results.json) and grouped
+    (n4/light/results.json + n4/heavy/results.json) layouts.
 
     Returns: {nodes: {model: [result_dict, ...]}}
     """

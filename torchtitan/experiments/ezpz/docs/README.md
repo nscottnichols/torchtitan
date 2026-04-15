@@ -10,5 +10,5 @@ date: 2026-03-15
 - [Known Issues and Operational Notes](./known-issues.md)
 - [XPU Attention Issues](./xpu-attention-issues.md) (SDPA, FlexAttention, Triton)
 - [Upstream Sync Log](./upstream-sync.md)
-- [Experiment Reports](./experiments/) (benchmarks, smoke tests, LR finder)
+- [Experiment Reports](./experiments/) (benchmarks, smoke tests, LR finder, production runs)
 - [TODO](./TODO.md)

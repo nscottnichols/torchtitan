@@ -84,21 +84,34 @@ weak and strong scaling efficiency.
 Design configs for a production training run combining optimal LRs
 (from LR finder) with optimal throughput configs (from benchmarks).
 
+### Status
+
+**agpt_20b -- IN PROGRESS**
+
+- 2026-04-14: 2-node verify run completed 146 steps (loss 12.92 -> 10.50)
+  before hitting 2h walltime. Config validated end-to-end.
+- 2026-04-14: 512-node production job queued (Job 8436463), waiting for nodes.
+- 2026-04-08: 1024-node attempt crashed at init (Job 8423904, exit 143).
+- Full report: [20B Production (n512)](experiments/agpt/aurora/20260414-production-20b-n512.md)
+
 ### Recommended configs
 
-**agpt_20b production:**
+**agpt_20b production (SUBMITTED):**
 ```
 Model:      agpt_20b
-TP:         2
-Compile:    on
+TP:         1
+Compile:    on (model + loss)
 seq_len:    8192
 LBS:        1
 AC:         full
-LR:         4e-4 (AdamW) / 4e-5 (Muon)
+LR:         2.28e-5 (SophiaG, from LR finder)
 Warmup:     200 steps
 Decay:      cosine, min_lr_factor=0.1
-Optimizer:  AdamW (most stable) or Muon (if LR tuned carefully)
-Expected:   355 TPS per 2-node, ~17.7% MFU
+Optimizer:  SophiaG
+Tokens:     4.67T (olmo-mix-1124)
+Steps:      92,859 (at GBS=6144 on 512 nodes)
+Expected:   346 TPS per 2-node, ~17.3% MFU
+Submit:     submit/aurora/submit_agpt_20b_n512.sh
 ```
 
 **agpt_80b_wide production:**
