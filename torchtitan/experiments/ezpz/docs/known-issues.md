@@ -2,6 +2,38 @@
 
 Troubleshooting reference for running ezpz experiments across ALCF machines.
 
+## torch.compile + loss compilation crashes with TP (upstream PR #2741)
+
+**Symptoms:** `InductorError: PendingUnbackedSymbolNotFound: Pending unbacked
+symbols {zuf0, zuf1}` during the first training step. The crash occurs in the
+compiled loss function, not in the model forward pass. Only triggers when
+`loss_parallel` is active (i.e. TP > 1) and loss compilation is enabled.
+
+**Root cause:** Upstream PR #2741 ("Enable per-layer compile with or without
+MoE") consolidated `apply_compile_dense` and `apply_compile_sparse` into a
+single `apply_compile` that unconditionally sets
+`torch._dynamo.config.capture_scalar_outputs = True`. This flag is needed for
+MoE dynamic shapes (expert routing produces data-dependent scalars), but it
+breaks dense models when the loss function is separately compiled. With the
+flag set, `F.cross_entropy` with `ignore_index` + `reduction='sum'` produces
+unbacked symbols from internal token masking that aren't bound to any output,
+causing `compute_unbacked_bindings` to raise.
+
+**Fix:** Reset the flag after `apply_compile` in the dense agpt parallelize
+path (`ezpz/agpt/parallelize.py`, commit `e8cbb8ef`):
+
+```python
+if model_compile_enabled:
+    apply_compile(model, compile_config)
+    torch._dynamo.config.capture_scalar_outputs = False
+```
+
+**Workaround:** `--compile.components=model` (skip loss compilation).
+
+**Affects:** All dense agpt configs with TP > 1 and compile enabled (80B
+variants at TP=2+). Does not affect MoE configs (which need the flag) or
+dense configs at TP=1 (where `loss_parallel` is inactive).
+
 ## torch.compile + SDPA `set_priority=True` (PyTorch 2.11)
 
 **Symptoms:** `RuntimeError('Invalid backend')` during `torch.compile` tracing
