@@ -508,3 +508,37 @@ This requires an upstream PyTorch XPU fix.
 6. **Reported MFU is misleadingly low** for MoE — it's computed against total
    params but only top_k experts are active. Corrected for active params, the
    2B at LBS=16 achieves ~39% active-MFU, comparable to dense models.
+
+## Full Benchmark Sweep -- Sunspot 2-node (2026-04-15)
+
+**Commit:** d09d9708 | **Nodes:** 2 (24 XPU) | **Steps:** 10
+**Report:** [experiments/agpt/sunspot/20260415-benchmark-n2.md](experiments/agpt/sunspot/20260415-benchmark-n2.md)
+
+First run of `run_benchmarks.sh` with all 18 configs (11 agpt + 7 MoE).
+
+### Results Summary
+
+| Config | TPS | TFLOPS | MFU | Memory | Status |
+|--------|-----|--------|-----|--------|--------|
+| agpt_debugmodel | 34,573 | 7.98 | 2.68% | — | OK |
+| agpt_2b | 5,489 | 61.41 | 20.59% | 46.80GiB (73%) | OK |
+| agpt_7b | — | — | — | — | CRASH |
+| agpt_8b | — | — | — | — | CRASH |
+| agpt_20b | 352 | 52.40 | 17.57% | 44.54GiB (70%) | OK |
+| agpt_50b | — | — | — | — | OOM |
+| agpt_80b (x5) | — | — | — | — | CRASH |
+| moe_debugmodel | 10,901 | 18.76 | 6.29% | — | OK |
+| moe_500m | 5,669 | 21.30 | 7.14% | — | OK |
+| moe_2b | 3,515 | 25.54 | 8.56% | — | OK |
+| moe_4b | 2,325 | 20.22 | 6.78% | — | OK |
+| moe_7b | 1,066 | 19.27 | 6.46% | 33.40GiB (52%) | OK |
+| moe_10b_2b | — | — | — | — | CRASH |
+| moe_10b_2b_sdpa | 979 | 17.08 | 5.73% | 35.77GiB (56%) | OK |
+
+### Issues Found and Fixed
+
+1. **80B compile regression** — upstream PR #2741 unconditionally sets
+   `capture_scalar_outputs=True`, breaking compiled loss with TP + loss_parallel.
+   Fixed in `e8cbb8ef` by resetting the flag for dense models.
+2. **Blendcorpus cache race** — `run_benchmarks.sh` was deleting `.npy` cache
+   files between runs, causing FileNotFoundError on Lustre. Fixed in `2b0ed561`.

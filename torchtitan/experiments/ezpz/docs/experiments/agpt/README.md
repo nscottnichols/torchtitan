@@ -29,3 +29,4 @@ Dense transformer training benchmarks across ALCF machines.
 | 2026-04-12 | [LR Finder (n2)](../lr-finder/agpt/sunspot/20260412-lr-finder-n2.md) | 2B, 20B x {AdamW,Muon,SophiaG} | 2 | All 6 sweeps; 20B SophiaG suggested LR=1.5e-5 |
 | 2026-04-12 | [Scaling Study](../../scaling-study.md) | 2b, 20b, 80b at 1-64N | 1-64 | 20b 87% efficiency at 64N; 80b OK at 4-32N |
 | 2026-04-13 | [Benchmark (n2)](sunspot/20260413-benchmark-n2.md) | All 11 agpt configs | 2 | 80b_deep best 80B variant: 83 TPS, 15.2% MFU |
+| 2026-04-15 | [Full Benchmark (n2)](sunspot/20260415-benchmark-n2.md) | All 18 configs (agpt+MoE) | 2 | 80B compile regression found; fix in e8cbb8ef |
