@@ -167,7 +167,7 @@ def parallelize_qwen3(
 
     # turn on per-TransformerBlock compile after AC wrapping and before FSDP
     if model_compile_enabled:
-        apply_compile(model, compile_config, parallel_dims.ep_enabled)
+        apply_compile(model, compile_config)
 
     if parallel_dims.fsdp_enabled:
         # apply FSDP or HSDP, potentially with Context Parallel

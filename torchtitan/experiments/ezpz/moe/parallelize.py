@@ -36,7 +36,7 @@ from torchtitan.config import (
 )
 from torchtitan.distributed import ParallelDims
 from torchtitan.distributed.activation_checkpoint import apply_ac
-from torchtitan.distributed.compile import apply_compile_sparse
+
 from torchtitan.distributed.context_parallel import apply_cp_to_attention_module
 from torchtitan.distributed.tensor_parallel import maybe_enable_async_tp, NoParallel
 
