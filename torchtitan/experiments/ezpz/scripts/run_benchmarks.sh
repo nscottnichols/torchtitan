@@ -115,7 +115,7 @@ DATASET_PATH="torchtitan/experiments/ezpz/data-lists/$(ezpz_get_machine_name)/bo
 # ---------------------------------------------------------------------------
 echo "--- Cleaning up stale processes and cache ---"
 pkill -u "${USER}" -f "torchtitan.experiments.ezpz.train" 2>/dev/null && sleep 2 || true
-rm -rf .cache/blendcorpus/*.npy 2>/dev/null || true
+# rm -rf .cache/blendcorpus/*.npy 2>/dev/null || true
 echo ""
 
 # ---------------------------------------------------------------------------
@@ -147,7 +147,7 @@ for ((i = 0; i < NUM_CONFIGS; i++)); do
     logfile="${OUTDIR}/${label}.log"
 
     echo "--- [${label}] running (module=${module} config=${config}) ---"
-    echo "    started @ $(tstamp)"
+    echo "    started @ $(date +%Y%m%d-%H%M%S)"
     echo "    logfile: ${logfile}"
     echo ""
 

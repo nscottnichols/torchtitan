@@ -103,7 +103,7 @@ for ((i = 0; i < NUM_CONFIGS; i++)); do
 
     echo "--- [${label}] running (module=${module} config=${config}) ---"
     echo "    TP=${tp} DP=${dp} LBS=${lbs} GAS=${gas} GBS=${gbs} seq_len=${seq_len}"
-    echo "    started @ $(tstamp)"
+    echo "    started @ $(date +%Y%m%d-%H%M%S)"
     echo "    logfile: ${logfile}"
     echo ""
 

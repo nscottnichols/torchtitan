@@ -223,7 +223,7 @@ print('OK')
             sync && sleep 5
 
             echo "    model=${model}  TP=${tp}  PP=${pp}  DP=${dp}  layers/stage=$(( n_layers / pp ))"
-            echo "    started @ $(tstamp)"
+            echo "    started @ $(date +%Y%m%d-%H%M%S)"
             echo "    logfile: ${logfile}"
             echo ""
 
