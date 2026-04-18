@@ -44,9 +44,9 @@ with additional compile/no-compile variants, see the
 [80B Throughput Leaderboard](experiments/agpt/aurora/80b-throughput-leaderboard.md).
 
 **Note:** 80B TP=2 was broken on Aurora from 2026-04-12 to 2026-04-17 (OOM by
-60 MiB). **Resolved 2026-04-18** — works again at 88 TPS / 16% MFU after IPEX
-removal and torch 2.12 update. See
-[restoration report](experiments/agpt/aurora/20260418-80b-tp2-restored.md).
+60 MiB). **Resolved 2026-04-18** — works again at 88 TPS / 16% MFU after
+removing `import intel_extension_for_pytorch` (IPEX allocator added ~60 MiB
+overhead). See [restoration report](experiments/agpt/aurora/20260418-80b-tp2-restored.md).
 
 Logs:
 `outputs/benchmarks/20260404_212401/`
