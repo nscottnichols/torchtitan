@@ -68,6 +68,7 @@ def agpt(
     dtype: Literal["bfloat16", "float32"] = "bfloat16",
     compile: bool = True,
     fsdp_reshard_after_forward: Literal["default", "always", "never"] = "default",
+    tensor_parallel_degree: int = 1,
     checkpoint_interval: int = 50,
     hf_assets_path: str = "./assets/hf/gemma-7b",
     dataset_path: str | None = None,
@@ -88,6 +89,7 @@ def agpt(
     if compile:
         cfg.compile = CompileConfig(enable=True)
     cfg.parallelism.fsdp_reshard_after_forward = fsdp_reshard_after_forward
+    cfg.parallelism.tensor_parallel_degree = tensor_parallel_degree
     cfg.checkpoint.enable = True
     cfg.checkpoint.interval = checkpoint_interval
     return cfg
@@ -238,43 +240,43 @@ def agpt_50b() -> FaultTolerantTrainer.Config:
 
 
 def ezpz_agpt_80b() -> FaultTolerantTrainer.Config:
-    return agpt("80B")
+    return agpt("80B", tensor_parallel_degree=2)
 
 
 def agpt_80b() -> FaultTolerantTrainer.Config:
-    return agpt("80B")
+    return agpt("80B", tensor_parallel_degree=2)
 
 
 def ezpz_agpt_80b_alt() -> FaultTolerantTrainer.Config:
-    return agpt("80B_alt")
+    return agpt("80B_alt", tensor_parallel_degree=2)
 
 
 def agpt_80b_alt() -> FaultTolerantTrainer.Config:
-    return agpt("80B_alt")
+    return agpt("80B_alt", tensor_parallel_degree=2)
 
 
 def ezpz_agpt_80b_wide() -> FaultTolerantTrainer.Config:
-    return agpt("80B_wide")
+    return agpt("80B_wide", tensor_parallel_degree=2)
 
 
 def agpt_80b_wide() -> FaultTolerantTrainer.Config:
-    return agpt("80B_wide")
+    return agpt("80B_wide", tensor_parallel_degree=2)
 
 
 def ezpz_agpt_80b_deep() -> FaultTolerantTrainer.Config:
-    return agpt("80B_deep")
+    return agpt("80B_deep", tensor_parallel_degree=2)
 
 
 def agpt_80b_deep() -> FaultTolerantTrainer.Config:
-    return agpt("80B_deep")
+    return agpt("80B_deep", tensor_parallel_degree=2)
 
 
 def ezpz_agpt_80b_deep_alt() -> FaultTolerantTrainer.Config:
-    return agpt("80B_deep_alt")
+    return agpt("80B_deep_alt", tensor_parallel_degree=2)
 
 
 def agpt_80b_deep_alt() -> FaultTolerantTrainer.Config:
-    return agpt("80B_deep_alt")
+    return agpt("80B_deep_alt", tensor_parallel_degree=2)
 
 
 def ezpz_agpt_80b_from_json() -> FaultTolerantTrainer.Config:
