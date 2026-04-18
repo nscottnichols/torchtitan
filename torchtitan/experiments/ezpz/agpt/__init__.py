@@ -5,7 +5,6 @@
 # LICENSE file in the root directory of this source tree.
 
 from collections.abc import Callable
-from copy import deepcopy
 from dataclasses import dataclass
 from functools import partial
 from typing import Literal
@@ -27,10 +26,10 @@ from torchtitan.models.common import (
 from torch.nn.attention import sdpa_kernel, SDPBackend
 
 from torchtitan.models.common.attention import (
-    FlexAttention,
+    LocalMapInnerAttention,
     ScaledDotProductAttention,
-    VarlenAttention,
 )
+from torchtitan.models.common.config_utils import get_attention_config
 
 
 class EzpzScaledDotProductAttention(ScaledDotProductAttention):
@@ -152,6 +151,20 @@ def _default_inner_attention() -> ScaledDotProductAttention.Config:
     return EzpzScaledDotProductAttention.Config()
 
 
+def _ezpz_get_attention_config(
+    backend: str,
+) -> tuple[LocalMapInnerAttention.Config, str]:
+    """XPU-aware attention config selection.
+
+    For the "sdpa" backend, uses the XPU-optimized SDPA classes instead of
+    upstream's ScaledDotProductAttention. Other backends delegate to the
+    upstream get_attention_config().
+    """
+    if backend == "sdpa":
+        return _default_inner_attention(), "causal"
+    return get_attention_config(backend)
+
+
 def _build_agpt_layers(
     *,
     n_layers: int,
@@ -159,11 +172,12 @@ def _build_agpt_layers(
     n_heads: int,
     hidden_dim: int,
     n_kv_heads: int | None = None,
-    inner_attention=None,
-    mask_type: str = "causal",
+    fuse_qkv: bool = False,
+    attn_backend: str = "sdpa",
     rope_backend: Literal["complex", "cos_sin"] = "complex",
 ) -> list[TransformerBlock.Config]:
     """Build a list of per-layer TransformerBlock configs with depth-scaled inits."""
+    inner_attention, mask_type = _ezpz_get_attention_config(attn_backend)
     linear_init = _linear_init(dim)
     layers = []
     for layer_id in range(n_layers):
@@ -179,11 +193,8 @@ def _build_agpt_layers(
                     n_kv_heads=n_kv_heads,
                     wqkv_param_init=linear_init,
                     wo_param_init=_depth_init(dim, layer_id),
-                    inner_attention=(
-                        inner_attention
-                        if inner_attention is not None
-                        else _default_inner_attention()
-                    ),
+                    inner_attention=inner_attention,
+                    fuse_qkv=fuse_qkv,
                     mask_type=mask_type,
                     rope_backend=rope_backend,
                 ),
@@ -207,6 +218,8 @@ def _build_agpt_config(
     rope_theta: int,
     vocab_size: int,
     hidden_dim: int,
+    fuse_qkv: bool = False,
+    attn_backend: str = "sdpa",
     rope_backend: Literal["complex", "cos_sin"] = "complex",
     scaling: Literal["none", "llama", "yarn"] = "none",
     max_seq_len: int = 131072,
@@ -236,6 +249,8 @@ def _build_agpt_config(
             n_heads=n_heads,
             n_kv_heads=n_kv_heads,
             hidden_dim=hidden_dim,
+            fuse_qkv=fuse_qkv,
+            attn_backend=attn_backend,
             rope_backend=rope_backend,
         ),
     )
@@ -259,6 +274,7 @@ agpt_configs = {
         rope_theta=500000,
         vocab_size=32000,
         hidden_dim=compute_ffn_hidden_dim(256, multiple_of=256),
+        attn_backend="flex",
     ),
     "debugmodel_varlen_attn": _build_agpt_config(
         dim=256,
@@ -268,6 +284,7 @@ agpt_configs = {
         rope_theta=500000,
         vocab_size=32000,
         hidden_dim=compute_ffn_hidden_dim(256, multiple_of=256),
+        attn_backend="varlen",
     ),
     "2B": _build_agpt_config(
         dim=2048,
@@ -286,6 +303,7 @@ agpt_configs = {
         rope_theta=50000,
         vocab_size=256128,
         hidden_dim=11008,
+        attn_backend="flex",
     ),
     "7B": _build_agpt_config(
         dim=4096,
@@ -324,6 +342,7 @@ agpt_configs = {
         rope_theta=500000,
         vocab_size=256128,
         hidden_dim=compute_ffn_hidden_dim(5120, multiple_of=1024),
+        attn_backend="flex",
     ),
     "50B": _build_agpt_config(
         dim=8192,
@@ -394,36 +413,6 @@ agpt_configs = {
 }
 
 
-# Apply flex_attn overlay to the relevant configs
-def _apply_flex_attn(config: Llama3Model.Config) -> Llama3Model.Config:
-    flex_cfg = FlexAttention.Config()
-    layers = []
-    for layer_cfg in config.layers:
-        layer_cfg = deepcopy(layer_cfg)
-        layer_cfg.attention.inner_attention = flex_cfg
-        layer_cfg.attention.mask_type = "block_causal"
-        layers.append(layer_cfg)
-    config.layers = layers
-    return config
-
-
-def _apply_varlen_attn(config: Llama3Model.Config) -> Llama3Model.Config:
-    varlen_cfg = VarlenAttention.Config()
-    layers = []
-    for layer_cfg in config.layers:
-        layer_cfg = deepcopy(layer_cfg)
-        layer_cfg.attention.inner_attention = varlen_cfg
-        layer_cfg.attention.mask_type = "block_causal"
-        layers.append(layer_cfg)
-    config.layers = layers
-    return config
-
-
-_apply_flex_attn(agpt_configs["debugmodel_flex_attn"])
-_apply_varlen_attn(agpt_configs["debugmodel_varlen_attn"])
-_apply_flex_attn(agpt_configs["2B_flex_attn"])
-_apply_flex_attn(agpt_configs["20B_flex_attn"])
-
 # Case-insensitive aliases
 agpt_configs["2b"] = agpt_configs["2B"]
 agpt_configs["2b_flex_attn"] = agpt_configs["2B_flex_attn"]
@@ -439,7 +428,10 @@ agpt_configs["80b_alt"] = agpt_configs["80B_alt"]
 agpt_configs["80b_deep_alt"] = agpt_configs["80B_deep_alt"]
 
 
-def model_registry(flavor: str) -> FaultTolerantModelSpec:
+def model_registry(
+    flavor: str,
+    attn_backend: str = "sdpa",
+) -> FaultTolerantModelSpec:
     from torchtitan.distributed.pipeline_parallel import pipeline_llm
     from torchtitan.experiments.ft.diloco import fragment_llm
 
