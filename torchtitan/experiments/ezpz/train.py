@@ -39,10 +39,10 @@ fp = Path(__file__)
 WBPROJ_NAME = f"torchtitan.{fp.parent.stem}.{fp.stem}"
 os.environ.setdefault("WANDB_PROJECT", f"{WBPROJ_NAME}")
 
-try:
-    import intel_extension_for_pytorch as ipex
-except Exception:
-    pass
+# try:
+#     import intel_extension_for_pytorch as ipex
+# except Exception:
+#     pass
 
 
 _LEGACY_KEY_REMAP = {
