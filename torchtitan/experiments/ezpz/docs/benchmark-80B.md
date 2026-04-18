@@ -43,10 +43,10 @@
 with additional compile/no-compile variants, see the
 [80B Throughput Leaderboard](experiments/agpt/aurora/80b-throughput-leaderboard.md).
 
-**Note:** 80B TP=2 no longer works on Aurora as of 2026-04-12 (OOM on step 2,
-missed by 60 MiB on all tested nodes). Likely a system-level regression
-between April 4 and April 12 — see
-[known-issues.md](known-issues.md#80b-tp2-on-aurora-regression-since-2026-04-04).
+**Note:** 80B TP=2 was broken on Aurora from 2026-04-12 to 2026-04-17 (OOM by
+60 MiB). **Resolved 2026-04-18** — works again at 88 TPS / 16% MFU after IPEX
+removal and torch 2.12 update. See
+[restoration report](experiments/agpt/aurora/20260418-80b-tp2-restored.md).
 
 Logs:
 `outputs/benchmarks/20260404_212401/`

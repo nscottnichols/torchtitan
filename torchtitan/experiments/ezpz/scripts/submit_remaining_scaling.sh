@@ -26,7 +26,6 @@ SCALING_OUTDIR_BASE="outputs/scaling_study_aurora/${TIMESTAMP}"
 #   32-128 nodes → debug-scaling (1h walltime, split light/heavy)
 #   64 light already submitted as 8437382
 REMAINING_JOBS=(
-    "64:heavy:debug-scaling:01:00:00"
     "128:light:debug-scaling:01:00:00"
     "128:heavy:debug-scaling:01:00:00"
 )
