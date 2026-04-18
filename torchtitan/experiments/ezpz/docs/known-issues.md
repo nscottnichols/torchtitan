@@ -147,9 +147,11 @@ ssh <node2> 'ps aux | grep torchtitan | grep -v grep | awk "{print \$2}" | xargs
 ### Aurora / Sunspot (24x Intel Max 1550 per 2-node job)
 
 - 64 GiB per tile, 12 tiles per node
-- 80B fits at TP=2 on older Aurora nodes (`x1921c1s*`) but OOMs on newer nodes (`x4216c5s*`)
+- 80B fits at TP=2 on Aurora again as of 2026-04-18 (88 TPS, 16% MFU)
+- Previously broken 2026-04-12 through 2026-04-17 (OOM by 60 MiB); fixed by
+  IPEX removal and/or torch 2.12 update
 - 80B variants (alt, wide, deep) run reliably at TP=3+ on both Aurora and Sunspot
-- Best 80B throughput: 80B_wide TP=4 compile = 68 TPS, 11.79% MFU (Aurora)
+- Best 80B throughput: 80B TP=2 compile = 88 TPS, 16.05% MFU (Aurora, 2026-04-18)
 
 ## Tokenizer compatibility
 
@@ -208,40 +210,24 @@ along the sequence dimension, the non-sharded tensors remain as regular
 
 **Workaround:** Use CP=1 (default). For longer sequences, increase TP instead.
 
-## 80B TP=2 on Aurora (regression since ~2026-04-04)
+## 80B TP=2 on Aurora (regression 2026-04-12, resolved 2026-04-18)
 
-**Symptoms:** `torch.OutOfMemoryError` or `UR_RESULT_ERROR_OUT_OF_RESOURCES`
-on step 2. Step 1 completes at 60.75 GiB (94.94%) but step 2 needs 5.25 GiB
-with only 5.19 GiB free (missed by 60 MiB). Memory numbers are identical
-across all tested nodes.
+**Status: RESOLVED** — 80B TP=2 works again as of 2026-04-18. See
+[restoration report](experiments/agpt/aurora/20260418-80b-tp2-restored.md).
 
-**Affected:** All 80B variants at TP=2 on Aurora, tested 2026-04-12/13 on
-4 different node pairs (`x4216c5s*`, `x4704c1s*`, `x4219c2s*`, `x4310c3s*`).
+**Symptoms (when broken):** `torch.OutOfMemoryError` or
+`UR_RESULT_ERROR_OUT_OF_RESOURCES` on step 2. Step 1 completes at
+60.75 GiB (94.94%) but step 2 needs 5.25 GiB with only 5.19 GiB free
+(missed by 60 MiB).
 
-**Previously worked:** 80B TP=2 ran successfully on Aurora on 2026-04-04
-(nodes `x4201c1s1b0n0`, 89 TPS with compile=on). Also works on Sunspot
-(85 TPS, 2026-03-30).
+**Affected period:** 2026-04-12 through 2026-04-17. Tested on 4 different
+node pairs (`x4216c5s*`, `x4704c1s*`, `x4219c2s*`, `x4310c3s*`), all
+failed identically.
 
-**Likely cause:** An undiagnosed regression between 2026-04-04 and 2026-04-12,
-likely at the system level (framework libraries, Level Zero driver, or XPU
-runtime) rather than in torchtitan code. Evidence:
-- 4 different node pairs all fail with identical memory numbers
-  (42.82 GiB allocated, 12.36 GiB reserved, 5.19 GiB free) — rules out
-  node-specific hardware issues
-- Same torchtitan code at the benchmark commit (c6ff706) also OOMs —
-  rules out a code regression
-- The `aurora_frameworks-2025.3.1` module version string is unchanged but
-  the underlying libraries may have been updated in place
+**Resolution:** The fix coincided with two changes:
+1. Removal of `import intel_extension_for_pytorch` (IPEX) — may have been
+   registering XPU allocator hooks that added ~60 MiB overhead per rank
+2. Framework update to torch 2.12
 
-**Tried and failed:**
-- `PYTORCH_XPU_ALLOC_CONF=expandable_segments:True`
-- `--training.gc_freq 1`
-- `--metrics.no-enable_wandb`
-- `--training.enable_cpu_offload`
-- Same code at benchmark commit (c6ff706)
-
-**Workaround:** Use TP=4 with 80B_wide (68 TPS, 11.79% MFU). Or run on Sunspot.
-
-**To investigate:** Compare the exact library versions (Level Zero, PyTorch
-internals, IPEX) between the April 4 working environment and the current one.
-Check if `aurora_frameworks-2025.3.1` was patched in place between those dates.
+On 2026-04-18, 80B TP=2 runs at 59.82 GiB (93.49%), 88 TPS, 16.05% MFU —
+identical to the original April 4 benchmark (89 TPS, 16.24% MFU).
