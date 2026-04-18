@@ -31,3 +31,4 @@ Dense transformer training benchmarks across ALCF machines.
 | 2026-04-12 | [Scaling Study](../../scaling-study.md) | 2b, 20b, 80b at 1-64N | 1-64 | 20b 87% efficiency at 64N; 80b OK at 4-32N |
 | 2026-04-13 | [Benchmark (n2)](sunspot/20260413-benchmark-n2.md) | All 11 agpt configs | 2 | 80b_deep best 80B variant: 83 TPS, 15.2% MFU |
 | 2026-04-15 | [Full Benchmark (n2)](sunspot/20260415-benchmark-n2.md) | All 18 configs (agpt+MoE) | 2 | 80B compile regression found; fix in e8cbb8ef |
+| 2026-04-18 | [Torch 2.12 Benchmark (n2)](sunspot/20260418-torch212-benchmark-n2.md) | 8 configs (agpt+MoE) | 2 | 2b +11% TPS, -49% mem; 20b +29% TPS; 80b AC regression |

@@ -2,6 +2,35 @@
 
 Troubleshooting reference for running ezpz experiments across ALCF machines.
 
+## torch.compile + AC + TP crashes on torch 2.12+ (DeviceMesh assertion)
+
+**Symptoms:** `AssertionError: expected all tensors_saved_with_vc_check to be
+Tensors, got types: [..., <class 'torch.distributed.device_mesh.DeviceMesh'>]`
+during the first training step. Crashes in `runtime_wrappers.py:save_from_forward`.
+
+**Root cause:** AOT autograd traces the compiled + activation-checkpointed forward
+pass and saves intermediate values for the backward pass. On torch 2.12+, the
+`DeviceMesh` object from the TP mesh leaks into the saved tensors list. The
+`save_from_forward` assertion rejects it because `DeviceMesh` is not a
+`torch.Tensor`.
+
+**Affects:** All dense agpt configs with `compile + AC + TP > 1`. Confirmed on
+torch 2.12.0.dev20260415+xpu and 2.13.0.dev20260418+xpu. Does not affect
+TP=1 configs (no TP mesh to leak) or no-compile configs (no AOT autograd).
+
+**Tested configurations:**
+- `compile + AC=full + TP=2` → DeviceMesh assertion (CRASH)
+- `compile + AC=none + TP=2` → OOM (61.18/63.98 GiB, AC required)
+- `compile + AC=none + TP=2 + gc_freq=1` → same OOM
+- `no-compile + AC=full + TP=2` → **OK** (85 tps, 15.6% MFU, 95% memory)
+
+**Workaround:** `--compile.no-enable` for models that require TP (50B+). Eager
+mode with AC achieves comparable throughput to compiled mode on torch 2.10
+(85 vs 83 tps for 80B) since compile provided minimal benefit with TP anyway.
+
+**Status:** Not fixed in torch 2.13.0.dev20260418+xpu. Upstream PyTorch bug
+in `torch._functorch._aot_autograd.runtime_wrappers`.
+
 ## torch.compile + loss compilation crashes with TP (upstream PR #2741)
 
 **Symptoms:** `InductorError: PendingUnbackedSymbolNotFound: Pending unbacked
