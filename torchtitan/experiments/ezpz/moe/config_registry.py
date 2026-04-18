@@ -248,6 +248,27 @@ def moe_671b() -> FaultTolerantTrainer.Config:
     return cfg
 
 
+def moe_7b_ep() -> FaultTolerantTrainer.Config:
+    cfg = moe_7b()
+    cfg.model_spec = model_registry("7B", moe_comm_backend="standard")
+    cfg.parallelism.expert_parallel_degree = 2
+    return cfg
+
+
+def moe_10b_2b_sdpa_ep() -> FaultTolerantTrainer.Config:
+    cfg = moe_10b_2b_sdpa()
+    cfg.model_spec = model_registry("10B_2B_sdpa", moe_comm_backend="standard")
+    cfg.parallelism.expert_parallel_degree = 2
+    return cfg
+
+
+def moe_2b_ep() -> FaultTolerantTrainer.Config:
+    cfg = moe("2B", local_batch_size=16, seq_len=4096)
+    cfg.model_spec = model_registry("2B", moe_comm_backend="standard")
+    cfg.parallelism.expert_parallel_degree = 2
+    return cfg
+
+
 def moe_10b_2b() -> FaultTolerantTrainer.Config:
     cfg = moe("10B_2B", local_batch_size=1, seq_len=4096)
     cfg.optimizer.lr = 2.2e-4
