@@ -136,6 +136,47 @@ TPS, TFLOPS, and MFU are from step 10.
 - Required additional installs in `.venv`: `torchdata`, `sentencepiece`,
   `blendcorpus`, `deepspeed` (blendcorpus dependency)
 
+## Expert Parallelism (EP) Sweep — torch 2.13
+
+EP was previously blocked on torch 2.10 by missing `ShardPlacementResult`.
+Now available on torch 2.12+ via lazy import in the FSDP EP > 1 path.
+
+### debugmodel (8 experts)
+
+| EP | DP | TPS | TFLOPS | MFU | Memory |
+|----|-----|-----|--------|-----|--------|
+| 1 (no EP) | 24 | 28,155 | 16.58 | 5.56% | 3.01 GiB |
+| 2 | 12 | 17,582 | 10.35 | 3.47% | 2.99 GiB |
+| **4** | **6** | **19,058** | **11.22** | **3.76%** | **2.99 GiB** |
+| 8 | 3 | 11,351 | 6.69 | 2.24% | 2.99 GiB |
+
+EP=4 is the sweet spot for 8 experts — all-to-all volume is minimized (2
+experts per EP group). EP=8 (1 expert per rank) has maximum communication.
+EP=1 is fastest overall since no all-to-all is needed, but EP will become
+beneficial at higher node counts where FSDP communication dominates.
+
+### 7b (36 experts)
+
+| EP | DP | TPS | TFLOPS | MFU | Memory |
+|----|-----|-----|--------|-----|--------|
+| 1 (no EP) | 24 | 1,165 | 15.79 | 5.30% | 33.58 GiB |
+| 2 | 12 | **1,552** | **21.04** | **7.05%** | 29.80 GiB |
+| 3+ | — | — | — | — | 30+ min compile warmup |
+
+EP=2 gives **+33% TPS** and **-11% memory** over EP=1 for the 7b model.
+Higher EP values have prohibitively long compile warmup times (30+ min
+per config) due to the different EP mesh creating new compilation graphs.
+
+### Blockers
+
+- **moe_2b with EP**: crashes with `RuntimeError: tensor does not have a
+  device` — same torch 2.12/2.13 regression as the non-EP moe_2b config
+- **EP=1 + AllToAllTokenDispatcher**: `ExpertParallel` plan asserts EP > 1.
+  Use `LocalTokenDispatcher` (default) for EP=1 configs
+- **Compile warmup**: Each EP degree creates a new compile graph. First
+  run takes 10-30+ min for 7b+ models. Subsequent runs with the same EP
+  should use cached compilations
+
 ## Logs
 
 Wandb project: [torchtitan.ezpz.train](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train)
