@@ -19,8 +19,10 @@ from torchtitan.models.common import (
     RoPE,
     TransformerBlock,
 )
-from torchtitan.experiments.ezpz.agpt import _default_inner_attention
-from torchtitan.models.common.attention import FlexAttention, ScaledDotProductAttention
+from torchtitan.experiments.ezpz.agpt import (
+    _default_inner_attention,
+    _ezpz_get_attention_config,
+)
 from torchtitan.models.common.config_utils import (
     make_experts_config,
     make_ffn_config,
@@ -84,8 +86,7 @@ def _make_moe_attn_config(
     qk_rope_head_dim: int,
     v_head_dim: int,
     mscale: float = 1.0,
-    inner_attention=None,
-    mask_type: str = "causal",
+    attn_backend: str = "sdpa",
 ) -> Attention.Config:
     """Build a fully-specified MoE MLA Attention.Config.
 
@@ -93,6 +94,7 @@ def _make_moe_attn_config(
     When q_lora_rank == 0, sets wq (not wq_a/wq_b).
     When q_lora_rank > 0, sets wq_a/wq_b (not wq).
     """
+    _inner, _mask = _ezpz_get_attention_config(attn_backend)
     qk_head_dim = qk_nope_head_dim + qk_rope_head_dim
 
     if q_lora_rank == 0:
@@ -149,12 +151,8 @@ def _make_moe_attn_config(
             out_features=dim,
             param_init=_depth_init(layer_id),
         ),
-        inner_attention=(
-            inner_attention
-            if inner_attention is not None
-            else _default_inner_attention()
-        ),
-        mask_type=mask_type,
+        inner_attention=_inner,
+        mask_type=_mask,
     )
 
 
@@ -181,8 +179,7 @@ def _build_moe_layers(
     router_route_scale: float = 1.0,
     router_route_norm: bool = False,
     score_before_experts: bool = False,
-    inner_attention=None,
-    mask_type: str = "causal",
+    attn_backend: str = "sdpa",
 ) -> list[TransformerBlock.Config]:
     """Build the list of per-layer TransformerBlock configs.
 
@@ -204,8 +201,7 @@ def _build_moe_layers(
             qk_rope_head_dim=qk_rope_head_dim,
             v_head_dim=v_head_dim,
             mscale=mscale,
-            inner_attention=inner_attention,
-            mask_type=mask_type,
+            attn_backend=attn_backend,
         )
 
         if layer_id < n_dense_layers:
@@ -220,7 +216,6 @@ def _build_moe_layers(
             ffn_cfg = None
             moe_cfg = make_moe_config(
                 num_experts=num_experts,
-                score_before_experts=score_before_experts,
                 router=make_router_config(
                     dim=dim,
                     num_experts=num_experts,
@@ -236,6 +231,8 @@ def _build_moe_layers(
                     dim=dim,
                     hidden_dim=moe_hidden_dim,
                     num_experts=num_experts,
+                    top_k=router_top_k,
+                    score_before_experts=score_before_experts,
                     param_init=_depth_experts_init(layer_id),
                 ),
                 shared_experts=make_ffn_config(
@@ -348,8 +345,7 @@ def _debugmodel_flex_attn() -> moeModel.Config:
         router_top_k=3,
         router_score_func="softmax",
         score_before_experts=False,
-        inner_attention=FlexAttention.Config(),
-        mask_type="block_causal",
+        attn_backend="flex",
     )
     return moeModel.Config(
         vocab_size=vocab_size,
@@ -410,8 +406,7 @@ def _small() -> moeModel.Config:
         router_route_norm=True,
         router_route_scale=1.0,
         score_before_experts=False,
-        inner_attention=FlexAttention.Config(),
-        mask_type="block_causal",
+        attn_backend="flex",
     )
     return moeModel.Config(
         vocab_size=vocab_size,
@@ -470,8 +465,7 @@ def _16b() -> moeModel.Config:
         router_top_k=6,
         router_score_func="softmax",
         score_before_experts=False,
-        inner_attention=FlexAttention.Config(),
-        mask_type="block_causal",
+        attn_backend="flex",
     )
     return moeModel.Config(
         vocab_size=vocab_size,
@@ -534,8 +528,7 @@ def _236b() -> moeModel.Config:
         router_num_limited_groups=3,
         router_route_scale=16.0,
         score_before_experts=False,
-        inner_attention=FlexAttention.Config(),
-        mask_type="block_causal",
+        attn_backend="flex",
     )
     return moeModel.Config(
         vocab_size=vocab_size,
@@ -599,8 +592,7 @@ def _671b() -> moeModel.Config:
         router_route_scale=2.5,
         router_route_norm=True,
         score_before_experts=False,
-        inner_attention=FlexAttention.Config(),
-        mask_type="block_causal",
+        attn_backend="flex",
     )
     return moeModel.Config(
         vocab_size=vocab_size,
@@ -902,8 +894,7 @@ def _10b_2b() -> moeModel.Config:
         router_top_k=3,
         router_score_func="softmax",
         score_before_experts=False,
-        inner_attention=FlexAttention.Config(),
-        mask_type="block_causal",
+        attn_backend="flex",
     )
     return moeModel.Config(
         vocab_size=vocab_size,

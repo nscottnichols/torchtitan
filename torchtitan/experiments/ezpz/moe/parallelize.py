@@ -43,10 +43,8 @@ from torchtitan.distributed.tensor_parallel import maybe_enable_async_tp, NoPara
 # from torchtitan.models.moe import DeepSeekV3Model
 from torchtitan.experiments.ezpz.moe import moeModel
 from torchtitan.distributed.expert_parallel import (
-    DeepEPExpertParallel,
     ExpertParallel,
     ExpertTensorParallel,
-    ReordererSequenceParallel,
     TensorParallel,
 )
 from torchtitan.distributed.fsdp import get_fsdp_reshard_after_forward_policy
@@ -476,8 +474,8 @@ def apply_moe_ep_tp(
                     local_output_grad_placements=(Partial(),),
                 ),
             }
-            if ep_mesh is not None and etp_mesh is None:
-                moe_layer_plan.update({"moe.reorderer": ReordererSequenceParallel()})
+            # Token dispatching is now handled internally by the
+            # TokenDispatcher classes (LocalTokenDispatcher, etc.).
             if transformer_block.moe.shared_experts is not None:
                 moe_layer_plan.update(
                     {
@@ -506,16 +504,10 @@ def apply_moe_ep_tp(
         elif tp_mesh is None or etp_mesh is None:
             assert ep_etp_mesh is None
             experts_mesh = ep_mesh
-            if comm_backend in ("deepep", "hybridep"):
-                score_before_experts = transformer_block.moe.score_before_experts
-                experts_plan = DeepEPExpertParallel(
-                    score_before_experts=score_before_experts,
-                    comm_backend=comm_backend,
-                    hybridep_non_blocking_expert_capacity_factor=hybridep_non_blocking_expert_capacity_factor,
-                )
-                logger.info(f"Applying {comm_backend.upper()} to MoE layer")
-            else:
-                experts_plan = ExpertParallel()
+            # DeepEP/HybridEP communication is now handled by the
+            # TokenDispatcher (DeepEPTokenDispatcher) configured at model
+            # creation time, not at parallelization time.
+            experts_plan = ExpertParallel()
         else:
             experts_mesh = ep_etp_mesh
             experts_plan = ExpertTensorParallel()
