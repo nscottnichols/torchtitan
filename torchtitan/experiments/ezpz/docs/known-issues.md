@@ -149,7 +149,7 @@ ssh <node2> 'ps aux | grep torchtitan | grep -v grep | awk "{print \$2}" | xargs
 - 64 GiB per tile, 12 tiles per node
 - 80B fits at TP=2 on Aurora again as of 2026-04-18 (88 TPS, 16% MFU)
 - Previously broken 2026-04-12 through 2026-04-17 (OOM by 60 MiB); fixed by
-  IPEX removal and/or torch 2.12 update
+  removing `import intel_extension_for_pytorch` (IPEX allocator overhead)
 - 80B variants (alt, wide, deep) run reliably at TP=3+ on both Aurora and Sunspot
 - Best 80B throughput: 80B TP=2 compile = 88 TPS, 16.05% MFU (Aurora, 2026-04-18)
 
@@ -224,10 +224,10 @@ along the sequence dimension, the non-sharded tensors remain as regular
 node pairs (`x4216c5s*`, `x4704c1s*`, `x4219c2s*`, `x4310c3s*`), all
 failed identically.
 
-**Resolution:** The fix coincided with two changes:
-1. Removal of `import intel_extension_for_pytorch` (IPEX) — may have been
-   registering XPU allocator hooks that added ~60 MiB overhead per rank
-2. Framework update to torch 2.12
+**Resolution:** Removing `import intel_extension_for_pytorch` (IPEX). IPEX
+registered XPU allocator hooks that added ~60 MiB overhead per rank —
+exactly the margin between fitting and OOM at 93.49% utilization. The
+framework is still `torch==2.10` (`aurora_frameworks-2025.3.1`).
 
 On 2026-04-18, 80B TP=2 runs at 59.82 GiB (93.49%), 88 TPS, 16.05% MFU —
 identical to the original April 4 benchmark (89 TPS, 16.24% MFU).
