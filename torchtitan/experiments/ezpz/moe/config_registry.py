@@ -177,6 +177,13 @@ def moe_debugmodel_hf() -> FaultTolerantTrainer.Config:
     return cfg
 
 
+def moe_debugmodel_ep() -> FaultTolerantTrainer.Config:
+    cfg = moe_debugmodel()
+    cfg.model_spec = model_registry("debugmodel", moe_comm_backend="standard")
+    cfg.parallelism.expert_parallel_degree = 2
+    return cfg
+
+
 def moe_debugmodel_flex_attn() -> FaultTolerantTrainer.Config:
     cfg = moe_debugmodel()
     cfg.model_spec = model_registry("debugmodel_flex_attn")

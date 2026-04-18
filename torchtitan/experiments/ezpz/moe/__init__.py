@@ -180,6 +180,7 @@ def _build_moe_layers(
     router_route_norm: bool = False,
     score_before_experts: bool = False,
     attn_backend: str = "sdpa",
+    moe_comm_backend: str | None = None,
 ) -> list[TransformerBlock.Config]:
     """Build the list of per-layer TransformerBlock configs.
 
@@ -233,6 +234,7 @@ def _build_moe_layers(
                     num_experts=num_experts,
                     top_k=router_top_k,
                     score_before_experts=score_before_experts,
+                    comm_backend=moe_comm_backend,
                     param_init=_depth_experts_init(layer_id),
                 ),
                 shared_experts=make_ffn_config(
@@ -956,10 +958,26 @@ moe_configs["debugmodel_hf"] = moe_configs["debugmodel"]
 moe_configs["debugmodel_flex_attn_hf"] = moe_configs["debugmodel_flex_attn"]
 
 
-def model_registry(flavor: str) -> ModelSpec:
+def model_registry(
+    flavor: str,
+    moe_comm_backend: str | None = None,
+) -> ModelSpec:
     from torchtitan.distributed.pipeline_parallel import pipeline_llm
+    from torchtitan.models.common.config_utils import make_token_dispatcher_config
 
     config = moe_configs[flavor]()
+
+    # Rebuild token dispatchers if a comm_backend is specified (needed for EP>1)
+    if moe_comm_backend is not None:
+        for layer_cfg in config.layers:
+            if layer_cfg.moe is not None:
+                experts_cfg = layer_cfg.moe.experts
+                experts_cfg.token_dispatcher = make_token_dispatcher_config(
+                    num_experts=experts_cfg.num_experts,
+                    top_k=experts_cfg.token_dispatcher.top_k,
+                    score_before_experts=experts_cfg.token_dispatcher.score_before_experts,
+                    comm_backend=moe_comm_backend,
+                )
 
     return ModelSpec(
         name="moe",

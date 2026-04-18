@@ -133,20 +133,9 @@ def parallelize_moe(
         )
         maybe_enable_async_tp(parallelism, compile_config, tp_mesh)
 
-    # Check if using DeepEP for MoE communication
-    comm_backend = parallelism.expert_parallel_comm_backend
-    if comm_backend in ("deepep", "hybridep"):
-        if not parallel_dims.ep_enabled:
-            raise ValueError(
-                f"{comm_backend.upper()} requires expert parallelism (ep_degree > 1). "
-                "Please set expert_parallel_degree > 1 or use standard communication backend."
-            )
-        if parallel_dims.etp_enabled:
-            raise NotImplementedError(
-                f"{comm_backend.upper()} with Expert Tensor Parallelism (ETP) is not supported yet. "
-                "Please set expert_tensor_parallel_degree=1 or use standard communication backend."
-            )
-
+    # EP/TP parallelization for MoE layers. The comm_backend (standard,
+    # deepep, etc.) is now configured at model creation time via the
+    # token dispatcher, not at parallelization time.
     if parallel_dims.tp_enabled or parallel_dims.ep_enabled:
         apply_moe_ep_tp(
             model,
@@ -154,8 +143,6 @@ def parallelize_moe(
             ep_mesh=parallel_dims.get_optional_mesh("ep"),
             etp_mesh=parallel_dims.get_optional_mesh("etp"),
             ep_etp_mesh=parallel_dims.get_optional_mesh(["ep", "etp"]),
-            comm_backend=comm_backend,
-            hybridep_non_blocking_expert_capacity_factor=parallelism.hybridep_non_blocking_expert_capacity_factor,
         )
 
     if parallel_dims.cp_enabled:
@@ -430,10 +417,37 @@ def apply_fsdp(
                     shard_placement_fn=_experts_shard_placement_fn,
                 )
             else:
-                raise NotImplementedError(
-                    "EP > 1 with per-param FSDP mesh is not supported on this "
-                    "PyTorch version (missing ShardPlacementResult). "
-                    "Use ep_degree=1 or upgrade PyTorch."
+                # ep_degree > 1: per-param mesh with ShardPlacementResult
+                from torch.distributed.fsdp._fully_shard._fsdp_common import (
+                    FSDPMeshInfo,
+                    ShardPlacementResult,
+                )
+
+                assert edp_mesh is not None
+                edp_mesh_info = FSDPMeshInfo(mesh=edp_mesh, shard_mesh_dim=0)
+                dp_mesh_info = FSDPMeshInfo(mesh=dp_mesh, shard_mesh_dim=0)
+
+                def _shard_placement_fn(
+                    param: nn.Parameter,
+                    _expert_params: set = expert_params,
+                    _expert_placement: Shard = expert_shard_placement,
+                    _edp_mesh_info: FSDPMeshInfo = edp_mesh_info,
+                    _dp_mesh_info: FSDPMeshInfo = dp_mesh_info,
+                ) -> ShardPlacementResult:
+                    if param in _expert_params:
+                        return ShardPlacementResult(
+                            placement=_expert_placement, mesh_info=_edp_mesh_info
+                        )
+                    else:
+                        return ShardPlacementResult(
+                            placement=Shard(0), mesh_info=_dp_mesh_info
+                        )
+
+                fully_shard(
+                    transformer_block,
+                    **fsdp_config,
+                    reshard_after_forward=reshard_after_forward,
+                    shard_placement_fn=_shard_placement_fn,
                 )
         else:
             fully_shard(
