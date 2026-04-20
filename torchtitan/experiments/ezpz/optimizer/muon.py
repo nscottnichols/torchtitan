@@ -14,6 +14,11 @@ from torch import Tensor
 def zeropower_via_newtonschulz5(G, steps):
     """
     Newton-Schulz iteration to compute the zeroth power / orthogonalization of G.
+
+    WARNING: On 80B-scale models (dim >= 9216), bf16 overflows in A @ A
+    at step ~7, and fp32 overflows at step ~16. The LR scaling factor
+    (0.2 * sqrt(max_dim) = 32x for 9216-dim) amplifies updates beyond
+    stable range. Muon is not currently viable for 80B dense models.
     """
     assert len(G.shape) == 2
     a, b, c = (3.4445, -4.7750, 2.0315)
