@@ -262,7 +262,7 @@ def _build_moe_layers(
 def _debugmodel() -> moeModel.Config:
     dim = 256
     n_layers = 6
-    vocab_size = 32000
+    vocab_size = 256128
     n_heads = 16
     moe_hidden_dim = 256
     num_shared_experts = 2
@@ -320,7 +320,7 @@ def _debugmodel() -> moeModel.Config:
 def _debugmodel_flex_attn() -> moeModel.Config:
     dim = 256
     n_layers = 6
-    vocab_size = 32000
+    vocab_size = 256128
     n_heads = 16
     moe_hidden_dim = 256
     num_shared_experts = 2
@@ -440,7 +440,7 @@ def _small() -> moeModel.Config:
 def _16b() -> moeModel.Config:
     dim = 2048
     n_layers = 27
-    vocab_size = 102400
+    vocab_size = 256128
     n_heads = 16
     moe_hidden_dim = 1408
     num_shared_experts = 2
@@ -499,7 +499,7 @@ def _16b() -> moeModel.Config:
 def _236b() -> moeModel.Config:
     dim = 5120
     n_layers = 60
-    vocab_size = 102400
+    vocab_size = 256128
     n_heads = 128
     q_lora_rank = 1536
     moe_hidden_dim = 1536
@@ -562,7 +562,7 @@ def _236b() -> moeModel.Config:
 def _671b() -> moeModel.Config:
     dim = 7168
     n_layers = 61
-    vocab_size = 129280
+    vocab_size = 256128
     n_heads = 128
     q_lora_rank = 1536
     moe_hidden_dim = 2048
@@ -627,7 +627,7 @@ def _500m() -> moeModel.Config:
     """~500M active params. Halfway between debugmodel (48M) and 10B_2B."""
     dim = 512
     n_layers = 12
-    vocab_size = 32000
+    vocab_size = 256128
     n_heads = 16
     moe_hidden_dim = 512
     num_shared_experts = 2
@@ -686,7 +686,7 @@ def _2b() -> moeModel.Config:
     """~2B active params. Between small and 10B_2B."""
     dim = 1024
     n_layers = 18
-    vocab_size = 32000
+    vocab_size = 256128
     n_heads = 16
     moe_hidden_dim = 1024
     num_shared_experts = 2
@@ -748,7 +748,7 @@ def _4b() -> moeModel.Config:
     """
     dim = 1536
     n_layers = 22
-    vocab_size = 32000
+    vocab_size = 256128
     n_heads = 12
     moe_hidden_dim = 1024
     num_shared_experts = 2
@@ -811,7 +811,7 @@ def _7b() -> moeModel.Config:
     """
     dim = 2048
     n_layers = 24
-    vocab_size = 32000
+    vocab_size = 256128
     n_heads = 24
     moe_hidden_dim = 1280
     num_shared_experts = 2
@@ -869,7 +869,7 @@ def _7b() -> moeModel.Config:
 def _10b_2b() -> moeModel.Config:
     dim = 2048
     n_layers = 27
-    vocab_size = 102400
+    vocab_size = 256128
     n_heads = 16
     moe_hidden_dim = 1408
     num_shared_experts = 2

@@ -103,7 +103,7 @@ def _base_config(flavor: str) -> FaultTolerantTrainer.Config:
         ),
         training=TrainingConfig(
             local_batch_size=8,
-            seq_len=2048,
+            seq_len=8192,
             steps=10000,
         ),
         dataloader=BlendCorpusDataLoader.Config(dataset="c4_test"),
@@ -152,27 +152,27 @@ def moe(
 
 
 def moe_500m() -> FaultTolerantTrainer.Config:
-    return moe("500M", local_batch_size=4, seq_len=4096)
+    return moe("500M", local_batch_size=4)
 
 
 def moe_2b() -> FaultTolerantTrainer.Config:
-    return moe("2B", local_batch_size=16, seq_len=4096)
+    return moe("2B", local_batch_size=16)
 
 
 def moe_4b() -> FaultTolerantTrainer.Config:
-    return moe("4B", local_batch_size=16, seq_len=4096)
+    return moe("4B", local_batch_size=16)
 
 
 def moe_7b() -> FaultTolerantTrainer.Config:
-    return moe("7B", local_batch_size=2, seq_len=4096, activation_checkpoint_mode="none")
+    return moe("7B", local_batch_size=2, activation_checkpoint_mode="none")
 
 
 def moe_debugmodel() -> FaultTolerantTrainer.Config:
-    return moe("debugmodel", local_batch_size=8, seq_len=2048)
+    return moe("debugmodel", local_batch_size=8)
 
 
 def moe_debugmodel_hf() -> FaultTolerantTrainer.Config:
-    cfg = moe("debugmodel", local_batch_size=8, seq_len=2048)
+    cfg = moe("debugmodel", local_batch_size=8)
     cfg.dataloader.dataset_path = None
     return cfg
 
@@ -197,11 +197,11 @@ def moe_debugmodel_flex_attn_hf() -> FaultTolerantTrainer.Config:
 
 
 def moe_small() -> FaultTolerantTrainer.Config:
-    return moe("small", local_batch_size=8, seq_len=2048)
+    return moe("small", local_batch_size=8)
 
 
 def moe_small_hf() -> FaultTolerantTrainer.Config:
-    cfg = moe("small", local_batch_size=8, seq_len=2048)
+    cfg = moe("small", local_batch_size=8)
     cfg.dataloader.dataset_path = None
     return cfg
 
@@ -210,7 +210,6 @@ def moe_16b() -> FaultTolerantTrainer.Config:
     cfg = moe(
         "16B",
         local_batch_size=4,
-        seq_len=4096,
         hf_assets_path="./assets/hf/deepseek-moe-16b-base",
     )
     cfg.optimizer.lr = 2.2e-4
@@ -228,7 +227,6 @@ def moe_671b() -> FaultTolerantTrainer.Config:
     cfg = moe(
         "671B",
         local_batch_size=4,
-        seq_len=4096,
         hf_assets_path="./assets/hf/DeepSeek-V3.1-Base",
     )
     cfg.optimizer.lr = 2.2e-4
@@ -263,14 +261,14 @@ def moe_10b_2b_sdpa_ep() -> FaultTolerantTrainer.Config:
 
 
 def moe_2b_ep() -> FaultTolerantTrainer.Config:
-    cfg = moe("2B", local_batch_size=16, seq_len=4096)
+    cfg = moe("2B", local_batch_size=16)
     cfg.model_spec = model_registry("2B", moe_comm_backend="standard")
     cfg.parallelism.expert_parallel_degree = 2
     return cfg
 
 
 def moe_10b_2b() -> FaultTolerantTrainer.Config:
-    cfg = moe("10B_2B", local_batch_size=1, seq_len=4096)
+    cfg = moe("10B_2B", local_batch_size=1)
     cfg.optimizer.lr = 2.2e-4
     cfg.lr_scheduler.decay_type = "cosine"
     cfg.lr_scheduler.min_lr_factor = 0.1
@@ -280,7 +278,7 @@ def moe_10b_2b() -> FaultTolerantTrainer.Config:
 
 
 def moe_10b_2b_sdpa() -> FaultTolerantTrainer.Config:
-    cfg = moe("10B_2B_sdpa", local_batch_size=2, seq_len=4096,
+    cfg = moe("10B_2B_sdpa", local_batch_size=2,
               activation_checkpoint_mode="none")
     cfg.optimizer.lr = 2.2e-4
     cfg.lr_scheduler.decay_type = "cosine"
