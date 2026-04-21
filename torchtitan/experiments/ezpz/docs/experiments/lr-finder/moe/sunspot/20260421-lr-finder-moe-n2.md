@@ -46,7 +46,7 @@
 | 500M | 16 | 0 | ✓ |
 | 2B | 24 | 0 | ✓ |
 | 4B | 24 | 1 | mild instability at high LR |
-| 7B | 36 | — | expired (step 68/100) |
+| 7B | 36 | 5 | mild instability at high LR |
 
 *Very low suggested LRs for debugmodel and 2B are likely derivative
 analysis artifacts — early noise in the loss curve triggers false
