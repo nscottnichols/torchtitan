@@ -216,14 +216,45 @@ def run_lr_finder(trainer: FaultTolerantTrainer) -> None:
         out_dir = os.path.join(trainer.config.dump_folder, "lr_finder", sub_path)
         os.makedirs(out_dir, exist_ok=True)
 
-        # CSV
+        # Metadata for this run
+        from datetime import datetime
+
+        run_timestamp = datetime.now().isoformat()
+        job_id = os.environ.get(
+            "PBS_JOBID",
+            os.environ.get("SLURM_JOB_ID", "local"),
+        )
+        hostname = os.environ.get("HOSTNAME", "unknown")
+        world_size = int(os.environ.get("WORLD_SIZE", "1"))
+
+        # CSV — append mode so runs accumulate across experiments.
+        # If file exists with old 2-column format, rewrite with new header.
         csv_path = os.path.join(out_dir, "lr_finder_data.csv")
-        with open(csv_path, "w", newline="") as f:
+        new_header = [
+            "learning_rate", "loss",
+            "timestamp", "job_id", "hostname", "world_size",
+        ]
+        write_header = True
+        if os.path.isfile(csv_path):
+            with open(csv_path) as f:
+                first_line = f.readline().strip()
+            if "timestamp" in first_line:
+                write_header = False  # already has new header
+            else:
+                # Old format — rename as backup and start fresh
+                backup = csv_path + ".bak"
+                os.rename(csv_path, backup)
+                logger.info(f"LR Finder: backed up old CSV to {backup}")
+        with open(csv_path, "a", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(["learning_rate", "loss"])
+            if write_header:
+                writer.writerow(new_header)
             for lr, loss in zip(lrs, losses):
-                writer.writerow([lr, loss])
-        logger.info(f"LR Finder: saved CSV to {csv_path}")
+                writer.writerow([
+                    lr, loss,
+                    run_timestamp, job_id, hostname, world_size,
+                ])
+        logger.info(f"LR Finder: appended {len(lrs)} rows to {csv_path}")
 
         # NPZ
         try:
