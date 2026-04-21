@@ -33,3 +33,4 @@ Dense transformer training benchmarks across ALCF machines.
 | 2026-04-13 | [Benchmark (n2)](sunspot/20260413-benchmark-n2.md) | All 11 agpt configs | 2 | 80b_deep best 80B variant: 83 TPS, 15.2% MFU |
 | 2026-04-15 | [Full Benchmark (n2)](sunspot/20260415-benchmark-n2.md) | All 18 configs (agpt+MoE) | 2 | 80B compile regression found; fix in e8cbb8ef |
 | 2026-04-18 | [Torch 2.12 Benchmark (n2)](sunspot/20260418-torch212-benchmark-n2.md) | 8 configs (agpt+MoE) | 2 | 2b +11% TPS, -49% mem; 20b +29% TPS; 80b AC regression |
+| 2026-04-21 | [LR Finder 80B + GAS (n2)](../lr-finder/agpt/sunspot/20260421-lr-finder-80b-n2.md) | 80B x 3 opts, 2B/20B GAS sweep | 2 | 80B AdamW LR=1.1e-5; Muon/SophiaG broken at 80B |

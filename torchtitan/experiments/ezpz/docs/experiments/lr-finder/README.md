@@ -82,9 +82,10 @@ Latest results using `sqrt(2/(5*d))` weight init and 5% warmup (Sunspot 2026-04-
 |-------|---------|---------|---------|
 | 2B    | **1.3e-3**| **2.4e-3**| **3.1e-4**|
 | 20B   | **4.0e-4**| **1.7e-4**| **1.8e-5**|
-| 80B   | ~1e-4*  | ~2e-5*  | ~2e-6*  |
+| 80B   | **1.1e-5** | N/A† | N/A† |
 
-*80B extrapolated from scaling trend; not empirically verified (OOM on 2 nodes).
+†80B Muon/SophiaG broken: bf16 overflow in Newton-Schulz (Muon) and Hessian
+estimate (SophiaG) on 9216-dim matrices. See [2026-04-21 report](agpt/sunspot/20260421-lr-finder-80b-n2.md).
 
 ### Cross-Machine Comparison — agpt 2B
 
