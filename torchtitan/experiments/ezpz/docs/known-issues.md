@@ -2,6 +2,41 @@
 
 Troubleshooting reference for running ezpz experiments across ALCF machines.
 
+## torch.compile SYCL compilation time at high rank counts
+
+**Symptoms:** `torch.compile` takes hours to complete at 512+ nodes (6144+
+ranks). The SYCL/XPU inductor backend generates and compiles C++ kernels
+independently on each rank, causing filesystem contention on `/tmp`. At
+extreme rank counts, compilation never finishes within walltime.
+
+**Observed scaling:**
+
+| Nodes | Ranks | 2B compile | 80B compile |
+|-------|-------|------------|-------------|
+| 2     | 24    | ~3 min     | ~2 min      |
+| 4     | 48    | —          | ~4.5 min    |
+| 128   | 1536  | ~3.5 min   | ~5 min      |
+| 256   | 3072  | ~4.5 min   | pending     |
+| 512   | 6144  | 12+ hours  | pending     |
+
+**Root cause:** Each rank compiles kernels independently to `/tmp`. At 6144
+ranks across 512 nodes, the parallel SYCL C++ compilation creates massive
+filesystem I/O contention. The 80B model may fare better because it has
+fewer unique kernel shapes (84 identical transformer blocks) while the
+small 2B model (12 blocks) triggers more diverse compilation paths
+relative to its compute time.
+
+**At 512 nodes (80B):** Compile OOMs on **CPU memory** (`MemoryError:
+std::bad_alloc`) within 2 minutes. The inductor backend exhausts host RAM
+generating SYCL kernels for 84 transformer blocks across 6144 ranks.
+
+**Workaround:** Use `--compile.no-enable` at 512+ nodes. For the 80B
+model, compile works at 128N (5 min) but fails at 512N (CPU OOM). The
+2B model compiles at 256N (4.5 min) but takes 12+ hours at 512N.
+
+**See also:**
+[Scaling and production runs report](experiments/agpt/aurora/20260418-scaling-and-production-runs.md)
+
 ## torch.compile + AC + TP crashes on torch 2.12+ (DeviceMesh assertion)
 
 **Symptoms:** `AssertionError: expected all tensors_saved_with_vc_check to be
