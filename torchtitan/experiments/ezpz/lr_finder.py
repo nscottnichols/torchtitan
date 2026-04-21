@@ -226,22 +226,30 @@ def run_lr_finder(trainer: FaultTolerantTrainer) -> None:
         )
         hostname = os.environ.get("HOSTNAME", "unknown")
         world_size = int(os.environ.get("WORLD_SIZE", "1"))
+        global_batch_size = trainer.config.training.global_batch_size
+        seq_len = trainer.config.training.seq_len
 
         # CSV — append mode so runs accumulate across experiments.
-        # If file exists with old 2-column format, rewrite with new header.
+        # If file exists with outdated header, rename as backup.
         csv_path = os.path.join(out_dir, "lr_finder_data.csv")
         new_header = [
             "learning_rate", "loss",
             "timestamp", "job_id", "hostname", "world_size",
+            "global_batch_size", "seq_len",
         ]
         write_header = True
         if os.path.isfile(csv_path):
             with open(csv_path) as f:
                 first_line = f.readline().strip()
-            if "timestamp" in first_line:
-                write_header = False  # already has new header
+            if "global_batch_size" in first_line:
+                write_header = False  # already has current header
+            elif "timestamp" in first_line:
+                # Has old 6-column header but missing GBS — back up
+                backup = csv_path + ".bak2"
+                os.rename(csv_path, backup)
+                logger.info(f"LR Finder: backed up old CSV to {backup}")
             else:
-                # Old format — rename as backup and start fresh
+                # Very old 2-column format
                 backup = csv_path + ".bak"
                 os.rename(csv_path, backup)
                 logger.info(f"LR Finder: backed up old CSV to {backup}")
@@ -253,6 +261,7 @@ def run_lr_finder(trainer: FaultTolerantTrainer) -> None:
                 writer.writerow([
                     lr, loss,
                     run_timestamp, job_id, hostname, world_size,
+                    global_batch_size, seq_len,
                 ])
         logger.info(f"LR Finder: appended {len(lrs)} rows to {csv_path}")
 
