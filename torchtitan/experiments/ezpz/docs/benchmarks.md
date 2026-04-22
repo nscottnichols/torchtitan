@@ -505,9 +505,11 @@ This requires an upstream PyTorch XPU fix.
    `maybe_enable_amp`.
 5. **FlexAttention crashes on XPU** for MoE models due to `torch.autocast(
    dtype=torch.float32)` in the MoE router. Use SDPA variants instead.
-6. **Reported MFU is misleadingly low** for MoE — it's computed against total
-   params but only top_k experts are active. Corrected for active params, the
-   2B at LBS=16 achieves ~39% active-MFU, comparable to dense models.
+6. **MoE MFU is genuinely low** (~5-7%) — the FLOPS calculation already
+   accounts for active params only (`nparams_experts * top_k / num_experts`
+   in `get_moe_model_nparams_and_flops`). The low MFU reflects real
+   underutilization: most expert parameters are idle each step, and
+   routing/all-to-all overhead is significant.
 
 ## Full Benchmark Sweep -- Sunspot 2-node (2026-04-15)
 
