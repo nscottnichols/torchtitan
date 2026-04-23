@@ -12,6 +12,6 @@ date: 2026-03-15
 - [Upstream Sync Log](./upstream-sync.md)
 - [Experiment Reports](./experiments/) (benchmarks, smoke tests, LR finder, production runs)
 - [Scaling & Production Runs Report](./scaling-and-production-runs.md) — Apr 18–21 experiments
-- [Production Training Runs](./production-training-runs.md) — live status of ongoing training
+- [Production Training Runs](./production-training/) — live status of ongoing training
 - [RL (GRPO) Experiment](../rl/README.md) — TRL-based GRPO on XPU (experimental)
 - [TODO](./TODO.md)
