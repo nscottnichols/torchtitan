@@ -14,6 +14,10 @@
 | Total tokens | 4.67T |
 | Checkpoint dir | `outputs/checkpoints/agpt-20b-sophiag-olmo-mix-1124-n256-gbs3072` |
 
+### Loss / Throughput / MFU (256N)
+
+![20B 256N Training](figures/production_20b_256n.png)
+
 ### Progress
 
 | Job ID | Steps | Loss (start → end) | TPS/GPU | MFU | Memory | Status |
@@ -45,6 +49,10 @@
 | Total steps | 92,859 |
 | Total tokens | 4.67T |
 | Checkpoint dir | `outputs/checkpoints/agpt-20b-sophiag-olmo-mix-1124-n512-gbs6144` |
+
+### Loss / Throughput / MFU (512N)
+
+![20B 512N Training](figures/production_20b_512n.png)
 
 ### Progress
 

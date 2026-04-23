@@ -16,6 +16,10 @@
 | Checkpoint dir | `outputs/checkpoints/agpt-2b-sophiag-olmo-mix-1124-n256-gbs3072` |
 | Checkpoint interval | 100 steps |
 
+### Loss / Throughput / MFU
+
+![2B 256N Training](figures/production_2b_256n.png)
+
 ### Progress
 
 | Job ID | Steps | Loss (start → end) | TPS/GPU | MFU | Memory | Status |
