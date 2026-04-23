@@ -16,7 +16,7 @@ Dense transformer training benchmarks across ALCF machines.
 | 2026-04-13 | [20B Throughput (n2)](aurora/20260413-143800-throughput-20b-n2.md) | 20B TP={1,2,4} x compile | 2 | TP=1 compile: 357 TPS, 17.82% MFU |
 | 2026-04-14 | [20B Production (n512)](aurora/20260414-production-20b-n512.md) | 20B SophiaG LR=2.28e-5 | 512 | Verify: loss 12.92->10.50 in 146 steps |
 | 2026-04-18 | [80B TP=2 Restored](aurora/20260418-80b-tp2-restored.md) | 80B TP=2 compile | 2 | 88 TPS, 16% MFU — regression fixed |
-| 2026-04-18 | [Scaling & Production](aurora/20260418-scaling-and-production-runs.md) | 2B, 20B, 80B | 4-512 | 80B scales perfectly to 128N; compile wall at 512N |
+| 2026-04-18 | [Scaling & Production](../../../scaling-and-production-runs.md) | 2B, 20B, 80B | 4-512 | 80B scales perfectly to 128N; compile wall at 512N |
 
 ### Polaris
 

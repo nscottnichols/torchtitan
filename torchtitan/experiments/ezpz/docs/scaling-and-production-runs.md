@@ -363,10 +363,75 @@ diverged to NaN** from step 1 (grad_norm=NaN on first backward pass).
 - **Total throughput:** ~405K tokens/s across 512 nodes
 - **Memory:** 43.02 GiB (67%) — plenty of headroom at this FSDP degree
 
-**NaN root cause:** Likely LR=2.28e-5 is too high for 80B with SophiaG
-at GBS=3072. The LR was tuned on the 20B model. At 80B, the Hessian
-approximation in SophiaG may produce larger effective updates. Fix:
-try LR=5e-6 or switch to AdamW with LR=1e-4.
+**NaN root cause:** SophiaG is broken at 80B scale — confirmed by the
+[LR finder 80B report](../../lr-finder/agpt/sunspot/20260421-lr-finder-80b-n2.md)
+which found Muon and SophiaG both produce NaN for 80B. Use **AdamW with
+LR=1.1e-5** for 80B production runs.
+
+---
+
+### 11. agpt_20b @ 256 nodes — compile=on (Job 8443784)
+
+| Field         | Value |
+|---------------|-------|
+| Date          | 2026-04-21 12:40:00 CDT |
+| Job ID        | 8443784.aurora-pbs-0001.hostmgmt.cm.aurora.alcf.anl.gov |
+| Nodes / GPUs  | 256 / 3072 |
+| Queue         | small (prod) |
+| Exit status   | 0 (success) |
+| Model         | agpt_20b (20.7B params) |
+| Parallelism   | TP=1, FSDP=3072 |
+| Compile       | on |
+| Optimizer     | SophiaG, LR=2.28e-5 |
+| Steps         | 10 |
+
+**Result:** All 10 steps completed successfully.
+
+| Step | Loss    | TPS | MFU    | Memory           |
+|------|---------|-----|--------|------------------|
+| 1    | 12.944  | 31  | 1.53%  | 40.95GiB(63.99%) |
+| 2    | 12.940  | 280 | 13.98% | 40.95GiB(63.99%) |
+| 3    | 12.931  | 282 | 14.09% | 40.95GiB(63.99%) |
+| 5    | 12.897  | 283 | 14.11% | 40.95GiB(63.99%) |
+| 10   | 12.656  | 280 | 13.98% | 40.95GiB(63.99%) |
+
+**Insight:** 280 TPS at 256N vs 357 at 2N — 78% scaling efficiency. Some
+TPS variance (224-287) but no major stalls. Loss converges normally.
+
+---
+
+### 12. agpt_80b @ 256 nodes — compile=on (Job 8443785)
+
+| Field         | Value |
+|---------------|-------|
+| Date          | 2026-04-21 12:58:00 CDT |
+| Job ID        | 8443785.aurora-pbs-0001.hostmgmt.cm.aurora.alcf.anl.gov |
+| Nodes / GPUs  | 256 / 3072 |
+| Queue         | small (prod) |
+| Exit status   | 0 (success) |
+| Model         | agpt_80b (80.8B params) |
+| Parallelism   | TP=2, FSDP=1536 |
+| Compile       | on |
+| Optimizer     | SophiaG, LR=2.28e-5 |
+| Steps         | 10 |
+
+**Result:** All 10 steps completed successfully. **Compile works at 256N.**
+
+| Step | Loss    | TPS | MFU    | Memory           |
+|------|---------|-----|--------|------------------|
+| 1    | 12.905  | 11  | 2.03%  | 46.28GiB(72.34%) |
+| 2    | 12.933  | 83  | 15.24% | 46.28GiB(72.34%) |
+| 3    | 12.883  | 79  | 14.51% | 46.28GiB(72.34%) |
+| 5    | 12.876  | 80  | 14.59% | 46.28GiB(72.34%) |
+| 10   | 12.344  | 63  | 11.61% | 46.28GiB(72.34%) |
+
+**Key findings:**
+- **Compile works at 256N** (~7 min) — the critical boundary is between
+  256N and 512N where compile CPU OOMs
+- **79-83 TPS/GPU** — ~7% drop from 128N (88 TPS), ~6% from 2N
+- **Total throughput:** ~246K tokens/s across 256 nodes
+- **Loss converges normally** with SophiaG at 256N (GBS=1536) — the NaN
+  issue at 512N (GBS=3072) may be GBS-dependent, not just model-size
 
 ---
 
@@ -398,10 +463,11 @@ The 2B model hits a compile wall at 512N. The 80B model compiles fast at
 
 ### 2. 80B scales perfectly, 2B does not
 
-| Model | 2N TPS | 128N TPS | 256N TPS | Efficiency (128N) |
-|-------|--------|----------|----------|-------------------|
-| 2B    | 5,400  | 3,000    | ~700 avg | 56%               |
-| 80B   | 88     | 88-90    | —        | ~100%             |
+| Model | 2N TPS | 128N TPS | 256N TPS | 512N TPS     | Eff (256N) |
+|-------|--------|----------|----------|--------------|------------|
+| 2B    | 5,400  | 3,000    | ~700 avg | pending      | 13%        |
+| 20B   | 357    | —        | 280      | pending      | 78%        |
+| 80B   | 88     | 88-90    | 79-83    | 66 (no-compile)| 93%      |
 
 The 80B model maintains identical per-GPU TPS from 2 to 128 nodes because
 each step takes ~47s of compute, completely dominating the communication

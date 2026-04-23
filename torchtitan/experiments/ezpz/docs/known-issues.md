@@ -35,7 +35,7 @@ model, compile works at 128N (5 min) but fails at 512N (CPU OOM). The
 2B model compiles at 256N (4.5 min) but takes 12+ hours at 512N.
 
 **See also:**
-[Scaling and production runs report](experiments/agpt/aurora/20260418-scaling-and-production-runs.md)
+[Scaling and production runs report](scaling-and-production-runs.md)
 
 ## torch.compile + AC + TP crashes on torch 2.12+ (DeviceMesh assertion)
 
