@@ -74,5 +74,10 @@ representative.
 
 ## Plots
 
-See `docs/experiments/lr-finder/moe/sunspot/figures/` for per-model and
-comparison plots.
+![Comparison](figures/lr_finder_comparison.png)
+
+| | |
+|---|---|
+| ![debugmodel](figures/lr_finder_debugmodel.png) | ![500M](figures/lr_finder_500M.png) |
+| ![2B](figures/lr_finder_2B.png) | ![4B](figures/lr_finder_4B.png) |
+| ![7B](figures/lr_finder_7B.png) | ![Optimal LR](figures/lr_finder_optimal_lr.png) |
