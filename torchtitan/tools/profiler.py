@@ -12,7 +12,7 @@ from typing import Annotated
 
 import tyro
 import torch
-
+import tyro
 from torchtitan.config import Configurable
 from torchtitan.config.function import Function
 from torchtitan.tools.logging import logger
