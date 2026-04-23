@@ -135,7 +135,19 @@ This is because Muon's orthogonal momentum amplifies gradient scale differences.
 | | |
 |---|---|
 | ![2B](agpt/sunspot/figures/lr_finder_2b.png) | ![20B](agpt/sunspot/figures/lr_finder_20b.png) |
-| ![Optimal LR](agpt/sunspot/figures/lr_finder_optimal_lr.png) | |
+| ![Optimal LR](agpt/sunspot/figures/lr_finder_optimal_lr.png) | ![80B](agpt/sunspot/figures/lr_finder_80B.png) |
+
+### MoE Models — Sunspot (torch 2.13, 2 nodes / 24 XPUs)
+
+![MoE Comparison](moe/sunspot/figures/lr_finder_comparison.png)
+
+| | |
+|---|---|
+| ![debugmodel](moe/sunspot/figures/lr_finder_debugmodel.png) | ![500M](moe/sunspot/figures/lr_finder_500M.png) |
+| ![2B](moe/sunspot/figures/lr_finder_2B.png) | ![4B](moe/sunspot/figures/lr_finder_4B.png) |
+| ![7B](moe/sunspot/figures/lr_finder_7B.png) | ![Optimal LR](moe/sunspot/figures/lr_finder_optimal_lr.png) |
+
+See [MoE LR finder report](moe/sunspot/20260421-lr-finder-moe-n2.md) for details.
 
 #### Polaris (NVIDIA A100-40GB, 2 nodes / 8 GPUs)
 
