@@ -20,6 +20,31 @@ was required in ezpz.
 
 ---
 
+## 2026-04-23 (17th sync)
+
+**Upstream commits:**
+
+- `703b72ef` — [full DTensor] Use all DTensor for Qwen3 and llama4 at TP region (#2149)
+- `95a25420` — fix(hf_datasets): shuffle HuggingFaceTextDataset on re-loop (#3023)
+- `d52d2475` — [rl] Generator refactor (#3001)
+- `a676793a` — [rl] Rename inference example (#3045)
+- `0de35f96` — [profiler] Suppress Callable field from tyro CLI parsing (#3038)
+- + 10 more (GraphTrainer, CI, ROCm)
+
+**Breaking changes in `models/llama3/parallelize.py`:**
+
+- `use_local_output=True` → `use_local_output=False` for embed_plan,
+  norm_plan, and rowwise_output_plan. TP now keeps tensors as DTensors
+  instead of converting to plain tensors.
+
+**Changes required in ezpz:**
+
+| File | Change | Commit |
+|------|--------|--------|
+| `agpt/parallelize.py` | Replay `use_local_output=False` for embed, norm, rowwise plans | `fc3880c5` |
+
+---
+
 ## 2026-04-20 (16th sync)
 
 **Upstream commits:**
