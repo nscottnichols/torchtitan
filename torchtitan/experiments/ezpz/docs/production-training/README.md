@@ -4,6 +4,12 @@
 >
 > Last updated: 2026-04-23
 
+## Scaling Performance
+
+See [scaling-performance.md](scaling-performance.md) for the detailed
+experiment log from Apr 18-21 (compile scaling, 80B at 4-512N, interactive
+workflow validation).
+
 ## Overview
 
 Full-scale production training of AuroraGPT models on the

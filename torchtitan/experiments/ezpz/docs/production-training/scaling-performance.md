@@ -364,7 +364,7 @@ diverged to NaN** from step 1 (grad_norm=NaN on first backward pass).
 - **Memory:** 43.02 GiB (67%) — plenty of headroom at this FSDP degree
 
 **NaN root cause:** SophiaG is broken at 80B scale — confirmed by the
-[LR finder 80B report](../../lr-finder/agpt/sunspot/20260421-lr-finder-80b-n2.md)
+[LR finder 80B report](../experiments/lr-finder/agpt/sunspot/20260421-lr-finder-80b-n2.md)
 which found Muon and SophiaG both produce NaN for 80B. Use **AdamW with
 LR=1.1e-5** for 80B production runs.
 
@@ -491,6 +491,6 @@ use a fresh directory when the model architecture changes.
 ## Related
 
 - [80B TP=2 Restored](20260418-80b-tp2-restored.md)
-- [Known Issues](../../known-issues.md)
-- [Scaling Study (Sunspot)](../../scaling-study.md)
-- [Production Run Plan](../../TODO.md#5-production-multi-stage-training-plan)
+- [Known Issues](../known-issues.md)
+- [Scaling Study (Sunspot)](../scaling-study.md)
+- [Production Run Plan](../TODO.md#5-production-multi-stage-training-plan)
