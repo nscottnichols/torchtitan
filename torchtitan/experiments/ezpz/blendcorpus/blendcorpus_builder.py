@@ -170,6 +170,44 @@ class BlendCorpusDataLoader(BaseDataLoader):
             sequence_parallel_size=bc_cfg.sequence_parallel_size,
         )
 
+        # On XCCL (XPU) with torch <2.13, barrier() hangs because the
+        # C++ XCCL backend ignores opts.device and defaults all ranks
+        # to device 0.  Work around by replacing barrier() with a
+        # CPU-side gloo barrier for the duration of dataset building.
+        import torch
+        import torch.distributed as dist
+
+        _xccl_needs_barrier_fix = (
+            hasattr(torch, "xpu")
+            and torch.xpu.is_available()
+            and getattr(
+                dist.distributed_c10d._get_default_group(),
+                "bound_device_id",
+                None,
+            )
+            is None
+        )
+        if _xccl_needs_barrier_fix:
+            logger.info(
+                "XCCL barrier workaround: using gloo (CPU) barriers "
+                "for blendcorpus dataset building (torch %s)",
+                torch.__version__,
+            )
+            _prev_gloo_log = os.environ.get("GLOO_LOG_LEVEL")
+            os.environ["GLOO_LOG_LEVEL"] = "WARN"
+            _gloo_world = dist.new_group(backend="gloo")
+            if _prev_gloo_log is None:
+                os.environ.pop("GLOO_LOG_LEVEL", None)
+            else:
+                os.environ["GLOO_LOG_LEVEL"] = _prev_gloo_log
+            _orig_barrier = dist.barrier
+
+            def _gloo_barrier(group=None, async_op=False, device_ids=None):
+                # Always barrier on the gloo world group (CPU-side).
+                return _orig_barrier(group=_gloo_world, async_op=async_op)
+
+            dist.barrier = _gloo_barrier  # type: ignore[assignment]
+
         bc_set_config(bc_cfg)
         self._bc_cfg = bc_get_config()
 
@@ -185,6 +223,11 @@ class BlendCorpusDataLoader(BaseDataLoader):
             bc_cfg.data_cache_path,
         )
         train_ds, _, _ = build_gpt_datasets(self._bc_cfg)
+
+        # Keep gloo barrier active for the entire session — the XCCL
+        # barrier bug affects all collectives, not just dataset building.
+        # The gloo barrier is CPU-side and works reliably on all backends.
+
         logger.info("Rank %d: blendcorpus datasets ready.", rank)
         self._train_ds = train_ds
         self._build_pretraining_data_loader = build_pretraining_data_loader

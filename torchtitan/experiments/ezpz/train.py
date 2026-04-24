@@ -39,10 +39,15 @@ fp = Path(__file__)
 WBPROJ_NAME = f"torchtitan.{fp.parent.stem}.{fp.stem}"
 os.environ.setdefault("WANDB_PROJECT", f"{WBPROJ_NAME}")
 
-# try:
-#     import intel_extension_for_pytorch as ipex
-# except Exception:
-#     pass
+# IPEX provides XPU operator overrides needed for TP collectives on
+# torch <=2.10. Without it, TP=2+ hangs during the first forward pass.
+import torch as _torch
+
+if _torch.__version__ < "2.11":
+    try:
+        import intel_extension_for_pytorch as ipex  # noqa: F401
+    except Exception:
+        pass
 
 
 _LEGACY_KEY_REMAP = {
