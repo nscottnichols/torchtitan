@@ -18,7 +18,8 @@ source .venv/bin/activate
 ezpz yeet-env
 deactivate
 source /tmp/.venv/bin/activate
-source <(curl -fsSL https://bit.ly/ezpz-utils) && ezpz_setup_job
+export PATH="/tmp/.venv/bin:${PATH}"
+source <(curl -fsSL https://bit.ly/ezpz-utils)
 
 # ---- Configuration ----
 MODEL="20b"
