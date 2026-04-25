@@ -13,13 +13,13 @@ export CCL_OP_SYNC=1
 export ONEAPI_DEVICE_SELECTOR="opencl:gpu;level_zero:gpu"
 export TORCH_CPP_LOG_LEVEL=ERROR
 
+source <(curl -fsSL https://bit.ly/ezpz-utils) && ezpz_setup_job
+
 cd "${PBS_O_WORKDIR:-$(pwd)}"
 source .venv/bin/activate
 ezpz yeet-env
 deactivate
 source /tmp/.venv/bin/activate
-export PATH="/tmp/.venv/bin:${PATH}"
-source <(curl -fsSL https://bit.ly/ezpz-utils)
 
 # ---- Configuration ----
 MODEL="10b_2b_sdpa_ep"
