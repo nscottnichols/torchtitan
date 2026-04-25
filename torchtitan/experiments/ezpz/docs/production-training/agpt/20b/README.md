@@ -23,16 +23,16 @@
 | Job ID | Steps | Loss (start → end) | TPS/GPU | MFU | Memory | Status |
 |--------|-------|---------------------|---------|-----|--------|--------|
 | 8443212 | 1–100 | 12.93 → 11.84 | 280 | 14.0% | 40.95 GiB | Killed (qdel) |
-| 8444123 | 100–581 | 11.84 → 7.35 | 248 | 12.4% | 43.95 GiB | Walltime (12h) |
-| 8446340 | 581→ | — | — | — | — | Queued |
-| 8446341 | cont. | — | — | — | — | Queued (dep) |
-| 8446342 | cont. | — | — | — | — | Queued (dep) |
+| 8444123 | 100–581 | 11.84 → 7.35 | 248 | 12.4% | 43.95 GiB | Complete (walltime) |
+| 8446340 | 501–1239+ | 7.33 → 5.67 | 274 | 13.7% | — | **Running** (7h53m) |
+| 8446341 | cont. | — | — | — | — | Held (dep) |
+| 8446342 | cont. | — | — | — | — | Held (dep) |
 
-**W&B:** [q9oq5huj](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/q9oq5huj) (job 8443212), [pnkaurba](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/pnkaurba) (job 8444123)
+**W&B:** [q9oq5huj](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/q9oq5huj) (job 8443212), [pnkaurba](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/pnkaurba) (job 8444123), [lrlv3xsc](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/lrlv3xsc) (job 8446340)
 
-**Latest checkpoint:** step-500
+**Latest checkpoint:** step-1200
 
-**Tokens consumed:** 581 × 3072 × 8192 = **14.6B tokens** (0.3% of target)
+**Tokens consumed:** 1239 × 3072 × 8192 = **31.2B tokens** (0.7% of target)
 
 ---
 
@@ -58,9 +58,9 @@
 
 | Job ID | Steps | Loss (start → end) | TPS/GPU | MFU | Memory | Status |
 |--------|-------|---------------------|---------|-----|--------|--------|
-| 8443819 | 1–458 | 12.94 → 7.09 | 41 | 2.1% | 54.14 GiB | Walltime (12h) |
-| 8446343 | 458→ | — | — | — | — | Queued |
-| 8446344 | cont. | — | — | — | — | Queued (dep) |
+| 8443819 | 1–458 | 12.94 → 7.09 | 41 | 2.1% | 54.14 GiB | Complete (walltime) |
+| 8446343 | 0 | — | — | — | — | Segfault (signal 11) |
+| 8446344 | — | — | — | — | — | Queued |
 
 **W&B:** [8of5hse0](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/8of5hse0)
 
@@ -68,9 +68,8 @@
 
 **Tokens consumed:** 458 × 6144 × 8192 = **23.1B tokens** (0.5% of target)
 
-**Note:** Very low TPS (41) — likely compile took most of the 12h walltime,
-leaving limited time for actual training. The 20B model at 512N may need
-compile=off for production viability.
+**Note:** Very low TPS (41) — compile took most of the 12h walltime.
+512N continuation (8446343) segfaulted on a bad node. 8446344 will retry.
 
 ### Job Chains
 

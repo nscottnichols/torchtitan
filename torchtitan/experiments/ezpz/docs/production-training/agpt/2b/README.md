@@ -24,18 +24,16 @@
 
 | Job ID | Steps | Loss (start → end) | TPS/GPU | MFU | Memory | Status |
 |--------|-------|---------------------|---------|-----|--------|--------|
-| 8444122 | 1–1431 | 12.94 → 6.13 | 489 | 1.8% | 47.12 GiB | Walltime (12h) |
-| 8446337 | 1431→ | — | — | — | — | Queued |
-| 8446338 | cont. | — | — | — | — | Queued (dep) |
-| 8446339 | cont. | — | — | — | — | Queued (dep) |
+| 8444122 | 1–1431 | 12.94 → 6.13 | 489 | 1.8% | 47.12 GiB | Complete (walltime) |
+| 8446337 | 1401–7000+ | 6.13 → 5.80 | 2,051 | 7.7% | — | **Running** (7h53m) |
+| 8446338 | cont. | — | — | — | — | Held (dep) |
+| 8446339 | cont. | — | — | — | — | Held (dep) |
 
-**W&B:** [pjanidnw](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/pjanidnw)
+**W&B:** [pjanidnw](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/pjanidnw) (job 8444122), [4u9w23p9](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/4u9w23p9) (job 8446337)
 
-**Tokens consumed:** 1431 × 3072 × 8192 = **36.0B tokens** (0.8% of target)
+**Latest checkpoint:** step-7000
 
-**Note:** Low MFU (1.8%) is because the 2B model is too small for 3072-way
-FSDP — communication dominates. TPS/GPU (489) is much lower than the 2N
-baseline (5400). This is expected from the scaling study results.
+**Tokens consumed:** 7000 × 3072 × 8192 = **176.2B tokens** (3.8% of target)
 
 ---
 
@@ -58,8 +56,8 @@ baseline (5400). This is expected from the scaling study results.
 | Job ID | Steps | Loss | TPS/GPU | MFU | Memory | Status |
 |--------|-------|------|---------|-----|--------|--------|
 | 8443818 | 0 | — | — | — | — | OOM (compile) |
-| 8446349 | 0→ | — | — | — | — | Queued (no-compile) |
-| 8446350 | cont. | — | — | — | — | Queued (dep) |
+| 8446349 | 0 | — | — | — | — | Segfault (signal 11) |
+| 8446350 | — | — | — | — | — | Queued |
 
 ### Job Chains
 

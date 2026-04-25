@@ -16,18 +16,21 @@
 
 ### Progress
 
-| Job ID | Steps | Loss | TPS/GPU | MFU | Memory | Status |
-|--------|-------|------|---------|-----|--------|--------|
+| Job ID | Steps | Loss (start → end) | TPS/GPU | MFU | Memory | Status |
+|--------|-------|---------------------|---------|-----|--------|--------|
 | 8444124 | 0 | — | — | — | — | Segfault (node) |
-| 8446345 | 0→ | — | — | — | — | Queued (retry) |
-| 8446346 | cont. | — | — | — | — | Queued (dep) |
+| 8446345 | 1–429+ | 12.94 → NaN (step 138) | 87 | 16.0% | 52.94 GiB | **Running** (7h, NaN) |
+| 8446346 | cont. | — | — | — | — | Held (dep) |
 
-**Expected:** 80 TPS/GPU, 15% MFU (from 256N test runs).
-Compile takes ~7 min at 256N.
+**W&B:** [47pxgzf3](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/47pxgzf3)
 
-**Note:** Previous attempt (8444124) segfaulted on a single bad node.
-AdamW is the only viable optimizer for 80B — SophiaG and Muon both
-produce NaN due to bf16 overflow at dim=9216.
+**Issue:** Loss went NaN at step 138. Loss was 12.00 → NaN. The model
+trained for 137 steps with good loss convergence (12.94 → 12.00) and
+87 TPS / 16% MFU before diverging. LR=1.1e-5 may still be too high
+for 80B at GBS=1536. Consider reducing to 5e-6 or 1e-6.
+
+**Note:** AdamW is the only viable optimizer for 80B — SophiaG and Muon
+both produce NaN due to bf16 overflow at dim=9216.
 
 ---
 
@@ -47,13 +50,17 @@ produce NaN due to bf16 overflow at dim=9216.
 
 ### Progress
 
-| Job ID | Steps | Loss | TPS/GPU | MFU | Memory | Status |
-|--------|-------|------|---------|-----|--------|--------|
+| Job ID | Steps | Loss (start → end) | TPS/GPU | MFU | Memory | Status |
+|--------|-------|---------------------|---------|-----|--------|--------|
 | 8443820 | 0 | — | — | — | — | CPU OOM (compile) |
-| 8446347 | 0→ | — | — | — | — | Queued (no-compile) |
-| 8446348 | cont. | — | — | — | — | Queued (dep) |
+| 8446347 | — | — | — | — | — | Queued |
+| 8446348 | 1–320+ | 12.94 → NaN (step 15) | 62 | 11.3% | 56.33 GiB | **Running** (7h53m, NaN) |
 
-**Expected:** 66 TPS/GPU, 12% MFU without compile (from 512N test).
+**W&B:** [mbszs7ij](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/mbszs7ij)
+
+**Issue:** Loss went NaN at step 15. Only 14 steps converged before
+diverging. Same LR issue as 256N but worse — higher GBS (3072) makes
+the effective learning rate even more aggressive.
 
 ### Job Chains
 
