@@ -28,6 +28,7 @@ ezpz launch python3 -m torchtitan.experiments.ezpz.train \
     --config=agpt_2b \
     --optimizer=sophiag \
     --optimizer.lr=2.28e-5 \
+    --training.local-batch-size=2 \
     --training.steps="${STEPS}" \
     --dataloader.dataset-path="${DATASET_PATH}" \
     ${EXTRA_ARGS:-}
