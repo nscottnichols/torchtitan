@@ -19,15 +19,24 @@
 | Job ID | Steps | Loss (start → end) | TPS/GPU | MFU | Memory | Status |
 |--------|-------|---------------------|---------|-----|--------|--------|
 | 8444124 | 0 | — | — | — | — | Segfault (node) |
-| 8446345 | 1–429+ | 12.94 → NaN (step 138) | 87 | 16.0% | 52.94 GiB | **Running** (7h, NaN) |
+| 8446345 | 1–685+ | 12.94 → NaN (step 138) | 92 | 16.8% | 52.94 GiB | **Running** (NaN) |
 | 8446346 | cont. | — | — | — | — | Held (dep) |
 
 **W&B:** [47pxgzf3](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/47pxgzf3)
 
 **Issue:** Loss went NaN at step 138. Loss was 12.00 → NaN. The model
 trained for 137 steps with good loss convergence (12.94 → 12.00) and
-87 TPS / 16% MFU before diverging. LR=1.1e-5 may still be too high
-for 80B at GBS=1536. Consider reducing to 5e-6 or 1e-6.
+87 TPS / 16% MFU before diverging.
+
+**LR finder at 256N (2026-04-25):** Ran with init_lr=1e-9, max_lr=1e-4.
+NaN appeared at step 30 (LR=3e-8). This is puzzlingly low — the
+production run survived 137 steps at LR=1.1e-5. The NaN may be
+data-dependent (bad batch) rather than LR-dependent.
+
+**Investigation in progress:**
+- Testing fixed LR=1e-6 for 200 steps on fresh 256N allocation (8451155)
+- If this also NaNs, the issue is likely bf16 overflow in the gradient
+  computation itself (same root cause as SophiaG/Muon at 80B)
 
 **Note:** AdamW is the only viable optimizer for 80B — SophiaG and Muon
 both produce NaN due to bf16 overflow at dim=9216.
@@ -54,7 +63,7 @@ both produce NaN due to bf16 overflow at dim=9216.
 |--------|-------|---------------------|---------|-----|--------|--------|
 | 8443820 | 0 | — | — | — | — | CPU OOM (compile) |
 | 8446347 | — | — | — | — | — | Queued |
-| 8446348 | 1–320+ | 12.94 → NaN (step 15) | 62 | 11.3% | 56.33 GiB | **Running** (7h53m, NaN) |
+| 8446348 | 1–495+ | 12.94 → NaN (step 15) | 65 | 11.9% | 56.33 GiB | **Running** (NaN) |
 
 **W&B:** [mbszs7ij](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/mbszs7ij)
 
