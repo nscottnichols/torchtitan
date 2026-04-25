@@ -18,7 +18,7 @@ source .venv/bin/activate
 ezpz yeet-env
 deactivate
 source /tmp/.venv/bin/activate
-source <(curl -fsSL https://bit.ly/ezpz-utils)
+source <(curl -fsSL https://bit.ly/ezpz-utils) && ezpz_setup_job
 
 # ---- Configuration ----
 MODEL="10b_2b_sdpa_ep"
