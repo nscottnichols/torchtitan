@@ -2,6 +2,7 @@
 
 > [!NOTE]
 > We will use the alias `uvi`:
+>
 > ```bash
 > alias uvi='uv pip install --no-cache --link-mode=copy
 > ```
@@ -62,7 +63,8 @@
    python3 scripts/download_hf_assets.py --repo_id google/gemma-7b --assets tokenizer
    ```
 
-8. (Optional) Copy `.venv` to `/tmp/.venv` on all nodes (significantly faster startup, better performance):
+8. (Optional) Copy `.venv` to `/tmp/.venv` on all nodes
+   (significantly faster startup, better performance):
 
    ```bash
    ezpz yeet-env
@@ -80,7 +82,7 @@
       source /tmp/.venv/bin/activate
       ```
 
-8. Run training:
+9. Run training:
 
    ```bash
    FLAVOR=agpt
@@ -91,4 +93,3 @@
        --checkpoint.no-enable \
        --training.steps=10
    ```
-

@@ -6,7 +6,6 @@
 > [saforem2/torchtitan@ezpz](https://github.com/saforem2/torchtitan/tree/ezpz)
 
 1. Submit job:
-
    - Aurora:
 
      ```bash
@@ -58,7 +57,6 @@
    ```
 
 1. Launch Training
-
    - AuroraGPT-2B:
 
      ```bash
@@ -84,28 +82,28 @@
      ```
 
 > [!TIP]
->   - To suppress the `UserWarning: Torchinductor` error seen when using
->     `--compile.enable` on Aurora, you can export:
 >
->     ```bash
->     export SYCL_DISABLE_FSYCL_SYCLHPP_WARNING=1
->     ```
-
+> - To suppress the `UserWarning: Torchinductor` error seen when using
+>   `--compile.enable` on Aurora, you can export:
+>
+>   ```bash
+>   export SYCL_DISABLE_FSYCL_SYCLHPP_WARNING=1
+>   ```
 
 ## Launching with `run_train.sh`
 
 - [run_train.sh](torchtitan/experiments/ezpz/run_train.sh)
 
-    ```bash
-    # AuroraGPT-2B model:
-    MODEL=2b bash torchtitan/experiments/ezpz/run_train.sh
-    # or, AuroraGPT-7B model:
-    MODEL=7b bash torchtitan/experiments/ezpz/run_train.sh
-    # or, to specify the data-file-list:
-    MODEL=7b \
-        DFL=torchtitan/experiments/ezpz/data-lists/$(ezpz_get_machine_name)/books.txt \
-        bash torchtitan/experiments/ezpz/run_train.sh
-    ```
+  ```bash
+  # AuroraGPT-2B model:
+  MODEL=2b bash torchtitan/experiments/ezpz/run_train.sh
+  # or, AuroraGPT-7B model:
+  MODEL=7b bash torchtitan/experiments/ezpz/run_train.sh
+  # or, to specify the data-file-list:
+  MODEL=7b \
+      DFL=torchtitan/experiments/ezpz/data-lists/$(ezpz_get_machine_name)/books.txt \
+      bash torchtitan/experiments/ezpz/run_train.sh
+  ```
 
 ## MoE Training with JSON Override Configs
 
