@@ -35,7 +35,7 @@
 4. Install PyTorch:
 
    ```bash
-   uvi torch torchvision torchaudio torchdata torchcomms \
+   uvi torch torchvision torchaudio torchdata \
        --pre \
        --index-url https://download.pytorch.org/whl/nightly/xpu \
        --upgrade
@@ -44,9 +44,7 @@
 5. Install dependencies:
 
    ```bash
-   uvi tyro tensorboard
-   uvi deepspeed
-   CC=$(which gcc) CXX=$(which g++) MPICC=$(which mpicc) uv pip install "git+https://github.com/mpi4py/mpi4py"
+   uvi torchcomms tyro tensorboard deepspeed mpi4py
    uvi "git+https://github.com/zhenghh04/blendcorpus"
    uvi "git+https://github.com/saforem2/ezpz@fix/remove-ipex-imports"
    ```
