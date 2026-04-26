@@ -490,7 +490,7 @@ use a fresh directory when the model architecture changes.
 
 ## Related
 
-- [80B TP=2 Restored](20260418-80b-tp2-restored.md)
+- [80B TP=2 Restored](../experiments/agpt/aurora/20260418-80b-tp2-restored.md)
 - [Known Issues](../guides/known-issues.md)
 - [Scaling Study (Sunspot)](../scaling/)
 - [Production Run Plan](../TODO.md#5-production-multi-stage-training-plan)
