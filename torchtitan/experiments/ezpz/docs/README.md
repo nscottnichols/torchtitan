@@ -12,7 +12,7 @@ date: 2026-03-15
 - [Upstream Sync Log](./upstream-sync.md)
 - [Experiment Reports](./experiments/) (benchmarks, smoke tests, LR finder, production runs)
 - [Scaling Study — PyTorch 2.13](./scaling-study-torch213.md) — weak scaling 2–4096 nodes (in progress)
-- [Scaling & Production Runs Report](./production-training/scaling-performance.md) — Apr 18–21 experiments
-- [Production Training Runs](./production-training/) — live status of ongoing training
+- [Scaling & Production Runs Report](./production/scaling-performance.md) — Apr 18–21 experiments
+- [Production Training Runs](./production/) — live status of ongoing training
 - [RL (GRPO) Experiment](./rl/README.md) — TRL-based GRPO on XPU (experimental)
 - [TODO](./TODO.md)
