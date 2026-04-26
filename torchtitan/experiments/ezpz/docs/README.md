@@ -34,4 +34,5 @@ date: 2026-03-15
 
 ## Planning
 
+- [Development Journal](./journal.md) — session-by-session log of work, findings, issues
 - [TODO](./TODO.md)
