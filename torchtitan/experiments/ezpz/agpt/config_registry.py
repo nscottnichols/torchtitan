@@ -294,8 +294,17 @@ def ezpz_agpt_80b_deep_from_json() -> FaultTolerantTrainer.Config:
 # Competition speedrun configs — makes them discoverable via --config
 from torchtitan.experiments.ezpz.competition.configs import (  # noqa: E402, F401
     speedrun_2b_adamw,
+    speedrun_2b_adamw_cosine,
+    speedrun_2b_adamw_fast_warmup,
     speedrun_2b_adamw_high_lr,
+    speedrun_2b_adamw_short_decay,
+    speedrun_2b_mano,
     speedrun_2b_muon,
     speedrun_2b_muon_aggressive,
+    speedrun_2b_muon_fast_warmup,
+    speedrun_2b_muon_short_decay,
+    speedrun_2b_adamw_qknorm,
+    speedrun_2b_muon_qknorm,
     speedrun_2b_sophiag,
+    speedrun_2b_spam,
 )

@@ -16,6 +16,12 @@
 import torchtitan.experiments.ezpz.datasets  # noqa: F401 — register HF datasets
 
 from torchtitan.experiments.ezpz.agpt.config_registry import agpt
+from torchtitan.experiments.ezpz.optimizer import (
+    ManoOptimizersContainer,
+    MuonOptimizersContainer,
+    SPAMOptimizersContainer,
+    SophiaGOptimizersContainer,
+)
 
 # Fixed competition parameters — same for all configs
 DATASET = "HuggingFaceFW/fineweb-edu"
@@ -24,11 +30,7 @@ SEQ_LEN = 8192
 STEPS = 1000
 
 
-def _speedrun_base(
-    optimizer: str = "adamw",
-    lr: float = 1.3e-3,
-    **optimizer_kwargs,
-):
+def _speedrun_base():
     """Base speedrun config: 1000 steps, WSD schedule, fineweb-edu streaming.
 
     Fixed parameters (not tunable for fairness):
@@ -61,12 +63,6 @@ def _speedrun_base(
     cfg.lr_scheduler.decay_type = "linear"
     cfg.lr_scheduler.min_lr_factor = 0.0
 
-    # Optimizer
-    cfg.optimizer.name = optimizer
-    cfg.optimizer.lr = lr
-    for k, v in optimizer_kwargs.items():
-        setattr(cfg.optimizer, k, v)
-
     return cfg
 
 
@@ -75,24 +71,155 @@ def _speedrun_base(
 
 def speedrun_2b_adamw():
     """AdamW baseline — LR from LR finder (1.3e-3)."""
-    return _speedrun_base(optimizer="adamw", lr=1.3e-3)
+    cfg = _speedrun_base()
+    cfg.optimizer.lr = 1.3e-3
+    cfg.checkpoint.folder = "checkpoints/speedrun_2b_adamw"
+    return cfg
 
 
 def speedrun_2b_muon():
     """Muon — best NanoGPT speedrun optimizer. LR from LR finder (2.4e-3)."""
-    return _speedrun_base(optimizer="muon", lr=2.4e-3)
+    cfg = _speedrun_base()
+    cfg.optimizer = MuonOptimizersContainer.Config(lr=2.4e-3)
+    cfg.checkpoint.folder = "checkpoints/speedrun_2b_muon"
+    return cfg
 
 
 def speedrun_2b_sophiag():
     """SophiaG — second-order Hessian approx. LR from LR finder (3.1e-4)."""
-    return _speedrun_base(optimizer="sophiag", lr=3.1e-4)
+    cfg = _speedrun_base()
+    cfg.optimizer = SophiaGOptimizersContainer.Config(lr=3.1e-4)
+    cfg.checkpoint.folder = "checkpoints/speedrun_2b_sophiag"
+    return cfg
 
 
 def speedrun_2b_muon_aggressive():
     """Muon with 2x LR — pushing convergence speed."""
-    return _speedrun_base(optimizer="muon", lr=4.8e-3)
+    cfg = _speedrun_base()
+    cfg.optimizer = MuonOptimizersContainer.Config(lr=4.8e-3)
+    cfg.checkpoint.folder = "checkpoints/speedrun_2b_muon_aggressive"
+    return cfg
 
 
 def speedrun_2b_adamw_high_lr():
     """AdamW with 2x LR — testing upper bound."""
-    return _speedrun_base(optimizer="adamw", lr=2.6e-3)
+    cfg = _speedrun_base()
+    cfg.optimizer.lr = 2.6e-3
+    cfg.checkpoint.folder = "checkpoints/speedrun_2b_adamw_high_lr"
+    return cfg
+
+
+# ---- Hparam tweak configs ----
+
+
+def speedrun_2b_adamw_short_decay():
+    """AdamW with 10% decay (vs 20%) — more time at peak LR."""
+    cfg = _speedrun_base()
+    cfg.optimizer.lr = 1.3e-3
+    cfg.lr_scheduler.decay_ratio = 0.1
+    cfg.checkpoint.folder = "checkpoints/speedrun_2b_adamw_short_decay"
+    return cfg
+
+
+def speedrun_2b_adamw_cosine():
+    """AdamW with cosine decay instead of linear."""
+    cfg = _speedrun_base()
+    cfg.optimizer.lr = 1.3e-3
+    cfg.lr_scheduler.decay_type = "cosine"
+    cfg.checkpoint.folder = "checkpoints/speedrun_2b_adamw_cosine"
+    return cfg
+
+
+def speedrun_2b_adamw_fast_warmup():
+    """AdamW with 5-step warmup + 10% decay — max time at peak LR."""
+    cfg = _speedrun_base()
+    cfg.optimizer.lr = 1.3e-3
+    cfg.lr_scheduler.warmup_steps = 5
+    cfg.lr_scheduler.decay_ratio = 0.1
+    cfg.checkpoint.folder = "checkpoints/speedrun_2b_adamw_fast_warmup"
+    return cfg
+
+
+def speedrun_2b_muon_short_decay():
+    """Muon with 10% decay — more time at peak LR."""
+    cfg = _speedrun_base()
+    cfg.optimizer = MuonOptimizersContainer.Config(lr=2.4e-3)
+    cfg.lr_scheduler.decay_ratio = 0.1
+    cfg.checkpoint.folder = "checkpoints/speedrun_2b_muon_short_decay"
+    return cfg
+
+
+def speedrun_2b_muon_fast_warmup():
+    """Muon with 5-step warmup + 10% decay."""
+    cfg = _speedrun_base()
+    cfg.optimizer = MuonOptimizersContainer.Config(lr=2.4e-3)
+    cfg.lr_scheduler.warmup_steps = 5
+    cfg.lr_scheduler.decay_ratio = 0.1
+    cfg.checkpoint.folder = "checkpoints/speedrun_2b_muon_fast_warmup"
+    return cfg
+
+
+# ---- New optimizer configs ----
+
+
+def speedrun_2b_mano():
+    """Mano — manifold-normalized optimizer, 1.75x faster than Muon."""
+    cfg = _speedrun_base()
+    cfg.optimizer = ManoOptimizersContainer.Config(lr=3.0e-4)
+    cfg.checkpoint.folder = "checkpoints/speedrun_2b_mano"
+    return cfg
+
+
+def speedrun_2b_spam():
+    """SPAM — spike-aware Adam with momentum reset."""
+    cfg = _speedrun_base()
+    cfg.optimizer = SPAMOptimizersContainer.Config(lr=1.3e-3)
+    cfg.checkpoint.folder = "checkpoints/speedrun_2b_spam"
+    return cfg
+
+
+# ---- Architecture tweak configs ----
+
+
+def speedrun_2b_adamw_qknorm():
+    """AdamW + QK-Norm — stabilizes early attention training."""
+    cfg = agpt(
+        "2b_qknorm",
+        local_batch_size=LOCAL_BATCH_SIZE,
+        activation_checkpoint_mode="none",
+        seq_len=SEQ_LEN,
+        compile=True,
+        checkpoint_interval=STEPS,
+    )
+    cfg.dataloader.dataset = DATASET
+    cfg.dataloader.dataset_path = None
+    cfg.training.steps = STEPS
+    cfg.lr_scheduler.warmup_steps = 20
+    cfg.lr_scheduler.decay_ratio = 0.2
+    cfg.lr_scheduler.decay_type = "linear"
+    cfg.lr_scheduler.min_lr_factor = 0.0
+    cfg.optimizer.lr = 1.3e-3
+    cfg.checkpoint.folder = "checkpoints/speedrun_2b_adamw_qknorm"
+    return cfg
+
+
+def speedrun_2b_muon_qknorm():
+    """Muon + QK-Norm — best optimizer + attention stabilization."""
+    cfg = agpt(
+        "2b_qknorm",
+        local_batch_size=LOCAL_BATCH_SIZE,
+        activation_checkpoint_mode="none",
+        seq_len=SEQ_LEN,
+        compile=True,
+        checkpoint_interval=STEPS,
+    )
+    cfg.dataloader.dataset = DATASET
+    cfg.dataloader.dataset_path = None
+    cfg.training.steps = STEPS
+    cfg.lr_scheduler.warmup_steps = 20
+    cfg.lr_scheduler.decay_ratio = 0.2
+    cfg.lr_scheduler.decay_type = "linear"
+    cfg.lr_scheduler.min_lr_factor = 0.0
+    cfg.optimizer = MuonOptimizersContainer.Config(lr=2.4e-3)
+    cfg.checkpoint.folder = "checkpoints/speedrun_2b_muon_qknorm"
+    return cfg
