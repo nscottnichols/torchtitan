@@ -32,6 +32,8 @@ from torchtitan.experiments.ezpz.optimizer import (
 )
 from torchtitan.tools.logging import logger
 
+import torchtitan.experiments.ezpz.datasets  # noqa: F401 — enable arbitrary HF datasets
+
 DEFAULT_MODULE = "ezpz.agpt"
 DEFAULT_CONFIG = "ezpz_agpt_2b"
 
