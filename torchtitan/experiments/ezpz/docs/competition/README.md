@@ -19,13 +19,27 @@
 
 | Rank | Config | Optimizer | LR | Schedule | Final Loss | Steps | TPS/GPU | Status |
 |------|--------|-----------|------|----------|------------|-------|---------|--------|
-| 1 | `speedrun_2b_adamw` | AdamW | 1.3e-3 | WSD 20/800/200 | **3.801** | 1000 | 7,245 | Done |
-| 2 | `speedrun_2b_muon` | Muon | 2.4e-3 | WSD 20/800/200 | 3.915* | 785 | 4,695 | Resubmitted (3h) |
-| 3 | `speedrun_2b_sophiag` | SophiaG | 3.1e-4 | WSD 20/800/200 | 4.719 | 1000 | 7,208 | Done |
-| 4 | `speedrun_2b_muon_aggressive` | Muon | 4.8e-3 | WSD 20/800/200 | 4.756* | 773 | 4,596 | Resubmitted (3h) |
-| 5 | `speedrun_2b_adamw_high_lr` | AdamW | 2.6e-3 | WSD 20/800/200 | 5.850 | 1000 | 7,344 | Done |
+| 1 | `speedrun_2b_mano` | **Mano** | 3.0e-4 | WSD 20/800/200 | **3.765*** | 866 | ~7,200 | Running |
+| 2 | `speedrun_2b_adamw_cosine` | AdamW | 1.3e-3 | WSD cosine | **3.789** | 990 | 7,245 | Done |
+| 3 | `speedrun_2b_adamw` | AdamW | 1.3e-3 | WSD linear | 3.801 | 1000 | 7,245 | Done |
+| 4 | `speedrun_2b_muon` | Muon | 2.4e-3 | WSD 20/800/200 | 4.100* | 626 | 4,695 | Running |
+| 5 | `speedrun_2b_adamw_short_decay` | AdamW | 1.3e-3 | WSD decay=10% | 4.053 | 1000 | 7,245 | Done |
+| 6 | `speedrun_2b_adamw_fast_warmup` | AdamW | 1.3e-3 | warmup=5 decay=10% | 4.546 | 1000 | 7,245 | Done |
+| 7 | `speedrun_2b_muon_aggressive` | Muon | 4.8e-3 | WSD 20/800/200 | 4.710* | 630 | 4,596 | Running |
+| 8 | `speedrun_2b_sophiag` | SophiaG | 3.1e-4 | WSD 20/800/200 | 4.719 | 1000 | 7,208 | Done |
+| 9 | `speedrun_2b_adamw_high_lr` | AdamW | 2.6e-3 | WSD 20/800/200 | 5.850 | 1000 | 7,344 | Done |
+| 10 | `speedrun_2b_spam` | SPAM | 1.3e-3 | WSD 20/800/200 | 5.881* | 865 | ~7,200 | Running |
 
-*Timed out at 1h walltime — loss at last completed step.
+*Still running — loss at last reported step.
+
+### Key Findings
+
+- **Mano is the current leader** — already below AdamW's final loss at step 866 with 134 steps of decay remaining
+- **Cosine decay beats linear** for AdamW (3.789 vs 3.801)
+- **Shorter decay (10%) hurts** — not enough time in decay phase (4.053 vs 3.801)
+- **Shorter warmup (5 steps) hurts** — too little warmup destabilizes early training
+- **SPAM underperforms** — spike clipping + momentum reset don't help for this clean dataset
+- **Muon is 35% slower per step** (Newton-Schulz overhead) — Mano has no such overhead
 
 ## In Progress
 
