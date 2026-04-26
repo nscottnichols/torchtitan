@@ -28,7 +28,7 @@ SEQ_LEN="${SEQ_LEN:-8192}"
 TP="${TP:-1}"
 PP="${PP:-1}"
 CP="${CP:-1}"
-LBS="${LBS:-1}"
+LBS="${LBS:-2}"
 GAS="${GAS:-1}"
 GBS=$(( NGPUS * LBS * GAS / (TP * PP * CP) ))
 
