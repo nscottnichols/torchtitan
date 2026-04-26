@@ -181,7 +181,7 @@ def _build_agpt_layers(
     inner_attention, mask_type = _ezpz_get_attention_config(attn_backend)
     linear_init = _linear_init(dim)
     head_dim = dim // n_heads
-    qk_norm_config = RMSNorm.Config(normalized_shape=head_dim) if qk_norm else None
+    qk_norm_config = RMSNorm.Config(normalized_shape=head_dim, param_init=_NORM_INIT) if qk_norm else None
     layers = []
     for layer_id in range(n_layers):
         layers.append(
