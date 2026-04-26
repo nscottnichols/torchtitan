@@ -8,13 +8,17 @@ import torch.nn as nn
 
 from torchtitan.components.optimizer import OptimizersContainer
 from torchtitan.experiments.ezpz.optimizer.adopt import ADOPT
+from torchtitan.experiments.ezpz.optimizer.mano import Mano
 from torchtitan.experiments.ezpz.optimizer.muon import Muon, MuonClip, QKInputRecorder
 from torchtitan.experiments.ezpz.optimizer.sophia import SophiaG
+from torchtitan.experiments.ezpz.optimizer.spam import SPAM
 
 __all__ = [
     "ADOPTOptimizersContainer",
+    "ManoOptimizersContainer",
     "MuonClipOptimizersContainer",
     "MuonOptimizersContainer",
+    "SPAMOptimizersContainer",
     "SophiaGOptimizersContainer",
 ]
 
@@ -134,6 +138,52 @@ class MuonClipOptimizersContainer(MuonOptimizersContainer):
             }
         )
         return base
+
+
+class ManoOptimizersContainer(OptimizersContainer):
+    @dataclass(kw_only=True, slots=True)
+    class Config(OptimizersContainer.Config):
+        name: str = "Mano"
+        momentum: float = 0.95
+
+    @staticmethod
+    def _resolve_optimizer_cls(name: str) -> type:
+        return Mano
+
+    @staticmethod
+    def _build_optimizer_kwargs(config: ManoOptimizersContainer.Config) -> dict[str, Any]:
+        return {
+            "lr": config.lr,
+            "momentum": config.momentum,
+            "weight_decay": config.weight_decay,
+            "adamw_betas": (config.beta1, config.beta2),
+            "adamw_eps": config.eps,
+        }
+
+
+class SPAMOptimizersContainer(OptimizersContainer):
+    @dataclass(kw_only=True, slots=True)
+    class Config(OptimizersContainer.Config):
+        name: str = "SPAM"
+        spike_threshold: float = 2.0
+        delta_t: int = 100
+        ema_beta: float = 0.999
+
+    @staticmethod
+    def _resolve_optimizer_cls(name: str) -> type:
+        return SPAM
+
+    @staticmethod
+    def _build_optimizer_kwargs(config: SPAMOptimizersContainer.Config) -> dict[str, Any]:
+        return {
+            "lr": config.lr,
+            "betas": (config.beta1, config.beta2),
+            "eps": config.eps,
+            "weight_decay": config.weight_decay,
+            "spike_threshold": config.spike_threshold,
+            "delta_t": config.delta_t,
+            "ema_beta": config.ema_beta,
+        }
 
 
 def register_muonclip_qk_pairs(

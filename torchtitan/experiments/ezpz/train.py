@@ -26,8 +26,10 @@ from torchtitan.config import ConfigManager
 from torchtitan.experiments.ezpz.logging import init_logger
 from torchtitan.experiments.ezpz.optimizer import (
     ADOPTOptimizersContainer,
+    ManoOptimizersContainer,
     MuonClipOptimizersContainer,
     MuonOptimizersContainer,
+    SPAMOptimizersContainer,
     SophiaGOptimizersContainer,
 )
 from torchtitan.tools.logging import logger
@@ -87,9 +89,11 @@ _OPTIMIZER_CONFIGS: dict[str, type[OptimizersContainer.Config]] = {
     "adamw": OptimizersContainer.Config,
     "adam": OptimizersContainer.Config,
     "adopt": ADOPTOptimizersContainer.Config,
-    "sophiag": SophiaGOptimizersContainer.Config,
+    "mano": ManoOptimizersContainer.Config,
     "muon": MuonOptimizersContainer.Config,
     "muonclip": MuonClipOptimizersContainer.Config,
+    "sophiag": SophiaGOptimizersContainer.Config,
+    "spam": SPAMOptimizersContainer.Config,
 }
 
 
