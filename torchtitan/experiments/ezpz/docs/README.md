@@ -5,10 +5,10 @@ date: 2026-03-15
 
 # Pre-Training AuroraGPT with TorchTitan + 🍋 `ezpz`
 
-- Dense Models: [AuroraGPT-{2,20}B](./dense-configs.md)
-- MoE Variants: [AuroraGPT-10B-2B](./moe-configs.md)
-- [Known Issues and Operational Notes](./known-issues.md)
-- [XPU Attention Issues](./xpu-attention-issues.md) (SDPA, FlexAttention, Triton)
+- Dense Models: [AuroraGPT-{2,20}B](./configs/dense.md)
+- MoE Variants: [AuroraGPT-10B-2B](./configs/moe.md)
+- [Known Issues and Operational Notes](./guides/known-issues.md)
+- [XPU Attention Issues](./guides/xpu-attention-issues.md) (SDPA, FlexAttention, Triton)
 - [Upstream Sync Log](./upstream-sync.md)
 - [Experiment Reports](./experiments/) (benchmarks, smoke tests, LR finder, production runs)
 - [Scaling Study — PyTorch 2.13](./scaling-study-torch213.md) — weak scaling 2–4096 nodes (in progress)
