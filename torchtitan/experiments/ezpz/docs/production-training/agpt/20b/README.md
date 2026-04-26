@@ -24,15 +24,15 @@
 |--------|-------|---------------------|---------|-----|--------|--------|
 | 8443212 | 1–100 | 12.93 → 11.84 | 280 | 14.0% | 40.95 GiB | Killed (qdel) |
 | 8444123 | 100–581 | 11.84 → 7.35 | 248 | 12.4% | 43.95 GiB | Complete (walltime) |
-| 8446340 | 501–1614+ | 7.33 → 5.25 | 283 | 14.1% | — | **Running** |
-| 8446341 | cont. | — | — | — | — | Held (dep) |
-| 8446342 | cont. | — | — | — | — | Held (dep) |
+| 8446340 | 501–1614 | 7.33 → 5.25 | 283 | 14.1% | — | Complete (walltime) |
+| 8446341 | 1614–? | — | — | — | — | Complete |
+| 8446342 | 1614–1719+ | 5.25 → 5.19 | 285 | 14.2% | — | **Running** |
 
 **W&B:** [q9oq5huj](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/q9oq5huj) (job 8443212), [pnkaurba](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/pnkaurba) (job 8444123), [lrlv3xsc](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/lrlv3xsc) (job 8446340)
 
-**Latest checkpoint:** step-1600
+**Latest checkpoint:** step-1700
 
-**Tokens consumed:** 1614 × 3072 × 8192 = **40.6B tokens** (0.9% of target)
+**Tokens consumed:** 1719 × 3072 × 8192 = **43.3B tokens** (0.9% of target)
 
 ---
 

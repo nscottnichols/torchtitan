@@ -25,15 +25,15 @@
 | Job ID | Steps | Loss (start → end) | TPS/GPU | MFU | Memory | Status |
 |--------|-------|---------------------|---------|-----|--------|--------|
 | 8444122 | 1–1431 | 12.94 → 6.13 | 489 | 1.8% | 47.12 GiB | Complete (walltime) |
-| 8446337 | 1401–9876+ | 6.13 → 5.78 | 1,794 | 6.7% | — | **Running** |
-| 8446338 | cont. | — | — | — | — | Held (dep) |
+| 8446337 | 1401–9876 | 6.13 → 5.78 | 1,794 | 6.7% | — | Complete (walltime) |
+| 8446338 | 9876–12295+ | 5.78 → 5.76 | 2,485 | 9.3% | — | **Running** |
 | 8446339 | cont. | — | — | — | — | Held (dep) |
 
 **W&B:** [pjanidnw](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/pjanidnw) (job 8444122), [4u9w23p9](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/4u9w23p9) (job 8446337)
 
-**Latest checkpoint:** step-7000
+**Latest checkpoint:** step-12200
 
-**Tokens consumed:** 7000 × 3072 × 8192 = **176.2B tokens** (3.8% of target)
+**Tokens consumed:** 12295 × 3072 × 8192 = **309.5B tokens** (6.6% of target)
 
 ---
 

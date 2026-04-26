@@ -2,7 +2,7 @@
 
 > **Living document** — updated as jobs complete and new runs are submitted.
 >
-> Last updated: 2026-04-25
+> Last updated: 2026-04-26
 
 ## Scaling Performance
 
@@ -26,12 +26,13 @@ Full-scale production training of AuroraGPT models on the
 
 | Run | Model | Nodes | Optimizer | LR | Compile | Steps Done | Loss | Status |
 |-----|-------|-------|-----------|------|---------|------------|------|--------|
-| [2B-256N](agpt/2b/) | 2B | 256 | SophiaG | 2.28e-5 | on | 7000+ | 5.80 | **Running** |
-| [2B-512N](agpt/2b/) | 2B | 512 | SophiaG | 2.28e-5 | off | 0 | — | Segfault, retry queued |
-| [20B-256N](agpt/20b/) | 20B | 256 | SophiaG | 2.28e-5 | on | 1239+ | 5.67 | **Running** |
-| [20B-512N](agpt/20b/) | 20B | 512 | SophiaG | 2.28e-5 | on | 458 | 7.09 | Segfault, retry queued |
-| [80B-256N](agpt/80b/) | 80B | 256 | AdamW | 1.1e-5 | on | 429+ | NaN | **Running** (NaN@138) |
-| [80B-512N](agpt/80b/) | 80B | 512 | AdamW | 1.1e-5 | off | 320+ | NaN | **Running** (NaN@15) |
+| [2B-256N](agpt/2b/) | 2B | 256 | SophiaG | 2.28e-5 | on | 12435+ | 5.76 | **Running** |
+| [2B-512N](agpt/2b/) | 2B | 512 | SophiaG | 2.28e-5 | off | 0 | — | Segfault |
+| [20B-256N](agpt/20b/) | 20B | 256 | SophiaG | 2.28e-5 | on | 1739+ | 5.17 | **Running** |
+| [20B-512N](agpt/20b/) | 20B | 512 | SophiaG | 2.28e-5 | on | 458 | 7.09 | Segfault |
+| [80B-256N](agpt/80b/) | 80B | 256 | AdamW | 1.1e-5 | on | 777 | NaN | NaN@138 (killed) |
+| [80B-256N](agpt/80b/) | 80B | 256 | AdamW | 1e-6 | on | 51 | 12.91 | Stable (walltime) |
+| [80B-512N](agpt/80b/) | 80B | 512 | AdamW | 1.1e-5 | off | 495 | NaN | NaN@15 (killed) |
 
 ### MoE
 
