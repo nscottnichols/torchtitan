@@ -26,14 +26,14 @@
 |--------|-------|---------------------|---------|-----|--------|--------|
 | 8444122 | 1–1431 | 12.94 → 6.13 | 489 | 1.8% | 47.12 GiB | Complete (walltime) |
 | 8446337 | 1401–9876 | 6.13 → 5.78 | 1,794 | 6.7% | — | Complete (walltime) |
-| 8446338 | 9876–12295+ | 5.78 → 5.76 | 2,485 | 9.3% | — | **Running** |
+| 8446338 | 9876–16900+ | 5.78 → 5.73 | 2,280 | 8.6% | 47.02 GiB | **Running** |
 | 8446339 | cont. | — | — | — | — | Held (dep) |
 
 **W&B:** [pjanidnw](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/pjanidnw) (job 8444122), [4u9w23p9](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/4u9w23p9) (job 8446337)
 
-**Latest checkpoint:** step-12200
+**Latest checkpoint:** step-16800
 
-**Tokens consumed:** 12295 × 3072 × 8192 = **309.5B tokens** (6.6% of target)
+**Tokens consumed:** 16900 × 3072 × 8192 = **425.5B tokens** (9.1% of target)
 
 ---
 

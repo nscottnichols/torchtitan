@@ -71,9 +71,35 @@ both produce NaN due to bf16 overflow at dim=9216.
 diverging. Same LR issue as 256N but worse — higher GBS (3072) makes
 the effective learning rate even more aggressive.
 
+---
+
+## 80B @ 256N — AdamW LR=1e-6
+
+| Field | Value |
+|-------|-------|
+| Model | agpt_80b (80.8B params) |
+| Nodes / GPUs | 256 / 3,072 |
+| Parallelism | TP=2, FSDP=1536 |
+| Compile | on |
+| Optimizer | AdamW, LR=1e-6 |
+| GBS | 1,536 (LBS=1) |
+
+### Progress
+
+| Job ID | Steps | Loss (start → end) | TPS/GPU | MFU | Memory | Status |
+|--------|-------|---------------------|---------|-----|--------|--------|
+| 8451225 | 1–51 | 12.94 → 12.91 | — | — | — | Complete (walltime) |
+| 8451226 | 0 | — | — | — | — | Crashed (Gloo timeout, bad node) |
+
+**Note:** LR=1e-6 stabilized the 80B model (51 steps without NaN).
+Job 8451226 crashed during dataloader init due to an unreachable node
+(`Gloo connectFullMesh failed ... No route to host`). Needs resubmit.
+
 ### Job Chains
 
 ```
-80B-256N: 8446345 → 8446346
-80B-512N: 8446347 → 8446348
+80B-256N (LR=1.1e-5): 8446345 → 8446346
+80B-256N (LR=1e-6): 8451225 → 8451226 (crashed)
+80B-512N (LR=1.1e-5): 8446347 → 8446348
+80B-512N (torch 2.13, LR=1e-6): 8451727 → 8451728
 ```
