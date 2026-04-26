@@ -181,8 +181,8 @@ def speedrun_2b_spam():
 # ---- Architecture tweak configs ----
 
 
-def speedrun_2b_adamw_qknorm():
-    """AdamW + QK-Norm — stabilizes early attention training."""
+def _speedrun_qknorm_base():
+    """Base config with QK-Norm enabled."""
     cfg = agpt(
         "2b_qknorm",
         local_batch_size=LOCAL_BATCH_SIZE,
@@ -198,6 +198,12 @@ def speedrun_2b_adamw_qknorm():
     cfg.lr_scheduler.decay_ratio = 0.2
     cfg.lr_scheduler.decay_type = "linear"
     cfg.lr_scheduler.min_lr_factor = 0.0
+    return cfg
+
+
+def speedrun_2b_adamw_qknorm():
+    """AdamW + QK-Norm — stabilizes early attention training."""
+    cfg = _speedrun_qknorm_base()
     cfg.optimizer.lr = 1.3e-3
     cfg.checkpoint.folder = "checkpoints/speedrun_2b_adamw_qknorm"
     return cfg
@@ -205,21 +211,52 @@ def speedrun_2b_adamw_qknorm():
 
 def speedrun_2b_muon_qknorm():
     """Muon + QK-Norm — best optimizer + attention stabilization."""
-    cfg = agpt(
-        "2b_qknorm",
-        local_batch_size=LOCAL_BATCH_SIZE,
-        activation_checkpoint_mode="none",
-        seq_len=SEQ_LEN,
-        compile=True,
-        checkpoint_interval=STEPS,
-    )
-    cfg.dataloader.dataset = DATASET
-    cfg.dataloader.dataset_path = None
-    cfg.training.steps = STEPS
-    cfg.lr_scheduler.warmup_steps = 20
-    cfg.lr_scheduler.decay_ratio = 0.2
-    cfg.lr_scheduler.decay_type = "linear"
-    cfg.lr_scheduler.min_lr_factor = 0.0
+    cfg = _speedrun_qknorm_base()
     cfg.optimizer = MuonOptimizersContainer.Config(lr=2.4e-3)
     cfg.checkpoint.folder = "checkpoints/speedrun_2b_muon_qknorm"
+    return cfg
+
+
+# ---- Round 2: combo configs based on round 1 findings ----
+
+
+def speedrun_2b_mano_high_lr():
+    """Mano with higher LR (6e-4) — try to close gap to Muon."""
+    cfg = _speedrun_base()
+    cfg.optimizer = ManoOptimizersContainer.Config(lr=6.0e-4)
+    cfg.checkpoint.folder = "checkpoints/speedrun_2b_mano_high_lr"
+    return cfg
+
+
+def speedrun_2b_mano_1e3():
+    """Mano with LR=1e-3 — aggressive push."""
+    cfg = _speedrun_base()
+    cfg.optimizer = ManoOptimizersContainer.Config(lr=1.0e-3)
+    cfg.checkpoint.folder = "checkpoints/speedrun_2b_mano_1e3"
+    return cfg
+
+
+def speedrun_2b_muon_cosine():
+    """Muon + cosine decay — combine best optimizer with best schedule."""
+    cfg = _speedrun_base()
+    cfg.optimizer = MuonOptimizersContainer.Config(lr=2.4e-3)
+    cfg.lr_scheduler.decay_type = "cosine"
+    cfg.checkpoint.folder = "checkpoints/speedrun_2b_muon_cosine"
+    return cfg
+
+
+def speedrun_2b_mano_cosine():
+    """Mano + cosine decay — fast optimizer with best schedule."""
+    cfg = _speedrun_base()
+    cfg.optimizer = ManoOptimizersContainer.Config(lr=3.0e-4)
+    cfg.lr_scheduler.decay_type = "cosine"
+    cfg.checkpoint.folder = "checkpoints/speedrun_2b_mano_cosine"
+    return cfg
+
+
+def speedrun_2b_mano_qknorm():
+    """Mano + QK-Norm — fast manifold optimizer with attention stabilization."""
+    cfg = _speedrun_qknorm_base()
+    cfg.optimizer = ManoOptimizersContainer.Config(lr=3.0e-4)
+    cfg.checkpoint.folder = "checkpoints/speedrun_2b_mano_qknorm"
     return cfg

@@ -442,6 +442,7 @@ agpt_configs["80b_wide"] = agpt_configs["80B_wide"]
 agpt_configs["80b_deep"] = agpt_configs["80B_deep"]
 agpt_configs["80b_alt"] = agpt_configs["80B_alt"]
 agpt_configs["80b_deep_alt"] = agpt_configs["80B_deep_alt"]
+agpt_configs["2b_qknorm"] = agpt_configs["2B_qknorm"]
 
 
 def model_registry(
