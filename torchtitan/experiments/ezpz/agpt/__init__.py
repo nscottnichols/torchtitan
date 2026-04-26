@@ -175,10 +175,13 @@ def _build_agpt_layers(
     fuse_qkv: bool = False,
     attn_backend: str = "sdpa",
     rope_backend: Literal["complex", "cos_sin"] = "complex",
+    qk_norm: bool = False,
 ) -> list[TransformerBlock.Config]:
     """Build a list of per-layer TransformerBlock configs with depth-scaled inits."""
     inner_attention, mask_type = _ezpz_get_attention_config(attn_backend)
     linear_init = _linear_init(dim)
+    head_dim = dim // n_heads
+    qk_norm_config = RMSNorm.Config(normalized_shape=head_dim) if qk_norm else None
     layers = []
     for layer_id in range(n_layers):
         layers.append(
@@ -197,6 +200,7 @@ def _build_agpt_layers(
                     fuse_qkv=fuse_qkv,
                     mask_type=mask_type,
                     rope_backend=rope_backend,
+                    qk_norm=qk_norm_config,
                 ),
                 feed_forward=make_ffn_config(
                     dim=dim,
@@ -223,6 +227,7 @@ def _build_agpt_config(
     rope_backend: Literal["complex", "cos_sin"] = "complex",
     scaling: Literal["none", "llama", "yarn"] = "none",
     max_seq_len: int = 131072,
+    qk_norm: bool = False,
 ) -> Llama3Model.Config:
     return Llama3Model.Config(
         dim=dim,
@@ -252,6 +257,7 @@ def _build_agpt_config(
             fuse_qkv=fuse_qkv,
             attn_backend=attn_backend,
             rope_backend=rope_backend,
+            qk_norm=qk_norm,
         ),
     )
 
@@ -294,6 +300,16 @@ agpt_configs = {
         rope_theta=50000,
         vocab_size=256128,
         hidden_dim=11008,
+    ),
+    "2B_qknorm": _build_agpt_config(
+        dim=2048,
+        n_layers=12,
+        n_heads=16,
+        n_kv_heads=4,
+        rope_theta=50000,
+        vocab_size=256128,
+        hidden_dim=11008,
+        qk_norm=True,
     ),
     "2B_flex_attn": _build_agpt_config(
         dim=2048,
