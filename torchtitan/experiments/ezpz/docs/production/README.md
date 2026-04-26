@@ -26,13 +26,16 @@ Full-scale production training of AuroraGPT models on the
 
 | Run | Model | Nodes | Optimizer | LR | Compile | Steps Done | Loss | Status |
 |-----|-------|-------|-----------|------|---------|------------|------|--------|
-| [2B-256N](agpt/2b/) | 2B | 256 | SophiaG | 2.28e-5 | on | 12435+ | 5.76 | **Running** |
+| [2B-256N](agpt/2b/) | 2B | 256 | SophiaG | 2.28e-5 | on | 16,900+ | 5.73 | **Running** |
 | [2B-512N](agpt/2b/) | 2B | 512 | SophiaG | 2.28e-5 | off | 0 | — | Segfault |
-| [20B-256N](agpt/20b/) | 20B | 256 | SophiaG | 2.28e-5 | on | 1739+ | 5.17 | **Running** |
+| [2B-512N](agpt/2b/) | 2B | 512 | SophiaG | 2.28e-5 | — | — | — | Queued (torch 2.13) |
+| [20B-256N](agpt/20b/) | 20B | 256 | SophiaG | 2.28e-5 | on | 2,375+ | 4.88 | **Running** |
 | [20B-512N](agpt/20b/) | 20B | 512 | SophiaG | 2.28e-5 | on | 458 | 7.09 | Segfault |
+| [20B-512N](agpt/20b/) | 20B | 512 | SophiaG | 2.28e-5 | — | — | — | Queued (torch 2.13) |
 | [80B-256N](agpt/80b/) | 80B | 256 | AdamW | 1.1e-5 | on | 777 | NaN | NaN@138 (killed) |
-| [80B-256N](agpt/80b/) | 80B | 256 | AdamW | 1e-6 | on | 51 | 12.91 | Stable (walltime) |
+| [80B-256N](agpt/80b/) | 80B | 256 | AdamW | 1e-6 | on | 51 | 12.91 | Crashed (bad node) |
 | [80B-512N](agpt/80b/) | 80B | 512 | AdamW | 1.1e-5 | off | 495 | NaN | NaN@15 (killed) |
+| [80B-512N](agpt/80b/) | 80B | 512 | AdamW | 1e-6 | — | — | — | Queued (torch 2.13) |
 
 ### MoE
 
@@ -55,3 +58,6 @@ Full-scale production training of AuroraGPT models on the
    continuation attempt.
 5. **Compile time at 256N** — ~7-15 min depending on model size. Eats into
    the 12h walltime.
+6. **80B Gloo timeout on bad nodes** — 80B-256N AdamW LR=1e-6 (8451226)
+   crashed at 11 min during dataloader init with `Gloo connectFullMesh
+   failed ... No route to host`. Transient bad node. Needs resubmit.
