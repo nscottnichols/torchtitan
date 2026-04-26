@@ -5,15 +5,15 @@ Multi-stage Pre-Training for AuroraGPT-{2, 20}B dense models using saforem2/torc
 - W\&B Report:
   [**Pre-Training AuroraGPT-20B with TorchTitan**](https://api.wandb.ai/links/aurora_gpt/ibv5q8u0)
 - Training Scripts:
-  - AuroraGPT-2B: [submit_agpt_2B.sh](../submit_agpt_2b.sh)
-  - AuroraGPT-20B: [submit_agpt_20B.sh](../submit_agpt_20b.sh)
+  - AuroraGPT-2B: [submit_agpt_2B.sh](../../submit_agpt_2b.sh)
+  - AuroraGPT-20B: [submit_agpt_20B.sh](../../submit_agpt_20b.sh)
 
 ## Training Configs
 
 - Model implementations:
-  [torchtitan/experiments/ezpz/agpt/__init__.py](../agpt/__init__.py)
+  [torchtitan/experiments/ezpz/agpt/__init__.py](../../agpt/__init__.py)
 - Training Configs:
-  [torchtitan/experiments/ezpz/agpt/config_registry.py](../agpt/config_registry.py)
+  [torchtitan/experiments/ezpz/agpt/config_registry.py](../../agpt/config_registry.py)
 
 |                       | AGPT-2B           | AGPT-20B          |
 |-----------------------|-------------------|-------------------|

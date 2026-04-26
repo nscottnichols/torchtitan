@@ -56,7 +56,7 @@ Sunspot slightly outperforms Aurora on small models (debugmodel, 2b) and matches
 
 ## Scaling Study (1–64 nodes)
 
-See [scaling/](../../scaling/) for the full weak scaling analysis across 1–64 nodes on Sunspot.
+See [scaling/](../../../scaling/) for the full weak scaling analysis across 1–64 nodes on Sunspot.
 
 | Model    | 1N TPS | 64N TPS | Weak Scaling Efficiency |
 |----------|--------|---------|------------------------|
