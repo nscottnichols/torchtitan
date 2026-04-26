@@ -1,5 +1,61 @@
 # TODO
 
+## 1. Docs Restructure
+
+### Problem
+Scaling results, benchmarks, and throughput data are scattered across
+`docs/benchmarks.md`, `docs/benchmark-80B.md`, `docs/scaling-study.md`,
+`docs/scaling-study-torch213.md`, `docs/production-training/scaling-performance.md`,
+and per-experiment logs in `docs/experiments/{agpt,moe}/{aurora,sunspot,polaris}/`.
+Finding the latest numbers for a given model/machine requires checking 5+ files.
+
+### Proposed structure
+```
+docs/
+├── README.md                          # overview + links
+├── configs/
+│   ├── dense.md                       # agpt model configs (from dense-configs.md)
+│   └── moe.md                         # moe model configs (from moe-configs.md)
+├── guides/
+│   ├── running-with-newer-pytorch.md
+│   └── known-issues.md
+├── scaling/
+│   ├── README.md                      # consolidated scaling summary table
+│   ├── agpt-2b.md                     # all 2B results across machines/torch versions
+│   ├── agpt-20b.md
+│   ├── agpt-80b.md                    # merge benchmark-80B.md + throughput leaderboard
+│   └── moe-7b.md
+├── production/
+│   └── scaling-performance.md         # production run tracker
+└── experiments/                       # raw per-run logs (unchanged)
+    ├── agpt/{aurora,sunspot,polaris}/
+    └── moe/{aurora,sunspot}/
+```
+
+### Key changes
+- `scaling/README.md` becomes the single place to find latest numbers
+  for any model/machine/torch version, with links to raw experiment logs
+- `configs/` and `guides/` consolidate reference material
+- Top-level clutter (`benchmarks.md`, `scaling-study.md`, etc.) moves
+  into the appropriate subdirectory
+- `experiments/` stays as-is (raw per-run logs)
+
+## 2. 80B compile + AC on torch 2.13
+
+### Problem
+80B TP=2 with compile + activation checkpointing crashes on torch 2.13
+with `AssertionError: expected all tensors_saved_with_vc_check to be Tensors,
+got types: [..., DeviceMesh]`. The AOT autograd tracer saves DeviceMesh
+objects from DTensor-parallelized modules into the autograd graph, and
+the AC version check rejects non-Tensor objects.
+
+### Status
+- Not patchable from our side — the DeviceMesh is structurally embedded
+  in the autograd saved state
+- Workaround: use `--compile.no-enable` on torch 2.13 (49 tflops / 16.4% MFU)
+- The 80B works with compile on torch 2.10 + IPEX (22.5 tflops / 7.5% MFU)
+- Needs upstream PyTorch fix in `torch/_functorch/_aot_autograd/runtime_wrappers.py`
+
 ## 3. MoE Throughput Optimization
 
 ### Problem

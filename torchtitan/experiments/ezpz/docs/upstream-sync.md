@@ -20,6 +20,71 @@ was required in ezpz.
 
 ---
 
+## 2026-04-25 (19th sync)
+
+**Upstream commits:**
+
+- `bfc2914b` — Use `current_accelerator` for device in AutoParallel calls to enable XPU (#3092)
+- `eb518a1d` — Add fused QKV support to Qwen3-VL state_dict_adapter (#3102)
+- `42b73643` — Fix SAC test compatibility with PyTorch indexed storage (#3098)
+- + 11 more (GraphTrainer CPU offload, CI, ROCm)
+
+**Changes required in ezpz:** None. Clean merge.
+
+---
+
+## 2026-04-24 (18th sync — torch 2.10 XCCL fixes + DTensor TP revert)
+
+**Context:** Investigating and fixing training hangs on torch 2.10
+(`aurora_frameworks-2025.3.1`) with the XCCL backend. Also fixing
+80B TP=2 regression on both torch 2.10 and 2.13.
+
+**Root causes identified:**
+
+1. **Blendcorpus barrier hang (torch 2.10):** The XCCL C++ backend
+   ignores `opts.device` for `barrier()` operations, defaulting all
+   ranks to device 0. This causes hangs during blendcorpus dataset
+   building which uses `barrier(group=mpu.get_data_parallel_group())`.
+
+2. **TP=2 forward pass hang (torch 2.10):** Removing the IPEX import
+   (`import intel_extension_for_pytorch`) in the 17th sync broke TP
+   collectives on torch ≤2.10, because IPEX provides XPU operator
+   overrides that the XCCL backend relies on.
+
+3. **80B AC + compile crash (torch 2.13):** The `use_local_output=False`
+   DTensor TP change (`fc3880c5`) causes `DeviceMesh` objects to leak
+   into the AOT autograd saved state, triggering
+   `AssertionError: expected all tensors_saved_with_vc_check to be Tensors`.
+   This is a PyTorch bug — AC's version check doesn't handle non-Tensor
+   objects from DTensor-parallelized modules.
+
+**Changes required in ezpz:**
+
+| File | Change | Commit |
+|------|--------|--------|
+| `blendcorpus/blendcorpus_builder.py` | Gloo barrier workaround: temporarily replace `dist.barrier` with a CPU-side gloo barrier during dataset building when `bound_device_id` is None | `312045b3` |
+| `train.py` | Re-enable IPEX import gated on `torch.__version__ < "2.11"` | `312045b3` |
+| `agpt/parallelize.py` | **Revert** `fc3880c5`: restore `use_local_output=enable_sp` (pre-DTensor-TP default). The full DTensor TP requires a newer torch that handles DeviceMesh in AC autograd context. | `8e9ebc23` |
+
+**Verified on Sunspot (2 nodes, 24 XPU tiles):**
+
+| Config | torch 2.10 | torch 2.13 |
+|--------|-----------|-----------|
+| agpt_2b (TP=1) | PASS | PASS |
+| agpt_20b (TP=1) | PASS | PASS |
+| agpt_80b (TP=2, compile) | PASS (22.5 tflops) | PASS w/o compile (49 tflops) |
+| moe_7b | PASS | PASS |
+
+**80B status by torch version:**
+
+| Torch | Compile | AC | Result |
+|-------|---------|-----|--------|
+| 2.10 | ON | full | PASS (with IPEX, 22.5 tflops, 7.5% MFU) |
+| 2.13 | OFF | full | PASS (49 tflops, 16.4% MFU) |
+| 2.13 | ON | full | FAIL (DeviceMesh in AOT autograd — upstream bug) |
+
+---
+
 ## 2026-04-23 (17th sync)
 
 **Upstream commits:**
@@ -42,6 +107,7 @@ was required in ezpz.
 | File | Change | Commit |
 |------|--------|--------|
 | `agpt/parallelize.py` | Replay `use_local_output=False` for embed, norm, rowwise plans | `fc3880c5` |
+| `agpt/parallelize.py` | **Reverted in 18th sync** — causes hangs on torch 2.10 and AC crash on 2.13 | `8e9ebc23` |
 
 ---
 
