@@ -136,6 +136,13 @@ class SoftcappedScaledDotProductAttention(EzpzScaledDotProductAttention):
         q, k, v = q.transpose(1, 2), k.transpose(1, 2), v.transpose(1, 2)
         if scale is None:
             scale = q.shape[-1] ** -0.5
+        # Handle GQA: expand KV heads to match query heads
+        n_heads_q = q.shape[1]
+        n_heads_kv = k.shape[1]
+        if n_heads_q != n_heads_kv:
+            n_rep = n_heads_q // n_heads_kv
+            k = k.repeat_interleave(n_rep, dim=1)
+            v = v.repeat_interleave(n_rep, dim=1)
         # Manual attention with logit capping
         scores = torch.matmul(q, k.transpose(-2, -1)) * scale
         # Softcap: cap * tanh(scores / cap)
