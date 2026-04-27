@@ -112,6 +112,26 @@ qsub -l select=2 -N speedrun_2b_muon -v CONFIG=speedrun_2b_muon \
     torchtitan/experiments/ezpz/competition/submit_run.sh
 ```
 
+## Full Training Results (10B tokens, 8 nodes)
+
+Local FineWeb-Edu, LBS=2, GAS=2, GBS=384, seq_len=8192, cosine WSD, ~3,178 steps.
+
+| Rank | Config | Loss | TPS/GPU |
+|------|--------|------|---------|
+| **1** | **`full_2b_adamw`** | **2.711** | 7,354 |
+| 2 | `full_2b_adamw_qknorm` | 2.720 | 7,480 |
+| 3 | `full_2b_mano_qknorm` | 2.854 | 7,346 |
+| 4 | `full_2b_mano` | 2.875 | 7,429 |
+| 5 | `full_2b_muon` | DNF | — (stuck compiling) |
+
+### Findings at 10B Scale
+
+- **AdamW wins at large batch** — simpler update is more efficient at GBS=384
+- **QK-Norm effect diminishes** — 0.009 for AdamW (vs 0.23 in speedruns)
+- **Mano ~0.16 behind AdamW** — needs LR re-tuning at larger batch
+- **Muon compile broken** with GAS on this torch version
+- **8-node scaling excellent** — ~7,300-7,500 TPS/GPU across all configs
+
 ## Ideas to Try Next
 
 - **TorchMuon + QK-Norm** — combine built-in Muon speed with best architecture tweak
