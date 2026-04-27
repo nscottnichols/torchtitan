@@ -425,3 +425,108 @@ def full_2b_mano_qknorm():
     cfg.optimizer = ManoOptimizersContainer.Config(lr=3.0e-4)
     cfg.checkpoint.folder = "checkpoints/full_2b_mano_qknorm"
     return cfg
+
+
+# ---- Round 4: 2-node speedrun with GAS=8, local dataset ----
+#
+# 2 nodes = 24 tiles, LBS=2, GAS=8 → GBS=384
+# 1000 steps × 384 × 8192 = 3.15B tokens
+# ~5 hours at AdamW speed (~7,200 TPS/GPU)
+# Uses local FineWeb-Edu (reproducible, no HF rate limits)
+
+TILES_2N = 24
+GAS_R4 = 8
+
+
+def _r4_base(variant: str = "2b"):
+    """Round 4 base: 2 nodes, GAS=8, local dataset, cosine WSD, no checkpoints."""
+    gbs = TILES_2N * LOCAL_BATCH_SIZE * GAS_R4
+
+    cfg = agpt(
+        variant,
+        local_batch_size=LOCAL_BATCH_SIZE,
+        activation_checkpoint_mode="none",
+        seq_len=SEQ_LEN,
+        compile=True,
+        checkpoint_interval=STEPS,
+    )
+
+    cfg.dataloader.dataset = DATASET_LOCAL
+    cfg.dataloader.dataset_path = None
+    cfg.training.steps = STEPS
+    cfg.training.global_batch_size = gbs
+    cfg.checkpoint.enable = False
+
+    # Cosine WSD (best schedule from earlier rounds)
+    cfg.lr_scheduler.warmup_steps = 20
+    cfg.lr_scheduler.decay_ratio = 0.2
+    cfg.lr_scheduler.decay_type = "cosine"
+    cfg.lr_scheduler.min_lr_factor = 0.0
+
+    return cfg
+
+
+def r4_adamw():
+    """AdamW baseline — GAS=8, local dataset."""
+    cfg = _r4_base()
+    cfg.optimizer.lr = 1.3e-3
+    return cfg
+
+
+def r4_adamw_qknorm():
+    """AdamW + QK-Norm — best wall-clock config from speedruns."""
+    cfg = _r4_base("2b_qknorm")
+    cfg.optimizer.lr = 1.3e-3
+    return cfg
+
+
+def r4_mano():
+    """Mano — fast manifold optimizer."""
+    cfg = _r4_base()
+    cfg.optimizer = ManoOptimizersContainer.Config(lr=3.0e-4)
+    return cfg
+
+
+def r4_mano_qknorm():
+    """Mano + QK-Norm."""
+    cfg = _r4_base("2b_qknorm")
+    cfg.optimizer = ManoOptimizersContainer.Config(lr=3.0e-4)
+    return cfg
+
+
+def r4_adamw_softcap():
+    """AdamW + logit softcapping (FlexAttention). Slow but tests convergence."""
+    cfg = _r4_base("2b_softcap")
+    cfg.optimizer.lr = 1.3e-3
+    return cfg
+
+
+def r4_adamw_qknorm_softcap():
+    """AdamW + QK-Norm + softcap — best speedrun tweak + softcap."""
+    cfg = _r4_base("2b_kitchen_sink")
+    # kitchen_sink has QK-Norm + softcap + ReLU² — but ReLU² hurt,
+    # so let's use a new variant without it
+    # For now just use kitchen_sink since we don't have a qknorm+softcap-only variant
+    cfg.optimizer.lr = 1.3e-3
+    return cfg
+
+
+def r4_adamw_higher_lr():
+    """AdamW with sqrt-scaled LR for GBS=384 (vs GBS=48 baseline).
+
+    Linear scaling rule: LR_new = LR_base * sqrt(GBS_new / GBS_base)
+    = 1.3e-3 * sqrt(384/48) = 1.3e-3 * 2.83 = 3.7e-3
+    """
+    cfg = _r4_base()
+    cfg.optimizer.lr = 3.7e-3
+    return cfg
+
+
+def r4_mano_higher_lr():
+    """Mano with sqrt-scaled LR for GBS=384.
+
+    LR_new = 3.0e-4 * sqrt(384/48) = 8.5e-4
+    """
+    cfg = _r4_base()
+    cfg.optimizer = ManoOptimizersContainer.Config(lr=8.5e-4)
+    return cfg
