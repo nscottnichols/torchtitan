@@ -141,6 +141,48 @@ class MuonClipOptimizersContainer(MuonOptimizersContainer):
         return base
 
 
+class _CompositeOptimizer(torch.optim.Optimizer):
+    """Wraps multiple optimizers into a single Optimizer interface.
+
+    Needed because OptimizersContainer expects one optimizer per model part,
+    but torch.optim.Muon only handles 2D params (need a separate AdamW for
+    embeddings/head).
+    """
+
+    def __init__(self, optimizers: list[torch.optim.Optimizer]):
+        self._optimizers = optimizers
+        # Collect all param groups for the Optimizer base class
+        all_groups = []
+        for opt in optimizers:
+            all_groups.extend(opt.param_groups)
+        # Initialize with empty defaults — param_groups are already set up
+        super().__init__([], {})
+        self.param_groups = all_groups
+        # Merge state dicts
+        self.state = {}
+        for opt in optimizers:
+            self.state.update(opt.state)
+
+    def step(self, closure=None):
+        loss = None
+        for opt in self._optimizers:
+            result = opt.step(closure)
+            if result is not None:
+                loss = result
+        return loss
+
+    def zero_grad(self, *args, **kwargs):
+        for opt in self._optimizers:
+            opt.zero_grad(*args, **kwargs)
+
+    def state_dict(self):
+        return {"optimizers": [opt.state_dict() for opt in self._optimizers]}
+
+    def load_state_dict(self, state_dict):
+        for opt, sd in zip(self._optimizers, state_dict["optimizers"]):
+            opt.load_state_dict(sd)
+
+
 class TorchMuonOptimizersContainer(OptimizersContainer):
     """Uses torch.optim.Muon (built-in, optimized) for 2D hidden layers
     and torch.optim.AdamW for embeddings/head/1D params.
@@ -155,7 +197,6 @@ class TorchMuonOptimizersContainer(OptimizersContainer):
         momentum: float = 0.95
         nesterov: bool = True
         ns_steps: int = 5
-        # AdamW params for non-2D layers
         adamw_lr_factor: float = 1.0
 
     def __init__(self, config: Config, *, model_parts: list[nn.Module]) -> None:
@@ -176,27 +217,26 @@ class TorchMuonOptimizersContainer(OptimizersContainer):
                 else:
                     adamw_params.append(p)
 
+            inner_opts = []
             if muon_params:
-                muon_opt = torch.optim.Muon(
+                inner_opts.append(torch.optim.Muon(
                     muon_params,
                     lr=config.lr,
                     weight_decay=config.weight_decay,
                     momentum=config.momentum,
                     nesterov=config.nesterov,
                     ns_steps=config.ns_steps,
-                )
-                self.optimizers.append(muon_opt)
-
+                ))
             if adamw_params:
-                adamw_opt = torch.optim.AdamW(
+                inner_opts.append(torch.optim.AdamW(
                     adamw_params,
                     lr=config.lr * config.adamw_lr_factor,
                     weight_decay=config.weight_decay,
                     betas=(config.beta1, config.beta2),
                     eps=config.eps,
-                )
-                self.optimizers.append(adamw_opt)
+                ))
 
+            self.optimizers.append(_CompositeOptimizer(inner_opts))
             all_params.extend(muon_params)
             all_params.extend(adamw_params)
 
