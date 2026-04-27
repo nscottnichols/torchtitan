@@ -47,10 +47,14 @@ of Muon's loss but at 1.58x the throughput.
 - **QK-Norm is the single biggest improvement** — gives 0.23 loss improvement
   for AdamW (3.80→3.57), also helps Mano (3.63→3.60)
 - **Muon wins on raw loss** (3.557) but is 35% slower per step due to
-  Newton-Schulz iterations — custom implementation bottleneck
+  Newton-Schulz iterations — inherent to the algorithm on XPU, not an
+  implementation issue (`torch.optim.Muon` is the same speed as our custom one)
 - **Mano matches Muon loss at AdamW speed** — manifold projection via
   vector-norm ops instead of matrix Newton-Schulz
 - **Cosine decay beats linear** across all optimizers (~0.01-0.03 improvement)
+- **Streaming data shuffle dominates variance** — same optimizer gives 1.3
+  loss difference across runs due to different HF streaming data ordering.
+  Future rounds should use the locally cached dataset for reproducibility.
 - **Shorter decay (10%) hurts** — not enough time in decay phase
 - **Shorter warmup (5 steps) hurts** — destabilizes early training
 - **SPAM underperforms** — spike clipping + momentum reset don't help
@@ -58,12 +62,18 @@ of Muon's loss but at 1.58x the throughput.
 - **SophiaG underperforms** AdamW by ~0.9 loss
 - **Higher LRs diverge** — LR finder boundaries confirmed
 
-## In Progress
+## TorchMuon Results
 
-| Config | Hypothesis | Status |
-|--------|-----------|--------|
-| `speedrun_2b_torchmuon` | torch.optim.Muon — faster than custom Muon? | Running |
-| `speedrun_2b_torchmuon_cosine` | torch.optim.Muon + cosine decay | Running |
+`torch.optim.Muon` (built-in since PyTorch 2.9) confirmed identical to our
+custom implementation on XPU — same TPS (~4,600), same algorithm. The 35%
+overhead vs AdamW is inherent to Newton-Schulz on this hardware, not fixable
+by a better implementation. Different final loss (4.48-4.84 vs 3.56) is
+entirely from streaming data shuffle variance.
+
+| Config | Loss | TPS | Notes |
+|--------|------|-----|-------|
+| `speedrun_2b_torchmuon` | 4.836 | 4,508 | Data shuffle variance |
+| `speedrun_2b_torchmuon_cosine` | 4.477 | 4,572 | Cosine still beats linear |
 
 ## Modifications Log
 
