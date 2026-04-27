@@ -160,15 +160,18 @@ Auto-registered at runtime via `datasets.py`. No core changes needed.
 **Caution:** Submitting many streaming jobs simultaneously hits HF rate limits
 (1000 API requests / 5 min). Stagger submissions or cache locally.
 
-## Competition (agpt_2b speedrun)
+## Competitions
 
-**Goal:** Lowest loss in 1000 steps on 2 nodes.
-**Fixed:** FineWeb-Edu, LBS=2, seq_len=8192.
-**Tracking:** `docs/competition/README.md`
+**Tracking:** `docs/competitions/`
 **W&B:** https://api.wandb.ai/links/aurora_gpt/hda3milo
 
-Current leader: Muon (custom) at 3.557, Mano at 3.631.
-TorchMuon integration in progress.
+| Competition | Winner | Loss |
+|-------------|--------|------|
+| 1000 steps, 2N, GBS=48 | Muon 3.557 / AdamW+QK-Norm 3.569 | 3.557 |
+| 10B tokens, 8N, GBS=384 | AdamW 2.711 | 2.711 |
+| 1000 steps, 2N, GAS=8, GBS=384 | AdamW+QK-Norm 3.205 | 3.205 |
+
+**Key pattern:** Mano/Muon win short runs, AdamW wins in cosine decay phase.
 
 ## Common Pitfalls
 

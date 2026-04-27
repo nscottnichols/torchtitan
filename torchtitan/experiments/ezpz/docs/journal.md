@@ -60,11 +60,56 @@ Running log of what's happening, session by session. Most recent first.
   in Newton-Schulz with gradient accumulation on torch 2.13
 - **8-node scaling excellent** — 7,300-7,500 TPS/GPU across all configs
 
+### Architecture Tweaks Implemented
+
+- **Logit softcapping** — `SoftcappedFlexAttention` using FlexAttention
+  `score_mod` with tanh cap at 30.0. Falls back to eager on XPU (4x slower).
+  Manual attention OOMs at seq_len=8192 (materializes full attention matrix).
+- **ReLU²** — `ReLUSquaredFeedForward` subclass. Didn't help (3.92 vs 3.80
+  baseline). SiLU gating is better for this architecture.
+- **WSM** — `eval/merge_checkpoints.py` utility for weighted state merging
+  of checkpoints. Supports uniform, linear, and exponential weighting.
+- New model variants: `2B_softcap`, `2B_relu2`, `2B_kitchen_sink`
+
+### Round 4: 2N, GAS=8, 1000 steps (local dataset)
+
+Reproducible speedrun with GBS=384 on 2 nodes using local FineWeb-Edu.
+
+| Rank | Config | Loss | TPS/GPU |
+|------|--------|------|---------|
+| 1 | AdamW+QK-Norm | **3.205** | 7,428 |
+| 2 | AdamW | 3.220 | 7,397 |
+| 3 | Mano | 3.294 | 7,397 |
+| 4 | Mano+QK-Norm | 3.307 | 7,423 |
+| 5 | Mano (8.5e-4) | 3.328 | 7,348 |
+| 6 | AdamW (3.7e-3) | 5.884 | 7,603 |
+
+**Key findings:**
+- AdamW+QK-Norm wins again — consistent across all GBS=384 experiments
+- Mano leads early/mid training but AdamW catches up in cosine decay phase
+- sqrt LR scaling too aggressive for AdamW (diverged), Mano tolerated it
+- Softcap results invalid — local dataset loader memorizes with FlexAttention
+  path (data sharding bug)
+- FlexAttention on XPU falls back to eager (Triton-XPU can't codegen tanh)
+  — 4x throughput penalty makes softcap impractical on this hardware
+
+### Docs Restructure
+
+- Reorganized `docs/competition/` → `docs/competitions/` with per-experiment dirs
+- Added light/dark theme loss curve plots using `<picture>` media queries
+- Created `docs/competitions/agpt2b-n2-gas8-1000steps/` with live loss curves
+
+### Upstream Sync (20th)
+
+- Merged upstream: dataset checkpoint resume fix (#3008), RL refactor (#3073)
+- Clean merge, no replay needed
+
 ### CLAUDE.md Added
 
 - Created `experiments/ezpz/.claude/CLAUDE.md` with project rules that
   travel with the codebase (upstream sync protocol, never modify outside
   ezpz, document every run, etc.)
+- Updated with Aurora-specific knowledge (queues, yeet-env scaling, eval pipeline)
 
 ---
 
