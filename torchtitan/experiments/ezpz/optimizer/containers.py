@@ -151,17 +151,14 @@ class _CompositeOptimizer(torch.optim.Optimizer):
     """
 
     def __init__(self, optimizers: list[torch.optim.Optimizer]):
+        # Skip Optimizer.__init__ — it rejects empty param lists.
+        # We manage param_groups and state via the inner optimizers.
         self._optimizers = optimizers
-        # Collect all param groups for the Optimizer base class
-        all_groups = []
-        for opt in optimizers:
-            all_groups.extend(opt.param_groups)
-        # Initialize with empty defaults — param_groups are already set up
-        super().__init__([], {})
-        self.param_groups = all_groups
-        # Merge state dicts
+        self.defaults = {}
         self.state = {}
+        self.param_groups = []
         for opt in optimizers:
+            self.param_groups.extend(opt.param_groups)
             self.state.update(opt.state)
 
     def step(self, closure=None):
