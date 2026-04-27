@@ -22,11 +22,11 @@
 
 ## Loss Curves
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="figures/loss_curves_dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="figures/loss_curves_light.png">
-  <img alt="Loss curves" src="figures/loss_curves_light.png">
-</picture>
+![Loss curves](figures/loss_curves.png)
+
+## Training Metrics
+
+![Training metrics](figures/metrics.png)
 
 ## Results
 
