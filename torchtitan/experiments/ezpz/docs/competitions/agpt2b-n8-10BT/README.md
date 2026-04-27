@@ -30,7 +30,11 @@ at scale, using the top configs from the
 
 ## Loss Curves
 
-![Loss curves — 10B tokens, 8 nodes](figures/loss_curves_10b.png)
+![Loss curves](figures/loss_curves.png)
+
+## Training Metrics
+
+![Training metrics](figures/metrics.png)
 
 ## Results
 

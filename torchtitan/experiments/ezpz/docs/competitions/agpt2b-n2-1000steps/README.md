@@ -19,7 +19,11 @@
 
 ## Loss Curves
 
-![Speedrun loss curves](figures/loss_curves_speedrun.png)
+![Speedrun loss curves](figures/loss_curves.png)
+
+## Training Metrics
+
+![Training metrics](figures/metrics.png)
 
 ## Leaderboard
 

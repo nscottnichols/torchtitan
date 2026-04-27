@@ -36,6 +36,55 @@ except ImportError:
     import matplotlib.pyplot as plt
 
 
+def compute_wsd_lr_schedule(
+    total_steps: int,
+    peak_lr: float,
+    warmup_steps: int = 20,
+    decay_ratio: float = 0.2,
+    decay_type: str = "cosine",
+    min_lr_factor: float = 0.0,
+) -> list[float]:
+    """Reconstruct the WSD learning rate schedule.
+
+    Args:
+        total_steps: Total training steps.
+        peak_lr: Peak learning rate.
+        warmup_steps: Number of warmup steps.
+        decay_ratio: Fraction of total steps for decay phase.
+        decay_type: "cosine" or "linear".
+        min_lr_factor: Minimum LR as fraction of peak.
+
+    Returns:
+        List of LR values, one per step.
+    """
+    import math
+
+    min_lr = peak_lr * min_lr_factor
+    decay_steps = int(total_steps * decay_ratio)
+    stable_steps = total_steps - warmup_steps - decay_steps
+
+    lrs = []
+    for step in range(total_steps):
+        if step < warmup_steps:
+            # Linear warmup
+            lr = peak_lr * (step + 1) / warmup_steps
+        elif step < warmup_steps + stable_steps:
+            # Stable phase
+            lr = peak_lr
+        else:
+            # Decay phase
+            decay_step = step - warmup_steps - stable_steps
+            progress = decay_step / max(decay_steps - 1, 1)
+            if decay_type == "cosine":
+                lr = min_lr + (peak_lr - min_lr) * 0.5 * (1 + math.cos(math.pi * progress))
+            elif decay_type == "linear":
+                lr = peak_lr + (min_lr - peak_lr) * progress
+            else:
+                lr = peak_lr
+        lrs.append(lr)
+    return lrs
+
+
 METRICS_PATTERNS = {
     "loss": r"loss:\s*([\d.]+)",
     "grad_norm": r"grad_norm:\s*([\d.]+)",
@@ -63,6 +112,11 @@ def load_run_data(
     output_dir: str = ".",
     ema_alpha: float = 0.03,
     grad_norm_alpha: float = 0.05,
+    peak_lr: float | None = None,
+    warmup_steps: int = 20,
+    decay_ratio: float = 0.2,
+    decay_type: str = "cosine",
+    min_lr_factor: float = 0.0,
 ) -> RunData | None:
     """Load training metrics from PBS output files.
 
@@ -116,6 +170,18 @@ def load_run_data(
             ema = alpha * v + (1 - alpha) * ema
             smooth.append(ema)
         smoothed[metric] = smooth
+
+    # Inject reconstructed LR schedule if peak_lr provided
+    if peak_lr is not None:
+        lr_schedule = compute_wsd_lr_schedule(
+            total_steps=max(steps) if steps else 1000,
+            peak_lr=peak_lr,
+            warmup_steps=warmup_steps,
+            decay_ratio=decay_ratio,
+            decay_type=decay_type,
+            min_lr_factor=min_lr_factor,
+        )
+        smoothed["lr"] = [lr_schedule[min(s, len(lr_schedule) - 1)] for s in steps]
 
     return RunData(
         name=config_name,
@@ -191,15 +257,31 @@ def plot_metrics_panel(
 ) -> matplotlib.figure.Figure:
     """Plot a 2x2 panel of training metrics."""
     if metrics is None:
-        metrics = [
-            ("loss", "Loss (EMA)"),
-            ("grad_norm", "Gradient Norm (EMA)"),
-            ("tps", "TPS / GPU"),
-            ("mfu", "MFU (%)"),
-        ]
+        # Check if any run has LR data
+        has_lr = any("lr" in r.metrics for r in runs)
+        if has_lr:
+            metrics = [
+                ("loss", "Loss (EMA)"),
+                ("lr", "Learning Rate"),
+                ("grad_norm", "Gradient Norm (EMA)"),
+                ("tps", "TPS / GPU"),
+                ("mfu", "MFU (%)"),
+            ]
+        else:
+            metrics = [
+                ("loss", "Loss (EMA)"),
+                ("grad_norm", "Gradient Norm (EMA)"),
+                ("tps", "TPS / GPU"),
+                ("mfu", "MFU (%)"),
+            ]
 
+    ncols = 2
+    nrows = (len(metrics) + ncols - 1) // ncols
     colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
-    fig, axes = plt.subplots(2, 2, figsize=(16, 10))
+    fig, axes = plt.subplots(nrows, ncols, figsize=(16, 5 * nrows))
+    # Hide any unused axes
+    for idx in range(len(metrics), nrows * ncols):
+        axes.flat[idx].set_visible(False)
 
     for ax, (metric, ylabel) in zip(axes.flat, metrics):
         for i, run in enumerate(runs):
