@@ -4,6 +4,70 @@ Running log of what's happening, session by session. Most recent first.
 
 ---
 
+## 2026-04-27 — Full 10B training, TorchMuon, local dataset
+
+### Local Dataset Cache
+
+- Downloaded FineWeb-Edu `sample-100BT` (267 GB, 140 parquet files)
+  to `/lus/tegu/projects/datasets/datasets/fineweb-edu-100BT/`
+- Added `register_local_dataset()` to `datasets.py` for parquet/arrow files
+- Registered as `fineweb_edu_local` — eliminates HF streaming rate limits
+  and ensures reproducible data ordering across runs
+
+### TorchMuon Integration
+
+- Added `TorchMuonOptimizersContainer` using `torch.optim.Muon` (built-in
+  since PyTorch 2.9)
+- Required `_CompositeOptimizer` wrapper — `OptimizersContainer` expects one
+  optimizer per model part, but Muon only handles 2D params (need separate
+  AdamW for embeddings/head)
+- Multiple fix iterations: missing `import torch`, empty param list rejection
+  from `Optimizer.__init__`, FSDP empty model parts
+- **Result: same TPS as custom Muon (~4,600)** — Newton-Schulz overhead is
+  inherent to the algorithm on XPU, not an implementation issue
+- **Streaming data shuffle causes ~1.3 loss variance** — same optimizer gives
+  very different loss across runs due to HF streaming data ordering
+
+### Speedrun Competition Final Results (1000 steps, 2 nodes)
+
+| Rank | Config | Loss | TPS/GPU |
+|------|--------|------|---------|
+| 1 | Muon (custom) | **3.557** | 4,556 |
+| 2 | AdamW + QK-Norm | **3.569** | 7,178 |
+| 3 | Muon + cosine | 3.591 | 4,625 |
+| 4 | Mano + QK-Norm | 3.604 | 6,980 |
+| 5 | Mano | 3.631 | 7,048 |
+
+### Full Training (10B tokens, 8 nodes, GBS=384)
+
+| Rank | Config | Loss | TPS/GPU |
+|------|--------|------|---------|
+| 1 | AdamW | **2.711** | 7,354 |
+| 2 | AdamW + QK-Norm | 2.720 | 7,480 |
+| 3 | Mano + QK-Norm | 2.854 | 7,346 |
+| 4 | Mano | 2.875 | 7,429 |
+| 5 | Muon | DNF (compile stuck) | — |
+
+### Key Findings
+
+- **AdamW wins at large batch (GBS=384)** — simpler update more efficient
+  per token than manifold optimizers
+- **QK-Norm effect diminishes at 10B** — 0.009 loss improvement (vs 0.23
+  in 1000-step speedruns). Helps early training but washes out
+- **Mano ~0.16 behind AdamW at GBS=384** — LR finder was tuned at GBS=48,
+  needs re-tuning for larger batch
+- **Muon compile broken with GAS** — inductor can't pickle cyclic objects
+  in Newton-Schulz with gradient accumulation on torch 2.13
+- **8-node scaling excellent** — 7,300-7,500 TPS/GPU across all configs
+
+### CLAUDE.md Added
+
+- Created `experiments/ezpz/.claude/CLAUDE.md` with project rules that
+  travel with the codebase (upstream sync protocol, never modify outside
+  ezpz, document every run, etc.)
+
+---
+
 ## 2026-04-26 — RL refactor, docs reorg, competition launch
 
 ### RL Multi-Task Support
