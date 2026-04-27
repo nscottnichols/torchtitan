@@ -37,17 +37,19 @@
 | 7 | `r4_adamw_softcap` | AdamW+Softcap | 1.3e-3 | — | 1,865 | Running (FlexAttn slow) |
 | 8 | `r4_adamw_qknorm_softcap` | AdamW+QKN+Softcap | 1.3e-3 | — | 1,876 | Running (FlexAttn slow) |
 
-### Early Findings (step ~300)
+### Findings (step ~400)
 
-- **Mano+QK-Norm leads** — 4.685 at step 289, ahead of AdamW (4.929 at step 301)
+- **Mano+QK-Norm leads at 4.23** — 0.34 ahead of AdamW (4.57), gap widening
 - **Mano beats AdamW per-step** at GBS=384 with GAS=8 — reversal from the
-  8-node run where AdamW won (GAS=2)
-- **QK-Norm helps both optimizers** by ~0.04 consistently
-- **sqrt-scaled LR is too aggressive** — AdamW at 3.7e-3 diverging, Mano at
-  8.5e-4 behind base Mano at 3e-4
-- **Softcap (FlexAttention) matches AdamW step-for-step with 4x fewer steps** —
-  4.96 at step 73 vs AdamW 4.93 at step 301. Same loss, 4x fewer optimizer
-  updates, but 4x slower throughput (net wash on wall-clock)
+  8-node run where AdamW won (GAS=2). More gradient accumulation steps may
+  favor manifold optimizers.
+- **QK-Norm helps both optimizers** by ~0.04-0.17 consistently
+- **sqrt-scaled LR is too aggressive** — AdamW at 3.7e-3 fully diverged (5.93),
+  Mano at 8.5e-4 behind base Mano at 3e-4
+- **Softcap is 4-5x more data-efficient** — loss 3.34 at step 99 vs AdamW 4.57
+  at step 404. But 4x slower throughput (FlexAttention on XPU = 1,860 TPS)
+- **ReLU² hurts softcap** — kitchen_sink (QK-Norm + softcap + ReLU²) at 5.47
+  vs softcap-only at 3.34. ReLU² is actively harmful in this combination.
 
 ## Key Questions
 
