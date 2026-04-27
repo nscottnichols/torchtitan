@@ -26,16 +26,16 @@ Full-scale production training of AuroraGPT models on the
 
 | Run | Model | Nodes | Optimizer | LR | Compile | Steps Done | Loss | Status |
 |-----|-------|-------|-----------|------|---------|------------|------|--------|
-| [2B-256N](agpt/2b/) | 2B | 256 | SophiaG | 2.28e-5 | on | 16,900+ | 5.73 | **Running** |
+| [2B-256N](agpt/2b/) | 2B | 256 | SophiaG | 2.28e-5 | on | 17,518+ | 5.73 | **Running** |
 | [2B-512N](agpt/2b/) | 2B | 512 | SophiaG | 2.28e-5 | off | 0 | — | Segfault |
-| [2B-512N](agpt/2b/) | 2B | 512 | SophiaG | 2.28e-5 | — | — | — | Queued (torch 2.13) |
-| [20B-256N](agpt/20b/) | 20B | 256 | SophiaG | 2.28e-5 | on | 2,375+ | 4.88 | **Running** |
+| [2B-512N](agpt/2b/) | 2B | 512 | SophiaG | 2.28e-5 | — | 0 | — | Killed (yeet-env) |
+| [20B-256N](agpt/20b/) | 20B | 256 | SophiaG | 2.28e-5 | on | 2,562 | 4.83 | Complete (walltime) |
 | [20B-512N](agpt/20b/) | 20B | 512 | SophiaG | 2.28e-5 | on | 458 | 7.09 | Segfault |
-| [20B-512N](agpt/20b/) | 20B | 512 | SophiaG | 2.28e-5 | — | — | — | Queued (torch 2.13) |
+| [20B-512N](agpt/20b/) | 20B | 512 | SophiaG | 2.28e-5 | — | 0 | — | Killed (yeet-env) |
 | [80B-256N](agpt/80b/) | 80B | 256 | AdamW | 1.1e-5 | on | 777 | NaN | NaN@138 (killed) |
 | [80B-256N](agpt/80b/) | 80B | 256 | AdamW | 1e-6 | on | 51 | 12.91 | Crashed (bad node) |
 | [80B-512N](agpt/80b/) | 80B | 512 | AdamW | 1.1e-5 | off | 495 | NaN | NaN@15 (killed) |
-| [80B-512N](agpt/80b/) | 80B | 512 | AdamW | 1e-6 | — | — | — | Queued (torch 2.13) |
+| [80B-512N](agpt/80b/) | 80B | 512 | AdamW | 1e-6 | — | 0 | — | Killed (yeet-env) |
 
 ### MoE
 
@@ -61,3 +61,9 @@ Full-scale production training of AuroraGPT models on the
 6. **80B Gloo timeout on bad nodes** — 80B-256N AdamW LR=1e-6 (8451226)
    crashed at 11 min during dataloader init with `Gloo connectFullMesh
    failed ... No route to host`. Transient bad node. Needs resubmit.
+7. **yeet-env saturates flare at 512N** — three concurrent 512N jobs
+   rsyncing the same 8.6GB `.venv` to 1,536 nodes (~13TB total reads)
+   saturated the Lustre filesystem for 2+ hours. Training TPS on co-running
+   256N jobs dropped from ~2,400 to ~30. Even an 8-node job couldn't finish
+   yeet-env in 2h. **Mitigation:** stagger venv submissions, use DAOS, or
+   use tar+broadcast instead of per-node rsync.

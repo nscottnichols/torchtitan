@@ -26,14 +26,18 @@
 |--------|-------|---------------------|---------|-----|--------|--------|
 | 8444122 | 1–1431 | 12.94 → 6.13 | 489 | 1.8% | 47.12 GiB | Complete (walltime) |
 | 8446337 | 1401–9876 | 6.13 → 5.78 | 1,794 | 6.7% | — | Complete (walltime) |
-| 8446338 | 9876–16900+ | 5.78 → 5.73 | 2,280 | 8.6% | 47.02 GiB | **Running** |
-| 8446339 | cont. | — | — | — | — | Held (dep) |
+| 8446338 | 9876–17424 | 5.78 → 5.73 | 2,280 | 8.6% | 47.02 GiB | Complete (walltime) |
+| 8446339 | 17401–17518+ | 5.73 → 5.73 | 761 | 2.9% | 47.02 GiB | **Running** |
 
 **W&B:** [pjanidnw](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/pjanidnw) (job 8444122), [4u9w23p9](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/4u9w23p9) (job 8446337)
 
-**Latest checkpoint:** step-16800
+**Latest checkpoint:** step-17400
 
-**Tokens consumed:** 16900 × 3072 × 8192 = **425.5B tokens** (9.1% of target)
+**Tokens consumed:** 17518 × 3072 × 8192 = **441.1B tokens** (9.4% of target)
+
+**Note:** TPS degraded significantly (2,400 → 40-700) during 8446338/8446339 due to
+concurrent 512N yeet-env copies saturating the flare filesystem. 512N venv jobs were
+killed; throughput is recovering.
 
 ---
 
@@ -64,5 +68,5 @@
 ```
 2B-256N (torch 2.10, LBS=1): 8446337 → 8446338 → 8446339 → 8451750 → 8451752
 2B-512N (torch 2.10, LBS=1): 8446349 → 8446350
-2B-512N (torch 2.13, LBS=2): 8451723 → 8451724
+2B-512N (torch 2.13, LBS=2): 8451723 → 8451724 (killed — yeet-env saturated flare)
 ```

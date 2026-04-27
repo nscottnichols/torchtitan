@@ -26,13 +26,17 @@
 | 8444123 | 100–581 | 11.84 → 7.35 | 248 | 12.4% | 43.95 GiB | Complete (walltime) |
 | 8446340 | 501–1614 | 7.33 → 5.25 | 283 | 14.1% | — | Complete (walltime) |
 | 8446341 | 1614–? | — | — | — | — | Complete |
-| 8446342 | 1601–2375+ | 5.26 → 4.88 | 280 | 14.0% | 44.38 GiB | **Running** |
+| 8446342 | 1601–2562 | 5.26 → 4.83 | 280 | 14.0% | 44.38 GiB | Complete (walltime) |
+| 8451749 | cont. | — | — | — | — | Queued |
 
 **W&B:** [q9oq5huj](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/q9oq5huj) (job 8443212), [pnkaurba](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/pnkaurba) (job 8444123), [lrlv3xsc](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/lrlv3xsc) (job 8446340)
 
-**Latest checkpoint:** step-2300
+**Latest checkpoint:** step-2500
 
-**Tokens consumed:** 2375 × 3072 × 8192 = **59.8B tokens** (1.3% of target)
+**Tokens consumed:** 2562 × 3072 × 8192 = **64.5B tokens** (1.4% of target)
+
+**Note:** TPS degraded to ~30-100 during final 2h due to concurrent 512N yeet-env
+copies saturating the flare filesystem. Effective training time was ~8h of the 12h walltime.
 
 ---
 
@@ -76,5 +80,5 @@
 ```
 20B-256N (torch 2.10, LBS=1): 8446340 → 8446341 → 8446342 → 8451749 → 8451751
 20B-512N (torch 2.10, LBS=1): 8446343 → 8446344
-20B-512N (torch 2.13, LBS=2): 8451725 → 8451726
+20B-512N (torch 2.13, LBS=2): 8451725 → 8451726 (killed — yeet-env saturated flare)
 ```
