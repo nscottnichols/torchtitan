@@ -284,6 +284,58 @@ def speedrun_2b_torchmuon_cosine():
     return cfg
 
 
+# ---- Architecture tweak speedruns (round 3) ----
+
+
+def _speedrun_variant_base(variant: str):
+    """Base speedrun using a model variant (softcap, relu2, kitchen_sink)."""
+    cfg = agpt(
+        variant,
+        local_batch_size=LOCAL_BATCH_SIZE,
+        activation_checkpoint_mode="none",
+        seq_len=SEQ_LEN,
+        compile=True,
+        checkpoint_interval=STEPS,
+    )
+    cfg.dataloader.dataset = DATASET_LOCAL
+    cfg.dataloader.dataset_path = None
+    cfg.training.steps = STEPS
+    cfg.checkpoint.enable = False
+    cfg.lr_scheduler.warmup_steps = 20
+    cfg.lr_scheduler.decay_ratio = 0.2
+    cfg.lr_scheduler.decay_type = "cosine"
+    cfg.lr_scheduler.min_lr_factor = 0.0
+    return cfg
+
+
+def speedrun_2b_softcap():
+    """AdamW + logit softcapping at 30.0 (Gemma 2 style)."""
+    cfg = _speedrun_variant_base("2b_softcap")
+    cfg.optimizer.lr = 1.3e-3
+    return cfg
+
+
+def speedrun_2b_relu2():
+    """AdamW + ReLU-squared activation in FFN (NanoGPT speedrun)."""
+    cfg = _speedrun_variant_base("2b_relu2")
+    cfg.optimizer.lr = 1.3e-3
+    return cfg
+
+
+def speedrun_2b_kitchen_sink():
+    """QK-Norm + logit softcap + ReLU² — everything combined."""
+    cfg = _speedrun_variant_base("2b_kitchen_sink")
+    cfg.optimizer.lr = 1.3e-3
+    return cfg
+
+
+def speedrun_2b_mano_kitchen_sink():
+    """Mano + QK-Norm + logit softcap + ReLU² — best optimizer + all tweaks."""
+    cfg = _speedrun_variant_base("2b_kitchen_sink")
+    cfg.optimizer = ManoOptimizersContainer.Config(lr=3.0e-4)
+    return cfg
+
+
 # ---- Full training configs (10B tokens, 8 nodes, local dataset) ----
 #
 # 8 nodes = 96 tiles, LBS=2, GAS=2 → GBS=384

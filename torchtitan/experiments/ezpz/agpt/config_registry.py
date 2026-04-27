@@ -321,4 +321,8 @@ from torchtitan.experiments.ezpz.competition.configs import (  # noqa: E402, F40
     full_2b_mano,
     full_2b_mano_qknorm,
     full_2b_muon,
+    speedrun_2b_kitchen_sink,
+    speedrun_2b_mano_kitchen_sink,
+    speedrun_2b_relu2,
+    speedrun_2b_softcap,
 )

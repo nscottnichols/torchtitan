@@ -95,7 +95,73 @@ class XPUScaledDotProductAttention(EzpzScaledDotProductAttention):
     ]
 
 
+from torchtitan.models.common.feed_forward import FeedForward
+from torchtitan.models.common.linear import Linear
 from torchtitan.models.common.config_utils import make_ffn_config, make_gqa_config
+
+
+# ---------------------------------------------------------------------------
+# Architecture tweaks for competition
+# ---------------------------------------------------------------------------
+
+
+class SoftcappedScaledDotProductAttention(EzpzScaledDotProductAttention):
+    """SDPA with logit softcapping before softmax (Gemma 2 style).
+
+    Caps attention logits at a configurable value (default 30.0) using
+    tanh softcapping: logits = cap * tanh(logits / cap). This prevents
+    attention entropy collapse in early training.
+    """
+
+    @dataclass(kw_only=True, slots=True)
+    class Config(EzpzScaledDotProductAttention.Config):
+        logit_cap: float = 30.0
+
+    def __init__(self, config: Config):
+        super().__init__(config)
+        self.logit_cap = config.logit_cap
+
+    # pyrefly: ignore [bad-override]
+    def forward(
+        self,
+        q: torch.Tensor,
+        k: torch.Tensor,
+        v: torch.Tensor,
+        *,
+        scale: float | None = None,
+        enable_gqa: bool = False,
+        is_causal: bool = True,
+        **kwargs,
+    ) -> torch.Tensor:
+        q, k, v = q.transpose(1, 2), k.transpose(1, 2), v.transpose(1, 2)
+        if scale is None:
+            scale = q.shape[-1] ** -0.5
+        # Manual attention with logit capping
+        scores = torch.matmul(q, k.transpose(-2, -1)) * scale
+        # Softcap: cap * tanh(scores / cap)
+        scores = self.logit_cap * torch.tanh(scores / self.logit_cap)
+        if is_causal:
+            L, S = scores.shape[-2], scores.shape[-1]
+            mask = torch.triu(
+                torch.ones(L, S, dtype=torch.bool, device=scores.device),
+                diagonal=1,
+            )
+            scores.masked_fill_(mask, float("-inf"))
+        attn = F.softmax(scores, dim=-1, dtype=torch.float32).to(q.dtype)
+        out = torch.matmul(attn, v)
+        return out.transpose(1, 2)
+
+
+class ReLUSquaredFeedForward(FeedForward):
+    """FFN with ReLU-squared activation instead of SiLU.
+
+    ReLU²(x) = max(0, x)². Used in NanoGPT speedrun entries for faster
+    convergence. The squared activation creates sharper sparsity patterns.
+    """
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        h = F.relu(self.w1(x))
+        return self.w2(h * h * self.w3(x))
 from torchtitan.models.common.param_init import depth_scaled_std
 from torchtitan.models.llama3.model import Llama3Model, Llama3TransformerBlock
 from torchtitan.models.llama3.state_dict_adapter import Llama3StateDictAdapter
@@ -176,14 +242,44 @@ def _build_agpt_layers(
     attn_backend: str = "sdpa",
     rope_backend: Literal["complex", "cos_sin"] = "complex",
     qk_norm: bool = False,
+    logit_softcap: float | None = None,
+    relu_squared: bool = False,
 ) -> list[TransformerBlock.Config]:
     """Build a list of per-layer TransformerBlock configs with depth-scaled inits."""
-    inner_attention, mask_type = _ezpz_get_attention_config(attn_backend)
+    if logit_softcap is not None:
+        inner_attention = SoftcappedScaledDotProductAttention.Config(
+            logit_cap=logit_softcap,
+        )
+        mask_type = "causal"
+    else:
+        inner_attention, mask_type = _ezpz_get_attention_config(attn_backend)
     linear_init = _linear_init(dim)
     head_dim = dim // n_heads
     qk_norm_config = RMSNorm.Config(normalized_shape=head_dim, param_init=_NORM_INIT) if qk_norm else None
     layers = []
     for layer_id in range(n_layers):
+        if relu_squared:
+            ffn_config = ReLUSquaredFeedForward.Config(
+                w1=Linear.Config(
+                    in_features=dim, out_features=hidden_dim,
+                    param_init=linear_init,
+                ),
+                w2=Linear.Config(
+                    in_features=hidden_dim, out_features=dim,
+                    param_init=_depth_init(dim, layer_id),
+                ),
+                w3=Linear.Config(
+                    in_features=dim, out_features=hidden_dim,
+                    param_init=_depth_init(dim, layer_id),
+                ),
+            )
+        else:
+            ffn_config = make_ffn_config(
+                dim=dim,
+                hidden_dim=hidden_dim,
+                w1_param_init=linear_init,
+                w2w3_param_init=_depth_init(dim, layer_id),
+            )
         layers.append(
             Llama3TransformerBlock.Config(
                 attention_norm=RMSNorm.Config(
@@ -202,12 +298,7 @@ def _build_agpt_layers(
                     rope_backend=rope_backend,
                     qk_norm=qk_norm_config,
                 ),
-                feed_forward=make_ffn_config(
-                    dim=dim,
-                    hidden_dim=hidden_dim,
-                    w1_param_init=linear_init,
-                    w2w3_param_init=_depth_init(dim, layer_id),
-                ),
+                feed_forward=ffn_config,
             )
         )
     return layers
@@ -228,6 +319,8 @@ def _build_agpt_config(
     scaling: Literal["none", "llama", "yarn"] = "none",
     max_seq_len: int = 131072,
     qk_norm: bool = False,
+    logit_softcap: float | None = None,
+    relu_squared: bool = False,
 ) -> Llama3Model.Config:
     return Llama3Model.Config(
         dim=dim,
@@ -258,6 +351,8 @@ def _build_agpt_config(
             attn_backend=attn_backend,
             rope_backend=rope_backend,
             qk_norm=qk_norm,
+            logit_softcap=logit_softcap,
+            relu_squared=relu_squared,
         ),
     )
 
@@ -310,6 +405,38 @@ agpt_configs = {
         vocab_size=256128,
         hidden_dim=11008,
         qk_norm=True,
+    ),
+    "2B_softcap": _build_agpt_config(
+        dim=2048,
+        n_layers=12,
+        n_heads=16,
+        n_kv_heads=4,
+        rope_theta=50000,
+        vocab_size=256128,
+        hidden_dim=11008,
+        logit_softcap=30.0,
+    ),
+    "2B_relu2": _build_agpt_config(
+        dim=2048,
+        n_layers=12,
+        n_heads=16,
+        n_kv_heads=4,
+        rope_theta=50000,
+        vocab_size=256128,
+        hidden_dim=11008,
+        relu_squared=True,
+    ),
+    "2B_kitchen_sink": _build_agpt_config(
+        dim=2048,
+        n_layers=12,
+        n_heads=16,
+        n_kv_heads=4,
+        rope_theta=50000,
+        vocab_size=256128,
+        hidden_dim=11008,
+        qk_norm=True,
+        logit_softcap=30.0,
+        relu_squared=True,
     ),
     "2B_flex_attn": _build_agpt_config(
         dim=2048,
@@ -443,6 +570,9 @@ agpt_configs["80b_deep"] = agpt_configs["80B_deep"]
 agpt_configs["80b_alt"] = agpt_configs["80B_alt"]
 agpt_configs["80b_deep_alt"] = agpt_configs["80B_deep_alt"]
 agpt_configs["2b_qknorm"] = agpt_configs["2B_qknorm"]
+agpt_configs["2b_softcap"] = agpt_configs["2B_softcap"]
+agpt_configs["2b_relu2"] = agpt_configs["2B_relu2"]
+agpt_configs["2b_kitchen_sink"] = agpt_configs["2B_kitchen_sink"]
 
 
 def model_registry(
