@@ -20,6 +20,24 @@ was required in ezpz.
 
 ---
 
+## 2026-04-27 (20th sync)
+
+**Upstream commits:**
+
+- `cca3be50` — Fix reproducible training resume across epoch boundaries for
+  map and streaming datasets (#3008). Fixes two bugs in `HuggingFaceTextDataset`
+  and `ChatDataset` related to checkpoint resume after epoch re-loop.
+- `a7205469` — [rl] Env rollout based + controller refactor (#3073). Refactors
+  upstream RL experiment (not our ezpz/rl).
+
+**Changes required in ezpz:** None. Clean merge. Verified `_validate_dataset`
+still exists and is compatible with our `datasets.py` monkey-patch.
+
+**No replay needed:** Neither commit touches `llama3/`, `deepseek_v3/`, or
+`models/common/`.
+
+---
+
 ## 2026-04-25 (19th sync)
 
 **Upstream commits:**
