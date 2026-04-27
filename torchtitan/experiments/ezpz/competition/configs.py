@@ -282,3 +282,94 @@ def speedrun_2b_torchmuon_cosine():
     cfg.optimizer = TorchMuonOptimizersContainer.Config(lr=2.4e-3)
     cfg.lr_scheduler.decay_type = "cosine"
     return cfg
+
+
+# ---- Full training configs (10B tokens, 8 nodes, local dataset) ----
+#
+# 8 nodes = 96 tiles, LBS=2, GAS=2 → GBS=384
+# 10B tokens / (384 * 8192) = ~3,180 steps
+# ~4 hours at AdamW/Mano speed (~7,200 TPS/GPU)
+
+DATASET_LOCAL = "fineweb_edu_local"
+TOKENS_10B = 10_000_000_000
+TILES_8N = 96
+GAS = 2
+
+
+def _full_train_base():
+    """Base config for 10B token training on 8 nodes.
+
+    Uses locally cached FineWeb-Edu for reproducibility.
+    GBS = 96 tiles × LBS=2 × GAS=2 = 384.
+    ~3,180 steps, ~4 hours at AdamW speed.
+    """
+    gbs = TILES_8N * LOCAL_BATCH_SIZE * GAS
+    tokens_per_step = gbs * SEQ_LEN
+    steps = TOKENS_10B // tokens_per_step
+
+    cfg = agpt(
+        "2b",
+        local_batch_size=LOCAL_BATCH_SIZE,
+        activation_checkpoint_mode="none",
+        seq_len=SEQ_LEN,
+        compile=True,
+        checkpoint_interval=500,
+    )
+
+    cfg.dataloader.dataset = DATASET_LOCAL
+    cfg.dataloader.dataset_path = None
+    cfg.training.steps = steps
+    cfg.training.global_batch_size = gbs
+
+    # WSD: warmup 2%, stable, cosine decay last 20%
+    warmup = max(steps // 50, 10)
+    cfg.lr_scheduler.warmup_steps = warmup
+    cfg.lr_scheduler.decay_ratio = 0.2
+    cfg.lr_scheduler.decay_type = "cosine"
+    cfg.lr_scheduler.min_lr_factor = 0.0
+
+    cfg.checkpoint.enable = True
+
+    return cfg
+
+
+def full_2b_adamw():
+    """AdamW baseline, 10B tokens, 8 nodes."""
+    cfg = _full_train_base()
+    cfg.optimizer.lr = 1.3e-3
+    cfg.checkpoint.folder = "checkpoints/full_2b_adamw"
+    return cfg
+
+
+def full_2b_adamw_qknorm():
+    """AdamW + QK-Norm — wall-clock champion, 10B tokens, 8 nodes."""
+    cfg = _full_train_base()
+    cfg.model_spec = agpt("2b_qknorm").model_spec
+    cfg.optimizer.lr = 1.3e-3
+    cfg.checkpoint.folder = "checkpoints/full_2b_adamw_qknorm"
+    return cfg
+
+
+def full_2b_muon():
+    """Muon — best loss optimizer, 10B tokens, 8 nodes."""
+    cfg = _full_train_base()
+    cfg.optimizer = MuonOptimizersContainer.Config(lr=2.4e-3)
+    cfg.checkpoint.folder = "checkpoints/full_2b_muon"
+    return cfg
+
+
+def full_2b_mano():
+    """Mano — fast manifold optimizer, 10B tokens, 8 nodes."""
+    cfg = _full_train_base()
+    cfg.optimizer = ManoOptimizersContainer.Config(lr=3.0e-4)
+    cfg.checkpoint.folder = "checkpoints/full_2b_mano"
+    return cfg
+
+
+def full_2b_mano_qknorm():
+    """Mano + QK-Norm — best combo, 10B tokens, 8 nodes."""
+    cfg = _full_train_base()
+    cfg.model_spec = agpt("2b_qknorm").model_spec
+    cfg.optimizer = ManoOptimizersContainer.Config(lr=3.0e-4)
+    cfg.checkpoint.folder = "checkpoints/full_2b_mano_qknorm"
+    return cfg

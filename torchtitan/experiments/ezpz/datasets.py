@@ -66,6 +66,55 @@ def _make_loader(
     return _load
 
 
+def _make_local_loader(
+    *,
+    data_dir: str,
+    split: str = "train",
+    streaming: bool = True,
+) -> Callable:
+    """Build a loader for local parquet/arrow files."""
+
+    def _load(dataset_path: str) -> Any:
+        return load_dataset(
+            "parquet",
+            data_dir=data_dir,
+            split=split,
+            streaming=streaming,
+        )
+
+    return _load
+
+
+def register_local_dataset(
+    name: str,
+    data_dir: str,
+    *,
+    split: str = "train",
+    text_column: str = "text",
+    streaming: bool = True,
+) -> DatasetConfig:
+    """Register a local dataset (parquet/arrow files) for use with torchtitan.
+
+    Args:
+        name: Registry key (used as --dataloader.dataset <name>).
+        data_dir: Local directory containing parquet/arrow files.
+        split: Dataset split (default "train").
+        text_column: Column containing the text to train on.
+        streaming: Use streaming mode (default True).
+
+    Returns:
+        The registered DatasetConfig.
+    """
+    config = DatasetConfig(
+        path=data_dir,
+        loader=_make_local_loader(data_dir=data_dir, split=split, streaming=streaming),
+        sample_processor=_make_text_processor(text_column),
+    )
+    DATASETS[name] = config
+    log.debug(f"Registered local dataset {name!r} -> {data_dir}")
+    return config
+
+
 def _make_text_processor(text_column: str = "text") -> Callable:
     """Build a sample processor that extracts text from a given column."""
 
@@ -207,4 +256,13 @@ register_hf_dataset(
     "c4_streaming",
     "allenai/c4",
     config_name="en",
+)
+
+# ---------------------------------------------------------------------------
+# Local cached datasets
+# ---------------------------------------------------------------------------
+
+register_local_dataset(
+    "fineweb_edu_local",
+    "/lus/tegu/projects/datasets/datasets/fineweb-edu-100BT/sample/100BT/",
 )

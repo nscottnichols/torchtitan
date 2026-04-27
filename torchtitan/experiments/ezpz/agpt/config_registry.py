@@ -315,3 +315,10 @@ from torchtitan.experiments.ezpz.competition.configs import (  # noqa: E402, F40
     speedrun_2b_torchmuon,
     speedrun_2b_torchmuon_cosine,
 )
+from torchtitan.experiments.ezpz.competition.configs import (  # noqa: E402, F401
+    full_2b_adamw,
+    full_2b_adamw_qknorm,
+    full_2b_mano,
+    full_2b_mano_qknorm,
+    full_2b_muon,
+)
