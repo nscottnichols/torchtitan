@@ -1,8 +1,10 @@
-# agpt_2b Loss Competition
+# agpt_2b Speedrun Competition
 
 **Goal:** Lowest training loss in 1000 steps on 2 Sunspot nodes (24 XPU tiles).
 
 **W&B Report:** [aurora_gpt/torchtitan.ezpz.train](https://api.wandb.ai/links/aurora_gpt/hda3milo)
+
+**Full training results (10B tokens):** [training-10b-optimizer-sweep.md](../experiments/agpt/sunspot/20260427-training-10b-optimizer-sweep.md)
 
 ## Rules
 
@@ -17,13 +19,7 @@
 
 ## Loss Curves
 
-### Speedrun (1000 steps, 2 nodes)
-
 ![Speedrun loss curves](figures/loss_curves_speedrun.png)
-
-### Full Training (10B tokens, 8 nodes)
-
-![Full training loss curves](figures/loss_curves_10b.png)
 
 ## Leaderboard
 
@@ -54,31 +50,26 @@ of Muon's loss but at 1.58x the throughput.
 
 ## Key Findings
 
-- **QK-Norm is the single biggest improvement** — gives 0.23 loss improvement
-  for AdamW (3.80→3.57), also helps Mano (3.63→3.60)
+- **QK-Norm is the single biggest improvement** — 0.23 loss improvement
+  for AdamW (3.80->3.57), also helps Mano (3.63->3.60)
 - **Muon wins on raw loss** (3.557) but is 35% slower per step due to
   Newton-Schulz iterations — inherent to the algorithm on XPU, not an
-  implementation issue (`torch.optim.Muon` is the same speed as our custom one)
+  implementation issue (`torch.optim.Muon` is the same speed as custom)
 - **Mano matches Muon loss at AdamW speed** — manifold projection via
   vector-norm ops instead of matrix Newton-Schulz
-- **Cosine decay beats linear** across all optimizers (~0.01-0.03 improvement)
+- **Cosine decay beats linear** across all optimizers (~0.01-0.03)
 - **Streaming data shuffle dominates variance** — same optimizer gives 1.3
-  loss difference across runs due to different HF streaming data ordering.
-  Future rounds should use the locally cached dataset for reproducibility.
+  loss difference across runs due to HF streaming data ordering
 - **Shorter decay (10%) hurts** — not enough time in decay phase
 - **Shorter warmup (5 steps) hurts** — destabilizes early training
-- **SPAM underperforms** — spike clipping + momentum reset don't help
-  on clean data with well-tuned LR
+- **SPAM underperforms** — spike clipping doesn't help on clean data
 - **SophiaG underperforms** AdamW by ~0.9 loss
-- **Higher LRs diverge** — LR finder boundaries confirmed
 
 ## TorchMuon Results
 
-`torch.optim.Muon` (built-in since PyTorch 2.9) confirmed identical to our
-custom implementation on XPU — same TPS (~4,600), same algorithm. The 35%
-overhead vs AdamW is inherent to Newton-Schulz on this hardware, not fixable
-by a better implementation. Different final loss (4.48-4.84 vs 3.56) is
-entirely from streaming data shuffle variance.
+`torch.optim.Muon` confirmed identical to our custom implementation on XPU —
+same TPS (~4,600), same algorithm. The 35% overhead is inherent to Newton-Schulz
+on this hardware. Different final loss is from streaming data shuffle variance.
 
 | Config | Loss | TPS | Notes |
 |--------|------|-----|-------|
@@ -91,62 +82,22 @@ entirely from streaming data shuffle variance.
 
 | Optimizer | File | Key Idea | Source |
 |-----------|------|----------|--------|
-| **Mano** | `optimizer/mano.py` | Tangent-space projection on rotating Oblique manifold. Vector-norm ops vs Newton-Schulz. | [arxiv 2601.23000](https://arxiv.org/abs/2601.23000) |
-| **SPAM** | `optimizer/spam.py` | Spike-aware gradient clipping + periodic momentum reset. | [arxiv 2501.06842](https://arxiv.org/abs/2501.06842) |
-| **TorchMuon** | `optimizer/containers.py` | Wrapper for `torch.optim.Muon` (built-in since PyTorch 2.9). | [PyTorch docs](https://docs.pytorch.org/docs/stable/generated/torch.optim.Muon.html) |
+| **Mano** | `optimizer/mano.py` | Tangent-space projection on rotating Oblique manifold | [arxiv 2601.23000](https://arxiv.org/abs/2601.23000) |
+| **SPAM** | `optimizer/spam.py` | Spike-aware gradient clipping + periodic momentum reset | [arxiv 2501.06842](https://arxiv.org/abs/2501.06842) |
+| **TorchMuon** | `optimizer/containers.py` | Wrapper for `torch.optim.Muon` | [PyTorch docs](https://docs.pytorch.org/docs/stable/generated/torch.optim.Muon.html) |
 
 ### Architecture Tweaks
 
 | Tweak | File | Key Idea | Source |
 |-------|------|----------|--------|
-| **QK-Norm** | `agpt/__init__.py` | RMSNorm on Q,K before attention dot product. 0.23 loss improvement. | Gemma 2, NanoGPT speedrun |
-
-### Infrastructure
-
-| Feature | File | Description |
-|---------|------|-------------|
-| Generic HF datasets | `datasets.py` | `register_hf_dataset()` + auto-fallback for arbitrary HF hub paths |
-| Local dataset cache | `/lus/tegu/projects/datasets/datasets/fineweb-edu-100BT/` | 267 GB, 100B tokens |
-| Competition configs | `competition/configs.py` | 20+ speedrun configs |
-| Submit script | `competition/submit_run.sh` | PBS submission with .venv setup |
+| **QK-Norm** | `agpt/__init__.py` | RMSNorm on Q,K before attention dot product | Gemma 2, NanoGPT speedrun |
 
 ## Quick Start
 
 ```bash
-# Run a single config
 ezpz launch python3 -m torchtitan.experiments.ezpz.train \
     --module ezpz.agpt --config speedrun_2b_adamw_qknorm
 
-# Submit to PBS
 qsub -l select=2 -N speedrun_2b_muon -v CONFIG=speedrun_2b_muon \
     torchtitan/experiments/ezpz/competition/submit_run.sh
 ```
-
-## Full Training Results (10B tokens, 8 nodes)
-
-Local FineWeb-Edu, LBS=2, GAS=2, GBS=384, seq_len=8192, cosine WSD, ~3,178 steps.
-
-| Rank | Config | Loss | TPS/GPU |
-|------|--------|------|---------|
-| **1** | **`full_2b_adamw`** | **2.711** | 7,354 |
-| 2 | `full_2b_adamw_qknorm` | 2.720 | 7,480 |
-| 3 | `full_2b_mano_qknorm` | 2.854 | 7,346 |
-| 4 | `full_2b_mano` | 2.875 | 7,429 |
-| 5 | `full_2b_muon` | DNF | — (stuck compiling) |
-
-### Findings at 10B Scale
-
-- **AdamW wins at large batch** — simpler update is more efficient at GBS=384
-- **QK-Norm effect diminishes** — 0.009 for AdamW (vs 0.23 in speedruns)
-- **Mano ~0.16 behind AdamW** — needs LR re-tuning at larger batch
-- **Muon compile broken** with GAS on this torch version
-- **8-node scaling excellent** — ~7,300-7,500 TPS/GPU across all configs
-
-## Ideas to Try Next
-
-- **TorchMuon + QK-Norm** — combine built-in Muon speed with best architecture tweak
-- **Mano + QK-Norm + cosine** — triple combo
-- **Logit softcapping** — cap attention logits at 30.0 (Gemma 2)
-- **WSM** — checkpoint merging instead of online decay ([arxiv 2507.17634](https://arxiv.org/html/2507.17634v2))
-- **ReLU-squared activation** — replace SiLU in FFN (NanoGPT speedrun)
-- **Local dataset** — use cached FineWeb-Edu at `/lus/tegu/projects/datasets/datasets/fineweb-edu-100BT/`
