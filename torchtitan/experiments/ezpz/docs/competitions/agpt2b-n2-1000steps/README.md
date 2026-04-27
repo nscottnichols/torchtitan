@@ -4,7 +4,7 @@
 
 **W&B Report:** [aurora_gpt/torchtitan.ezpz.train](https://api.wandb.ai/links/aurora_gpt/hda3milo)
 
-**Full training results (10B tokens):** [training-10b-optimizer-sweep.md](../experiments/agpt/sunspot/20260427-training-10b-optimizer-sweep.md)
+**Full training results (10B tokens):** [agpt2b-n8-10BT](../agpt2b-n8-10BT/)
 
 ## Rules
 

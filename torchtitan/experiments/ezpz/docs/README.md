@@ -29,7 +29,7 @@ date: 2026-03-15
 
 ## Experiments
 
-- [agpt_2b Loss Competition](./competition/README.md) — optimizer/schedule/architecture speedrun ([W&B](https://api.wandb.ai/links/aurora_gpt/hda3milo))
+- [Competitions](./competitions/) — optimizer/training speedruns ([W&B](https://api.wandb.ai/links/aurora_gpt/hda3milo))
 - [RL (GRPO) Experiment](./rl/README.md) — TRL-based GRPO on XPU (experimental)
 
 ## Planning

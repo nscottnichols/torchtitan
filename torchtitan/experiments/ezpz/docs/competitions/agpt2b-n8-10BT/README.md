@@ -7,7 +7,7 @@
 
 Full 10B token training run comparing optimizer and architecture choices
 at scale, using the top configs from the
-[1000-step speedrun competition](../../../competition/README.md).
+[1000-step speedrun competition](../agpt2b-n2-1000steps/).
 
 **W&B Report:** [aurora_gpt/torchtitan.ezpz.train](https://api.wandb.ai/links/aurora_gpt/hda3milo)
 
@@ -102,5 +102,5 @@ where per-token efficiency dominates.
 
 ## Related
 
-- [Speedrun competition](../../../competition/README.md) — 1000 steps, 2 nodes
-- [Scaling study](../../../scaling/agpt-2b.md) — weak scaling results
+- [Speedrun competition](../agpt2b-n2-1000steps/) — 1000 steps, 2 nodes
+- [Scaling study](../../scaling/agpt-2b.md) — weak scaling results
