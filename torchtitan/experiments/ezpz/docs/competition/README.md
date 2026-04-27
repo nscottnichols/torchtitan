@@ -17,55 +17,53 @@
 
 ## Leaderboard
 
-| Rank | Config | Optimizer | LR | Schedule | Final Loss | Steps | TPS/GPU | Status |
-|------|--------|-----------|------|----------|------------|-------|---------|--------|
-| 1 | `speedrun_2b_mano` | **Mano** | 3.0e-4 | WSD 20/800/200 | **3.765*** | 866 | ~7,200 | Running |
-| 2 | `speedrun_2b_adamw_cosine` | AdamW | 1.3e-3 | WSD cosine | **3.789** | 990 | 7,245 | Done |
-| 3 | `speedrun_2b_adamw` | AdamW | 1.3e-3 | WSD linear | 3.801 | 1000 | 7,245 | Done |
-| 4 | `speedrun_2b_muon` | Muon | 2.4e-3 | WSD 20/800/200 | 4.100* | 626 | 4,695 | Running |
-| 5 | `speedrun_2b_adamw_short_decay` | AdamW | 1.3e-3 | WSD decay=10% | 4.053 | 1000 | 7,245 | Done |
-| 6 | `speedrun_2b_adamw_fast_warmup` | AdamW | 1.3e-3 | warmup=5 decay=10% | 4.546 | 1000 | 7,245 | Done |
-| 7 | `speedrun_2b_muon_aggressive` | Muon | 4.8e-3 | WSD 20/800/200 | 4.710* | 630 | 4,596 | Running |
-| 8 | `speedrun_2b_sophiag` | SophiaG | 3.1e-4 | WSD 20/800/200 | 4.719 | 1000 | 7,208 | Done |
-| 9 | `speedrun_2b_adamw_high_lr` | AdamW | 2.6e-3 | WSD 20/800/200 | 5.850 | 1000 | 7,344 | Done |
-| 10 | `speedrun_2b_spam` | SPAM | 1.3e-3 | WSD 20/800/200 | 5.881* | 865 | ~7,200 | Running |
+| Rank | Config | Optimizer | LR | Loss | TPS/GPU |
+|------|--------|-----------|------|------|---------|
+| **1** | **`speedrun_2b_muon`** | Muon (custom) | 2.4e-3 | **3.557** | 4,556 |
+| **2** | **`speedrun_2b_adamw_qknorm`** | **AdamW + QK-Norm** | 1.3e-3 | **3.569** | 7,178 |
+| 3 | `speedrun_2b_muon_cosine` | Muon + cosine | 2.4e-3 | 3.591 | 4,625 |
+| 4 | `speedrun_2b_mano_qknorm` | Mano + QK-Norm | 3.0e-4 | 3.604 | 6,980 |
+| 5 | `speedrun_2b_mano` | Mano | 3.0e-4 | 3.631 | 7,048 |
+| 6 | `speedrun_2b_muon_qknorm` | Muon + QK-Norm | 2.4e-3 | 3.650 | 4,655 |
+| 7 | `speedrun_2b_mano_cosine` | Mano + cosine | 3.0e-4 | 3.663 | 6,959 |
+| 8 | `speedrun_2b_mano_high_lr` | Mano (6e-4) | 6.0e-4 | 3.749 | 7,140 |
+| 9 | `speedrun_2b_adamw_cosine` | AdamW + cosine | 1.3e-3 | 3.790 | 7,195 |
+| 10 | `speedrun_2b_adamw` | AdamW (baseline) | 1.3e-3 | 3.801 | 7,245 |
+| 11 | `speedrun_2b_adamw_short_decay` | AdamW (10% decay) | 1.3e-3 | 4.053 | 7,294 |
+| 12 | `speedrun_2b_mano_1e3` | Mano (1e-3) | 1.0e-3 | 4.208 | 7,062 |
+| 13 | `speedrun_2b_muon_aggressive` | Muon (4.8e-3) | 4.8e-3 | 4.391 | 4,617 |
+| 14 | `speedrun_2b_adamw_fast_warmup` | AdamW (5-step wu) | 1.3e-3 | 4.546 | 7,172 |
+| 15 | `speedrun_2b_sophiag` | SophiaG | 3.1e-4 | 4.719 | 7,208 |
+| 16 | `speedrun_2b_spam` | SPAM | 1.3e-3 | 5.625 | 7,073 |
+| 17 | `speedrun_2b_adamw_high_lr` | AdamW (2.6e-3) | 2.6e-3 | 5.850 | 7,344 |
 
-*Still running — loss at last reported step.
+### Wall-Clock Champion
 
-### Key Findings
+**AdamW + QK-Norm** (3.569 at 7,178 TPS) is the practical winner — within 0.01
+of Muon's loss but at 1.58x the throughput.
 
-- **Mano is the current leader** — already below AdamW's final loss at step 866 with 134 steps of decay remaining
-- **Cosine decay beats linear** for AdamW (3.789 vs 3.801)
-- **Shorter decay (10%) hurts** — not enough time in decay phase (4.053 vs 3.801)
-- **Shorter warmup (5 steps) hurts** — too little warmup destabilizes early training
-- **SPAM underperforms** — spike clipping + momentum reset don't help for this clean dataset
-- **Muon is 35% slower per step** (Newton-Schulz overhead) — Mano has no such overhead
+## Key Findings
+
+- **QK-Norm is the single biggest improvement** — gives 0.23 loss improvement
+  for AdamW (3.80→3.57), also helps Mano (3.63→3.60)
+- **Muon wins on raw loss** (3.557) but is 35% slower per step due to
+  Newton-Schulz iterations — custom implementation bottleneck
+- **Mano matches Muon loss at AdamW speed** — manifold projection via
+  vector-norm ops instead of matrix Newton-Schulz
+- **Cosine decay beats linear** across all optimizers (~0.01-0.03 improvement)
+- **Shorter decay (10%) hurts** — not enough time in decay phase
+- **Shorter warmup (5 steps) hurts** — destabilizes early training
+- **SPAM underperforms** — spike clipping + momentum reset don't help
+  on clean data with well-tuned LR
+- **SophiaG underperforms** AdamW by ~0.9 loss
+- **Higher LRs diverge** — LR finder boundaries confirmed
 
 ## In Progress
 
-### Hparam Tweaks (submitted 2026-04-26)
-
-| Config | Change vs Baseline | Job ID | Status |
-|--------|-------------------|--------|--------|
-| `speedrun_2b_adamw_short_decay` | decay_ratio=0.1 (10%) | 12465388 | Running |
-| `speedrun_2b_adamw_cosine` | cosine decay | 12465389 | Running |
-| `speedrun_2b_adamw_fast_warmup` | warmup=5, decay=10% | 12465390 | Running |
-| `speedrun_2b_muon_short_decay` | Muon + decay=10% | 12465391 | Running |
-| `speedrun_2b_muon_fast_warmup` | Muon + warmup=5, decay=10% | 12465392 | Running |
-
-### New Optimizers (submitted 2026-04-26)
-
-| Config | Optimizer | Paper | Job ID | Status |
-|--------|-----------|-------|--------|--------|
-| `speedrun_2b_mano` | Mano (manifold-normalized) | [arxiv 2601.23000](https://arxiv.org/abs/2601.23000) | 12465393 | Running |
-| `speedrun_2b_spam` | SPAM (spike-aware Adam) | [arxiv 2501.06842](https://arxiv.org/abs/2501.06842) | 12465394 | Running |
-
-### Architecture Tweaks (submitted 2026-04-26)
-
-| Config | Change | Job ID | Status |
-|--------|--------|--------|--------|
-| `speedrun_2b_adamw_qknorm` | AdamW + QK-Norm | 12465395 | Running |
-| `speedrun_2b_muon_qknorm` | Muon + QK-Norm | 12465396 | Running |
+| Config | Hypothesis | Status |
+|--------|-----------|--------|
+| `speedrun_2b_torchmuon` | torch.optim.Muon — faster than custom Muon? | Running |
+| `speedrun_2b_torchmuon_cosine` | torch.optim.Muon + cosine decay | Running |
 
 ## Modifications Log
 
@@ -73,21 +71,23 @@
 
 | Optimizer | File | Key Idea | Source |
 |-----------|------|----------|--------|
-| **Mano** | `optimizer/mano.py` | Tangent-space projection on rotating Oblique manifold. Cheaper than Muon (vector ops vs Newton-Schulz). 1.75x faster wall-clock. | [arxiv 2601.23000](https://arxiv.org/abs/2601.23000) |
-| **SPAM** | `optimizer/spam.py` | Spike-aware gradient clipping + periodic momentum reset every DeltaT steps. Prevents gradient spike damage. | [arxiv 2501.06842](https://arxiv.org/abs/2501.06842) |
+| **Mano** | `optimizer/mano.py` | Tangent-space projection on rotating Oblique manifold. Vector-norm ops vs Newton-Schulz. | [arxiv 2601.23000](https://arxiv.org/abs/2601.23000) |
+| **SPAM** | `optimizer/spam.py` | Spike-aware gradient clipping + periodic momentum reset. | [arxiv 2501.06842](https://arxiv.org/abs/2501.06842) |
+| **TorchMuon** | `optimizer/containers.py` | Wrapper for `torch.optim.Muon` (built-in since PyTorch 2.9). | [PyTorch docs](https://docs.pytorch.org/docs/stable/generated/torch.optim.Muon.html) |
 
 ### Architecture Tweaks
 
 | Tweak | File | Key Idea | Source |
 |-------|------|----------|--------|
-| **QK-Norm** | `agpt/__init__.py` | RMSNorm on Q,K before attention dot product. Prevents attention entropy collapse in early training. | Gemma 2, NanoGPT speedrun |
+| **QK-Norm** | `agpt/__init__.py` | RMSNorm on Q,K before attention dot product. 0.23 loss improvement. | Gemma 2, NanoGPT speedrun |
 
 ### Infrastructure
 
 | Feature | File | Description |
 |---------|------|-------------|
 | Generic HF datasets | `datasets.py` | `register_hf_dataset()` + auto-fallback for arbitrary HF hub paths |
-| Competition configs | `competition/configs.py` | Speedrun configs with fixed dataset/LBS/seq_len |
+| Local dataset cache | `/lus/tegu/projects/datasets/datasets/fineweb-edu-100BT/` | 267 GB, 100B tokens |
+| Competition configs | `competition/configs.py` | 20+ speedrun configs |
 | Submit script | `competition/submit_run.sh` | PBS submission with .venv setup |
 
 ## Quick Start
@@ -95,7 +95,7 @@
 ```bash
 # Run a single config
 ezpz launch python3 -m torchtitan.experiments.ezpz.train \
-    --module ezpz.agpt --config speedrun_2b_muon
+    --module ezpz.agpt --config speedrun_2b_adamw_qknorm
 
 # Submit to PBS
 qsub -l select=2 -N speedrun_2b_muon -v CONFIG=speedrun_2b_muon \
@@ -104,11 +104,9 @@ qsub -l select=2 -N speedrun_2b_muon -v CONFIG=speedrun_2b_muon \
 
 ## Ideas to Try Next
 
-- **Cosine decay to zero** vs linear (in progress)
-- **Shorter decay window** (10% vs 20%, in progress)
-- **Mano + QK-Norm** combo
-- **SPAM + Muon hybrid** — spike-aware clipping with Muon's orthogonal updates
+- **TorchMuon + QK-Norm** — combine built-in Muon speed with best architecture tweak
+- **Mano + QK-Norm + cosine** — triple combo
 - **Logit softcapping** — cap attention logits at 30.0 (Gemma 2)
 - **WSM** — checkpoint merging instead of online decay ([arxiv 2507.17634](https://arxiv.org/html/2507.17634v2))
-- **Data diversity** — ensure each batch has tokens from 16+ unique documents
 - **ReLU-squared activation** — replace SiLU in FFN (NanoGPT speedrun)
+- **Local dataset** — use cached FineWeb-Edu at `/lus/tegu/projects/datasets/datasets/fineweb-edu-100BT/`
