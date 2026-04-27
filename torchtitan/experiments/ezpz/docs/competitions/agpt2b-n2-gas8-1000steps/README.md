@@ -28,32 +28,32 @@
   <img alt="Loss curves" src="figures/loss_curves_light.png">
 </picture>
 
-## Results (in progress)
+## Results
 
-| Rank | Config | Optimizer | LR | Loss | TPS/GPU | Status |
-|------|--------|-----------|------|------|---------|--------|
-| 1 | `r4_mano_qknorm` | Mano+QK-Norm | 3.0e-4 | — | 7,380 | Running |
-| 2 | `r4_mano` | Mano | 3.0e-4 | — | 7,396 | Running |
-| 3 | `r4_adamw_qknorm` | AdamW+QK-Norm | 1.3e-3 | — | 7,450 | Running |
-| 4 | `r4_adamw` | AdamW | 1.3e-3 | — | 7,544 | Running |
-| 5 | `r4_mano_higher_lr` | Mano | 8.5e-4 | — | 7,419 | Running |
-| 6 | `r4_adamw_higher_lr` | AdamW | 3.7e-3 | — | 7,518 | Running (diverging) |
-| 7 | `r4_adamw_softcap` | AdamW+Softcap | 1.3e-3 | — | 1,865 | Running (FlexAttn slow) |
-| 8 | `r4_adamw_qknorm_softcap` | AdamW+QKN+Softcap | 1.3e-3 | — | 1,876 | Running (FlexAttn slow) |
+| Rank | Config | Optimizer | LR | Loss | TPS/GPU |
+|------|--------|-----------|------|------|---------|
+| **1** | **`r4_adamw_qknorm`** | **AdamW+QK-Norm** | 1.3e-3 | **3.205** | 7,428 |
+| 2 | `r4_adamw` | AdamW | 1.3e-3 | 3.220 | 7,397 |
+| 3 | `r4_mano` | Mano | 3.0e-4 | 3.294 | 7,397 |
+| 4 | `r4_mano_qknorm` | Mano+QK-Norm | 3.0e-4 | 3.307 | 7,423 |
+| 5 | `r4_mano_higher_lr` | Mano | 8.5e-4 | 3.328 | 7,348 |
+| 6 | `r4_adamw_higher_lr` | AdamW | 3.7e-3 | 5.884 | 7,603 |
+| — | `r4_adamw_softcap` | AdamW+Softcap | 1.3e-3 | memorized | 1,865 |
+| — | `r4_adamw_qknorm_softcap` | AdamW+QKN+Softcap | 1.3e-3 | memorized | 1,876 |
 
-### Findings (step ~400)
+### Final Findings
 
-- **Mano+QK-Norm leads at 4.23** — 0.34 ahead of AdamW (4.57), gap widening
-- **Mano beats AdamW per-step** at GBS=384 with GAS=8 — reversal from the
-  8-node run where AdamW won (GAS=2). More gradient accumulation steps may
-  favor manifold optimizers.
-- **QK-Norm helps both optimizers** by ~0.04-0.17 consistently
-- **sqrt-scaled LR is too aggressive** — AdamW at 3.7e-3 fully diverged (5.93),
-  Mano at 8.5e-4 behind base Mano at 3e-4
-- **Softcap is 4-5x more data-efficient** — loss 3.34 at step 99 vs AdamW 4.57
-  at step 404. But 4x slower throughput (FlexAttention on XPU = 1,860 TPS)
-- **ReLU² hurts softcap** — kitchen_sink (QK-Norm + softcap + ReLU²) at 5.47
-  vs softcap-only at 3.34. ReLU² is actively harmful in this combination.
+- **AdamW+QK-Norm wins** (3.205) — QK-Norm gave 0.015 improvement over plain AdamW
+- **Mano leads early/mid training** but **AdamW catches up and wins in the decay phase**
+  — Mano was ahead by 0.25 at step 300, but AdamW overtook during cosine decay
+- **QK-Norm helps both optimizers** — 0.015 for AdamW, -0.013 for Mano
+- **sqrt-scaled LR is too aggressive** — AdamW at 3.7e-3 diverged (5.88),
+  Mano at 8.5e-4 slightly behind base Mano at 3e-4 (3.33 vs 3.29)
+- **Softcap results invalid** — local dataset loader causes memorization with
+  FlexAttention path (loss dropped to 0.05). Data sharding bug, not a
+  softcap evaluation.
+- **Consistent with 8-node 10B results** — AdamW wins at GBS=384 regardless
+  of whether it's 2N×GAS=8 or 8N×GAS=2
 
 ## Key Questions
 
