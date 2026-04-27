@@ -237,6 +237,10 @@ class TorchMuonOptimizersContainer(OptimizersContainer):
                     eps=config.eps,
                 ))
 
+            if not inner_opts:
+                # Empty model part (FSDP sharding) — use a no-op AdamW
+                inner_opts.append(torch.optim.AdamW([{"params": []}], lr=config.lr))
+
             self.optimizers.append(_CompositeOptimizer(inner_opts))
             all_params.extend(muon_params)
             all_params.extend(adamw_params)
