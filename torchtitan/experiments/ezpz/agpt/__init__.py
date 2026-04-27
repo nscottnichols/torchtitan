@@ -105,21 +105,22 @@ from torchtitan.models.common.config_utils import make_ffn_config, make_gqa_conf
 # ---------------------------------------------------------------------------
 
 
-class SoftcappedScaledDotProductAttention(EzpzScaledDotProductAttention):
-    """SDPA with logit softcapping before softmax (Gemma 2 style).
+class SoftcappedFlexAttention(LocalMapInnerAttention):
+    """FlexAttention with logit softcapping (Gemma 2 style).
 
-    Caps attention logits at a configurable value (default 30.0) using
-    tanh softcapping: logits = cap * tanh(logits / cap). This prevents
-    attention entropy collapse in early training.
+    Uses FlexAttention's score_mod to apply tanh softcapping inside the
+    fused kernel — no O(seq_len²) materialization. Requires torch.compile.
     """
 
     @dataclass(kw_only=True, slots=True)
-    class Config(EzpzScaledDotProductAttention.Config):
+    class Config(LocalMapInnerAttention.Config):
         logit_cap: float = 30.0
 
     def __init__(self, config: Config):
-        super().__init__(config)
+        super().__init__()
         self.logit_cap = config.logit_cap
+        from torch.nn.attention.flex_attention import flex_attention
+        self._flex_attention = torch.compile(flex_attention)
 
     # pyrefly: ignore [bad-override]
     def forward(
@@ -134,28 +135,18 @@ class SoftcappedScaledDotProductAttention(EzpzScaledDotProductAttention):
         **kwargs,
     ) -> torch.Tensor:
         q, k, v = q.transpose(1, 2), k.transpose(1, 2), v.transpose(1, 2)
-        if scale is None:
-            scale = q.shape[-1] ** -0.5
-        # Handle GQA: expand KV heads to match query heads
-        n_heads_q = q.shape[1]
-        n_heads_kv = k.shape[1]
-        if n_heads_q != n_heads_kv:
-            n_rep = n_heads_q // n_heads_kv
-            k = k.repeat_interleave(n_rep, dim=1)
-            v = v.repeat_interleave(n_rep, dim=1)
-        # Manual attention with logit capping
-        scores = torch.matmul(q, k.transpose(-2, -1)) * scale
-        # Softcap: cap * tanh(scores / cap)
-        scores = self.logit_cap * torch.tanh(scores / self.logit_cap)
-        if is_causal:
-            L, S = scores.shape[-2], scores.shape[-1]
-            mask = torch.triu(
-                torch.ones(L, S, dtype=torch.bool, device=scores.device),
-                diagonal=1,
-            )
-            scores.masked_fill_(mask, float("-inf"))
-        attn = F.softmax(scores, dim=-1, dtype=torch.float32).to(q.dtype)
-        out = torch.matmul(attn, v)
+
+        cap = self.logit_cap
+
+        def softcap_mod(score, b, h, q_idx, kv_idx):
+            return cap * torch.tanh(score / cap)
+
+        out = self._flex_attention(
+            q, k, v,
+            score_mod=softcap_mod,
+            scale=scale,
+            enable_gqa=enable_gqa,
+        )
         return out.transpose(1, 2)
 
 
@@ -254,7 +245,7 @@ def _build_agpt_layers(
 ) -> list[TransformerBlock.Config]:
     """Build a list of per-layer TransformerBlock configs with depth-scaled inits."""
     if logit_softcap is not None:
-        inner_attention = SoftcappedScaledDotProductAttention.Config(
+        inner_attention = SoftcappedFlexAttention.Config(
             logit_cap=logit_softcap,
         )
         mask_type = "causal"
