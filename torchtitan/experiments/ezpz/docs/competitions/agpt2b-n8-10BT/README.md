@@ -9,7 +9,7 @@ Full 10B token training run comparing optimizer and architecture choices
 at scale, using the top configs from the
 [1000-step speedrun competition](../agpt2b-n2-1000steps/).
 
-**W&B Report:** [aurora_gpt/torchtitan.ezpz.train](https://api.wandb.ai/links/aurora_gpt/hda3milo)
+**W&B Report:** [aurora_gpt/torchtitan.ezpz.train](https://api.wandb.ai/links/aurora_gpt/be9nm7s9)
 
 ## Configuration
 
