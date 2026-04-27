@@ -15,6 +15,16 @@
 7. All changes must stay within `experiments/ezpz/`
 8. **Tunable:** optimizer, LR, LR schedule, gradient clipping, architecture tweaks
 
+## Loss Curves
+
+### Speedrun (1000 steps, 2 nodes)
+
+![Speedrun loss curves](figures/loss_curves_speedrun.png)
+
+### Full Training (10B tokens, 8 nodes)
+
+![Full training loss curves](figures/loss_curves_10b.png)
+
 ## Leaderboard
 
 | Rank | Config | Optimizer | LR | Loss | TPS/GPU |
