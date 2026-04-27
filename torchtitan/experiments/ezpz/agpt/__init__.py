@@ -117,7 +117,7 @@ class SoftcappedFlexAttention(LocalMapInnerAttention):
         logit_cap: float = 30.0
 
     def __init__(self, config: Config):
-        super().__init__()
+        super().__init__(config)
         self.logit_cap = config.logit_cap
         from torch.nn.attention.flex_attention import flex_attention
         self._flex_attention = torch.compile(flex_attention)
