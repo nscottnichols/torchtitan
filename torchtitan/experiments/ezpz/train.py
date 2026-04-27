@@ -31,6 +31,7 @@ from torchtitan.experiments.ezpz.optimizer import (
     MuonOptimizersContainer,
     SPAMOptimizersContainer,
     SophiaGOptimizersContainer,
+    TorchMuonOptimizersContainer,
 )
 from torchtitan.tools.logging import logger
 
@@ -94,6 +95,7 @@ _OPTIMIZER_CONFIGS: dict[str, type[OptimizersContainer.Config]] = {
     "muonclip": MuonClipOptimizersContainer.Config,
     "sophiag": SophiaGOptimizersContainer.Config,
     "spam": SPAMOptimizersContainer.Config,
+    "torchmuon": TorchMuonOptimizersContainer.Config,
 }
 
 

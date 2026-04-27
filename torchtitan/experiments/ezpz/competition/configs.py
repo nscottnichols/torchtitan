@@ -21,6 +21,7 @@ from torchtitan.experiments.ezpz.optimizer import (
     MuonOptimizersContainer,
     SPAMOptimizersContainer,
     SophiaGOptimizersContainer,
+    TorchMuonOptimizersContainer,
 )
 
 # Fixed competition parameters — same for all configs
@@ -56,6 +57,9 @@ def _speedrun_base():
 
     # Training: 1000 steps
     cfg.training.steps = STEPS
+
+    # No checkpointing for speedruns
+    cfg.checkpoint.enable = False
 
     # LR schedule: WSD (warmup 20, stable to 800, decay last 200)
     cfg.lr_scheduler.warmup_steps = 20
@@ -259,4 +263,22 @@ def speedrun_2b_mano_qknorm():
     cfg = _speedrun_qknorm_base()
     cfg.optimizer = ManoOptimizersContainer.Config(lr=3.0e-4)
     cfg.checkpoint.folder = "checkpoints/speedrun_2b_mano_qknorm"
+    return cfg
+
+
+# ---- torch.optim.Muon (built-in, optimized) ----
+
+
+def speedrun_2b_torchmuon():
+    """torch.optim.Muon — official PyTorch implementation, much faster per-step."""
+    cfg = _speedrun_base()
+    cfg.optimizer = TorchMuonOptimizersContainer.Config(lr=2.4e-3)
+    return cfg
+
+
+def speedrun_2b_torchmuon_cosine():
+    """torch.optim.Muon + cosine decay."""
+    cfg = _speedrun_base()
+    cfg.optimizer = TorchMuonOptimizersContainer.Config(lr=2.4e-3)
+    cfg.lr_scheduler.decay_type = "cosine"
     return cfg

@@ -20,6 +20,7 @@ __all__ = [
     "MuonOptimizersContainer",
     "SPAMOptimizersContainer",
     "SophiaGOptimizersContainer",
+    "TorchMuonOptimizersContainer",
 ]
 
 
@@ -138,6 +139,70 @@ class MuonClipOptimizersContainer(MuonOptimizersContainer):
             }
         )
         return base
+
+
+class TorchMuonOptimizersContainer(OptimizersContainer):
+    """Uses torch.optim.Muon (built-in, optimized) for 2D hidden layers
+    and torch.optim.AdamW for embeddings/head/1D params.
+
+    Much faster than the custom Muon implementation — benefits from
+    PyTorch's fused kernels and Gram Newton-Schulz optimizations.
+    """
+
+    @dataclass(kw_only=True, slots=True)
+    class Config(OptimizersContainer.Config):
+        name: str = "TorchMuon"
+        momentum: float = 0.95
+        nesterov: bool = True
+        ns_steps: int = 5
+        # AdamW params for non-2D layers
+        adamw_lr_factor: float = 1.0
+
+    def __init__(self, config: Config, *, model_parts: list[nn.Module]) -> None:
+        import torch.optim
+
+        all_params = []
+        self.optimizers = []
+        self.model_parts = model_parts
+
+        for model in model_parts:
+            muon_params = []
+            adamw_params = []
+            for p in model.parameters():
+                if not p.requires_grad:
+                    continue
+                if p.ndim == 2 and max(p.shape) <= 10000:
+                    muon_params.append(p)
+                else:
+                    adamw_params.append(p)
+
+            if muon_params:
+                muon_opt = torch.optim.Muon(
+                    muon_params,
+                    lr=config.lr,
+                    weight_decay=config.weight_decay,
+                    momentum=config.momentum,
+                    nesterov=config.nesterov,
+                    ns_steps=config.ns_steps,
+                )
+                self.optimizers.append(muon_opt)
+
+            if adamw_params:
+                adamw_opt = torch.optim.AdamW(
+                    adamw_params,
+                    lr=config.lr * config.adamw_lr_factor,
+                    weight_decay=config.weight_decay,
+                    betas=(config.beta1, config.beta2),
+                    eps=config.eps,
+                )
+                self.optimizers.append(adamw_opt)
+
+            all_params.extend(muon_params)
+            all_params.extend(adamw_params)
+
+        optimizer_kwargs = {"lr": config.lr, "weight_decay": config.weight_decay}
+        self._validate_length(len(self.model_parts))
+        self._post_init(all_params, optimizer_kwargs)
 
 
 class ManoOptimizersContainer(OptimizersContainer):
