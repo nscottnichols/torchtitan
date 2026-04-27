@@ -6,6 +6,7 @@ from torchtitan.experiments.ezpz.optimizer.containers import (
     MuonOptimizersContainer,
     SPAMOptimizersContainer,
     SophiaGOptimizersContainer,
+    TorchMuonOptimizersContainer,
 )
 from torchtitan.experiments.ezpz.optimizer.mano import Mano
 from torchtitan.experiments.ezpz.optimizer.muon import Muon, MuonClip, QKInputRecorder

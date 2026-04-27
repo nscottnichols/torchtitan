@@ -312,4 +312,6 @@ from torchtitan.experiments.ezpz.competition.configs import (  # noqa: E402, F40
     speedrun_2b_muon_short_decay,
     speedrun_2b_sophiag,
     speedrun_2b_spam,
+    speedrun_2b_torchmuon,
+    speedrun_2b_torchmuon_cosine,
 )

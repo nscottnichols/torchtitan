@@ -20,6 +20,7 @@ __all__ = [
     "MuonOptimizersContainer",
     "SPAMOptimizersContainer",
     "SophiaGOptimizersContainer",
+    "TorchMuonOptimizersContainer",
 ]
 
 
@@ -138,6 +139,110 @@ class MuonClipOptimizersContainer(MuonOptimizersContainer):
             }
         )
         return base
+
+
+class _CompositeOptimizer(torch.optim.Optimizer):
+    """Wraps multiple optimizers into a single Optimizer interface.
+
+    Needed because OptimizersContainer expects one optimizer per model part,
+    but torch.optim.Muon only handles 2D params (need a separate AdamW for
+    embeddings/head).
+    """
+
+    def __init__(self, optimizers: list[torch.optim.Optimizer]):
+        self._optimizers = optimizers
+        # Collect all param groups for the Optimizer base class
+        all_groups = []
+        for opt in optimizers:
+            all_groups.extend(opt.param_groups)
+        # Initialize with empty defaults — param_groups are already set up
+        super().__init__([], {})
+        self.param_groups = all_groups
+        # Merge state dicts
+        self.state = {}
+        for opt in optimizers:
+            self.state.update(opt.state)
+
+    def step(self, closure=None):
+        loss = None
+        for opt in self._optimizers:
+            result = opt.step(closure)
+            if result is not None:
+                loss = result
+        return loss
+
+    def zero_grad(self, *args, **kwargs):
+        for opt in self._optimizers:
+            opt.zero_grad(*args, **kwargs)
+
+    def state_dict(self):
+        return {"optimizers": [opt.state_dict() for opt in self._optimizers]}
+
+    def load_state_dict(self, state_dict):
+        for opt, sd in zip(self._optimizers, state_dict["optimizers"]):
+            opt.load_state_dict(sd)
+
+
+class TorchMuonOptimizersContainer(OptimizersContainer):
+    """Uses torch.optim.Muon (built-in, optimized) for 2D hidden layers
+    and torch.optim.AdamW for embeddings/head/1D params.
+
+    Much faster than the custom Muon implementation — benefits from
+    PyTorch's fused kernels and Gram Newton-Schulz optimizations.
+    """
+
+    @dataclass(kw_only=True, slots=True)
+    class Config(OptimizersContainer.Config):
+        name: str = "TorchMuon"
+        momentum: float = 0.95
+        nesterov: bool = True
+        ns_steps: int = 5
+        adamw_lr_factor: float = 1.0
+
+    def __init__(self, config: Config, *, model_parts: list[nn.Module]) -> None:
+        import torch.optim
+
+        all_params = []
+        self.optimizers = []
+        self.model_parts = model_parts
+
+        for model in model_parts:
+            muon_params = []
+            adamw_params = []
+            for p in model.parameters():
+                if not p.requires_grad:
+                    continue
+                if p.ndim == 2 and max(p.shape) <= 10000:
+                    muon_params.append(p)
+                else:
+                    adamw_params.append(p)
+
+            inner_opts = []
+            if muon_params:
+                inner_opts.append(torch.optim.Muon(
+                    muon_params,
+                    lr=config.lr,
+                    weight_decay=config.weight_decay,
+                    momentum=config.momentum,
+                    nesterov=config.nesterov,
+                    ns_steps=config.ns_steps,
+                ))
+            if adamw_params:
+                inner_opts.append(torch.optim.AdamW(
+                    adamw_params,
+                    lr=config.lr * config.adamw_lr_factor,
+                    weight_decay=config.weight_decay,
+                    betas=(config.beta1, config.beta2),
+                    eps=config.eps,
+                ))
+
+            self.optimizers.append(_CompositeOptimizer(inner_opts))
+            all_params.extend(muon_params)
+            all_params.extend(adamw_params)
+
+        optimizer_kwargs = {"lr": config.lr, "weight_decay": config.weight_decay}
+        self._validate_length(len(self.model_parts))
+        self._post_init(all_params, optimizer_kwargs)
 
 
 class ManoOptimizersContainer(OptimizersContainer):
