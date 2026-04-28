@@ -305,7 +305,7 @@ def plot_metrics_panel(
                 start = int(max_step * 0.6)
                 axins = inset_axes(
                     ax, width="40%", height="40%",
-                    loc="center right" if metric in ("loss", "grad_norm") else "center left",
+                    loc="center right",
                     bbox_to_anchor=(0, 0.05, 1, 1), bbox_transform=ax.transAxes,
                 )
                 for i, run in enumerate(valid_runs):
