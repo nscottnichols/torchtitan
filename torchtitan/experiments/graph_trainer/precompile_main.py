@@ -20,6 +20,7 @@ Usage (aot mode):
     python -m torchtitan.experiments.graph_trainer.precompile_main \
         --module graph_trainer.llama3 \
         --config graph_trainer_llama3_debugmodel \
+        --compile.mode aot \
         --compile.passes full_inductor_compilation \
         --compile.joint_passes inductor_decomposition \
         --compile.precompile_artifact_dir /tmp/precompile_artifacts
@@ -318,7 +319,7 @@ def _precompile_aot_fx_trace(
     )
     from torchtitan.experiments.graph_trainer.trainer import make_fwd_bwd_step
 
-    loss_fn = model_spec.build_loss_fn(compile_config, parallel_dims=parallel_dims)
+    loss_fn = config.loss.build(compile_config=compile_config)
 
     fwd_bwd_fn = make_fwd_bwd_step(loss_fn)
 
