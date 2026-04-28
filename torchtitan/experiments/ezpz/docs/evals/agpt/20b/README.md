@@ -18,7 +18,7 @@
 
 ## Benchmark Accuracy vs Training Step
 
-![20B Eval Results](figures/eval_20b.png)
+![20B Eval Results](figures/eval_20b_v2.png)
 
 ## Results
 
