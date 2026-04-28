@@ -29,15 +29,20 @@ import matplotlib
 
 matplotlib.use("Agg")
 
+import matplotlib.pyplot as plt  # noqa: E402
+import numpy as np  # noqa: E402
+
 try:
     import ambivalent
-    import matplotlib.pyplot as plt  # noqa: E402
 
     plt.style.use(ambivalent.STYLES["ambivalent"])
-except ImportError:
-    import matplotlib.pyplot as plt  # noqa: E402
+except ImportError as e:
+    import warnings
 
-import numpy as np  # noqa: E402
+    warnings.warn(
+        f"ambivalent style unavailable, using matplotlib defaults: {e}",
+        stacklevel=2,
+    )
 
 # Regex to strip ANSI escape sequences
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")

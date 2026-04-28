@@ -21,13 +21,19 @@ import matplotlib
 
 matplotlib.use("Agg")
 
+import matplotlib.pyplot as plt
+
 try:
     import ambivalent
-    import matplotlib.pyplot as plt
 
     plt.style.use(ambivalent.STYLES["ambivalent"])
-except ImportError:
-    import matplotlib.pyplot as plt
+except ImportError as e:
+    import warnings
+
+    warnings.warn(
+        f"ambivalent style unavailable, using matplotlib defaults: {e}",
+        stacklevel=2,
+    )
 
 
 TASK_COLORS = {
