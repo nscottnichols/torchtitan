@@ -58,9 +58,26 @@ was required in ezpz.
     (force_sum_reduction for CCL/XPU), the `capture_scalar_outputs=False`
     reset after compile, and the `[norm, lm_head]` joint FSDP grouping.
   - Smoke test: 2N debug-scaling pending.
-- **moe: TODO.** moe/parallelize.py still uses the old API. Same replay
-  pattern needed against `models/deepseek_v3/parallelize.py` +
-  `models/deepseek_v3/sharding.py`. Not blocking — no current moe runs.
+- **moe: DONE.** Same shape of replay against deepseek_v3:
+  - New `moe/sharding.py` mirrors `models/deepseek_v3/sharding.py` but
+    binds against `experiments.ezpz.moe.model.Attention` (our MLA Attention
+    is a separate class from upstream's, even though structurally identical).
+  - `moe/model.py`: extends `moeModel.Config.update_from_config` to call
+    `set_moe_sharding_config` after the existing rope/MoE sync logic.
+  - `moe/parallelize.py`: rewritten as a thin orchestrator. The non-MoE TP
+    plumbing (`apply_non_moe_tp` with manual ColwiseParallel/RowwiseParallel/
+    SequenceParallel/PrepareModuleInput plans for attention + norms +
+    dense FFN) is gone — replaced by `model.parallelize(tp_mesh)`.
+    `apply_moe_ep_tp` is kept (mirrors upstream — MoE blocks are still
+    parallelized at parallelize-time, not via sharding_config).
+    `apply_fsdp` is still inlined locally (avoids `ShardPlacementResult`
+    import which doesn't exist in Aurora's PyTorch) and includes the
+    Shard(0) fallback for when expert hidden dim isn't FSDP-divisible.
+    Per-block `block.compile(backend=...)` workaround kept (XPU can't do
+    fullgraph=True for MoE routing).
+  - Smoke build verified locally: imports + `update_from_config` +
+    `Module.parallelize(1D mesh)` + meta `cfg.build()` all work on the
+    moe `debugmodel` flavor.
 - **qwen3: TODO.** qwen3 has its own model class that still references
   `self.output` (pre-rename) and would need a deeper rewrite. Not
   blocking — no current qwen3 runs.
