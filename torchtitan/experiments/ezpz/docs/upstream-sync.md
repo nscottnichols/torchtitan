@@ -78,9 +78,15 @@ was required in ezpz.
   - Smoke build verified locally: imports + `update_from_config` +
     `Module.parallelize(1D mesh)` + meta `cfg.build()` all work on the
     moe `debugmodel` flavor.
-- **qwen3: TODO.** qwen3 has its own model class that still references
-  `self.output` (pre-rename) and would need a deeper rewrite. Not
-  blocking — no current qwen3 runs.
+- **qwen3: REMOVED.** ezpz/qwen3 had drifted significantly from upstream
+  (single `layer:` template vs upstream's `layers: list`, custom
+  `__init__(config, *, layer_id, dim, n_layers)` block constructor,
+  `self.output` references, no `lm_head` slot in qwen3_configs entries).
+  README marked it "still under development" and no production jobs ever
+  used it. Removed via `git rm -r` rather than carry the replay debt
+  for unused code. History retained — restore with
+  `git checkout <parent-sha> -- torchtitan/experiments/ezpz/qwen3` if
+  ever needed.
 
 **Float8 tensorwise TP:** dropped from `agpt/parallelize.py` during the
 replay. The new sharding API doesn't expose an equivalent yet
