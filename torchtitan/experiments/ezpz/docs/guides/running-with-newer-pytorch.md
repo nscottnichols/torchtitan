@@ -46,7 +46,7 @@
    ```bash
    uvi torchcomms tyro tensorboard deepspeed mpi4py
    uvi "git+https://github.com/zhenghh04/blendcorpus"
-   uvi "git+https://github.com/saforem2/ezpz@fix/remove-ipex-imports"
+   uvi "git+https://github.com/saforem2/ezpz@fix/mfu-tracking"
    ```
 
 6. Remove Intel's MPI runtime (`impi-rt`):
