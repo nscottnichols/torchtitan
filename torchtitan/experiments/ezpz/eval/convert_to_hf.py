@@ -89,7 +89,7 @@ if __name__ == "__main__":
         default="experiments.ezpz.agpt",
     )
     parser.add_argument(
-        "--model_flavor", type=str, nargs="?", default="agpt_2b"
+        "--model_flavor", type=str, nargs="?", default="2b"
     )
     parser.add_argument(
         "--export_dtype",

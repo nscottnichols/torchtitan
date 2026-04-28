@@ -56,10 +56,8 @@ RESULTS_DIR="${REPO_ROOT}/outputs/evals/agpt-${MODEL}/step-${STEP}/results"
 # HF config for this model size
 HF_CONFIG="${EVAL_DIR}/configs/agpt_${MODEL}_config.json"
 
-# Model flavor (uppercase for config_registry)
-MODEL_FLAVOR="${MODEL^^}"
-# But config_registry uses "agpt_2b" style names
-MODEL_FLAVOR="agpt_${MODEL}"
+# Model flavor — config_registry uses lowercase "2b", "20b", etc.
+MODEL_FLAVOR="${MODEL}"
 
 # TP for vllm (2B fits on 1 GPU, 20B needs multiple)
 if [[ "$MODEL" == "2b" ]]; then
