@@ -1,0 +1,82 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+#
+# This source code is licensed under the BSD-style license found in the
+# LICENSE file in the root directory of this source tree.
+
+"""Config-based DTensor sharding for the agpt (Llama3-derived) model.
+
+Mirrors `torchtitan.models.llama3.sharding` but additionally fills in
+sharding for the optional QK-Norm RMSNorm sub-module that agpt configs
+may include. Upstream's `set_gqa_attention_sharding` does not know about
+qk_norm.
+"""
+
+from typing import TYPE_CHECKING
+
+from torch.distributed.tensor import Replicate
+
+from torchtitan.models.common.decoder_sharding import (
+    dense_param_placement,
+    norm_config,
+    set_decoder_sharding_config,
+    set_dense_ffn_sharding,
+    set_gqa_attention_sharding,
+)
+from torchtitan.protocols.sharding import ShardingConfig
+
+if TYPE_CHECKING:
+    from torchtitan.models.llama3.model import Llama3Model, Llama3TransformerBlock
+
+
+def set_agpt_sharding_config(
+    config: "Llama3Model.Config",
+    *,
+    loss_parallel: bool,
+    enable_sp: bool,
+) -> None:
+    """Fill ``sharding_config`` on all agpt sub-configs.
+
+    Same plan as `set_llama3_sharding_config` plus QK-Norm sharding when
+    present. Specs are populated unconditionally; the runtime mesh
+    determines which declarations apply.
+    """
+    set_decoder_sharding_config(
+        config, loss_parallel=loss_parallel, enable_sp=enable_sp
+    )
+    for layer_cfg in config.layers:
+        _set_agpt_layer_sharding(layer_cfg, enable_sp=enable_sp)
+
+
+def _set_agpt_layer_sharding(
+    layer_cfg: "Llama3TransformerBlock.Config",
+    *,
+    enable_sp: bool,
+) -> None:
+    """Set sharding on one agpt transformer layer (with optional QK-Norm)."""
+    norm = norm_config(enable_sp=enable_sp)
+    layer_cfg.attention_norm.sharding_config = norm
+    layer_cfg.ffn_norm.sharding_config = norm
+
+    set_gqa_attention_sharding(layer_cfg.attention, enable_sp=enable_sp)
+
+    qk_norm = getattr(layer_cfg.attention, "qk_norm", None)
+    if qk_norm is not None:
+        # QK-Norm RMSNorms operate on the head_dim of an already-Replicate-d
+        # x inside the GQA forward (set_gqa_attention_sharding uses
+        # in_dst_shardings={"x": Replicate}), so the norm itself only needs
+        # its weight distributed across all dims and no activation
+        # redistribution.
+        qk_norm.sharding_config = ShardingConfig(
+            state_shardings={"weight": dense_param_placement(tp=Replicate())},
+        )
+
+    assert layer_cfg.feed_forward is not None
+    from torch.distributed.tensor import Placement, Shard
+
+    attn_x_placement: Placement = Shard(1) if enable_sp else Replicate()
+    set_dense_ffn_sharding(
+        layer_cfg.feed_forward,
+        attn_x_placement=attn_x_placement,
+        enable_sp=enable_sp,
+    )

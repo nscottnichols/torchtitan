@@ -159,8 +159,9 @@ class ReLUSquaredFeedForward(FeedForward):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         h = F.relu(self.w1(x))
         return self.w2(h * h * self.w3(x))
+from torchtitan.experiments.ezpz.agpt.model import AgptModel
 from torchtitan.models.common.param_init import depth_scaled_std
-from torchtitan.models.llama3.model import Llama3Model, Llama3TransformerBlock
+from torchtitan.models.llama3.model import Llama3TransformerBlock
 from torchtitan.models.llama3.state_dict_adapter import Llama3StateDictAdapter
 from torchtitan.protocols.model_spec import FaultTolerantModelSpec
 
@@ -318,8 +319,8 @@ def _build_agpt_config(
     qk_norm: bool = False,
     logit_softcap: float | None = None,
     relu_squared: bool = False,
-) -> Llama3Model.Config:
-    return Llama3Model.Config(
+) -> AgptModel.Config:
+    return AgptModel.Config(
         dim=dim,
         vocab_size=vocab_size,
         tok_embeddings=Embedding.Config(
