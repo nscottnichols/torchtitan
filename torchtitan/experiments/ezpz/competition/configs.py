@@ -633,17 +633,17 @@ def r5_schedulefree():
 def smoke_2b_50steps():
     """50-step AdamW smoke test — verifies the post-#2963/#2937 replay.
 
-    Minimum viable run: 2 nodes, AdamW, no compile (faster startup), no
-    checkpoint, 50 steps. Verifies imports, model build, sharding-config
-    population, Module.parallelize, FSDP wrap, optimizer step, loss
-    function, and that loss decreases. ~5 minutes wall time.
+    Mirrors speedrun configs (compile on, ac=none, LBS=2, seq_len=8192)
+    but only 50 steps and warmup=5. Compile is required because plain
+    cross_entropy on [B*T, vocab=256k] OOMs on a single XPU tile without
+    the compiled chunked path. ~10 min wall time including compile.
     """
     cfg = agpt(
         "2b",
         local_batch_size=LOCAL_BATCH_SIZE,
         activation_checkpoint_mode="none",
         seq_len=SEQ_LEN,
-        compile=False,
+        compile=True,
         checkpoint_interval=10_000,
     )
     cfg.dataloader.dataset = DATASET

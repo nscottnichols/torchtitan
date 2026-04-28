@@ -259,6 +259,20 @@ class moeModel(Decoder):
                     f"{type(self.layers[0].attention.inner_attention).__name__}."
                 )
 
+            # Fill ShardingConfig on every sub-module config so
+            # Module.parallelize(tp_mesh) can distribute params/activations.
+            # MoE blocks are intentionally skipped — apply_moe_ep_tp handles
+            # them at parallelize-time, mirroring upstream deepseek_v3.
+            from torchtitan.experiments.ezpz.moe.sharding import (
+                set_moe_sharding_config,
+            )
+
+            set_moe_sharding_config(
+                self,
+                loss_parallel=not parallelism.disable_loss_parallel,
+                enable_sp=parallelism.enable_sequence_parallel,
+            )
+
         def get_nparams_and_flops(
             self, model: nn.Module, seq_len: int
         ) -> tuple[int, int]:

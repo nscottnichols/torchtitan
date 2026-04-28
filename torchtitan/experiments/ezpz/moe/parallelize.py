@@ -4,29 +4,49 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-import ezpz
+"""Apply PT-D parallelisms + AC + compile + FSDP to the ezpz/moe model.
 
-import torch
-import torch.distributed
-import torch.nn as nn
+This is the moe mirror of `torchtitan.models.deepseek_v3.parallelize`. It
+uses the new config-based DTensor sharding API for the non-MoE path: TP
+on attention/norms/dense-FFN is applied via `model.parallelize(tp_mesh)`,
+which reads `sharding_config` declarations filled in by
+`moeModel.Config.update_from_config`.
 
-from ezpz.models import summarize_model
+MoE expert/router TP and EP are still applied at parallelize-time by
+`apply_moe_ep_tp` — that mirrors upstream deepseek_v3, where
+`set_deepseek_v3_sharding_config` also leaves the MoE block alone.
+
+Differences vs upstream `parallelize_deepseekv3`:
+
+- `disable_fsdp_gradient_division` enables
+  `set_force_sum_reduction_for_comms(True)` for non-NCCL backends
+  (CCL on XPU). Upstream's version only sets the divide factor.
+- `apply_compile`: upstream uses fullgraph=True via `apply_compile_sparse`,
+  which fails on XPU (MoE routing's dynamic shapes). We compile each
+  block with `block.compile(backend=...)` (no fullgraph).
+- `apply_fsdp` is inlined locally to avoid importing
+  `ShardPlacementResult`, which doesn't exist in Aurora's PyTorch. Also
+  adds a Shard(0) fallback when expert hidden dim isn't divisible by the
+  FSDP world size.
+"""
 
 from typing import Any
 
+import ezpz
+import ezpz.distributed
+import torch
+import torch.distributed
+import torch.nn as nn
+from ezpz.models import summarize_model
 from torch.distributed.device_mesh import DeviceMesh
 from torch.distributed.fsdp import CPUOffloadPolicy, fully_shard, MixedPrecisionPolicy
 from torch.distributed.tensor import Partial, Replicate, Shard
 from torch.distributed.tensor.parallel import (
-    ColwiseParallel,
     parallelize_module,
-    PrepareModuleInput,
     PrepareModuleInputOutput,
     RowwiseParallel,
-    SequenceParallel,
 )
 
-from torchtitan.components.quantization.float8 import find_float8_linear_config
 from torchtitan.config import (
     ActivationCheckpointConfig,
     CompileConfig,
@@ -36,12 +56,7 @@ from torchtitan.config import (
 )
 from torchtitan.distributed import ParallelDims
 from torchtitan.distributed.activation_checkpoint import apply_ac
-
-from torchtitan.distributed.context_parallel import apply_cp_to_attention_module
-from torchtitan.distributed.tensor_parallel import maybe_enable_async_tp, NoParallel
-
-# from torchtitan.models.moe import DeepSeekV3Model
-from torchtitan.experiments.ezpz.moe import moeModel
+from torchtitan.distributed.context_parallel import apply_cp_to_forward
 from torchtitan.distributed.expert_parallel import (
     ExpertParallel,
     ExpertTensorParallel,
@@ -50,21 +65,33 @@ from torchtitan.distributed.expert_parallel import (
 from torchtitan.distributed.fsdp import get_fsdp_reshard_after_forward_policy
 from torchtitan.distributed.tensor_parallel import (
     ColwiseParallelWithGradPlacement,
+    maybe_enable_async_tp,
+    NoParallel,
 )
+from torchtitan.experiments.ezpz.moe import moeModel
 from torchtitan.protocols import ModelConvertersContainer
 from torchtitan.tools.logging import logger
 
 
 def disable_fsdp_gradient_division(model: nn.Module) -> None:
+    """Disable FSDP's automatic gradient division and (on XPU/CCL) force
+    sum reduction for cross-rank gradient comms.
+
+    On NCCL the default reduce-mean works correctly. On CCL (XPU) we need
+    SUM and divide ourselves to avoid losing precision.
+    """
     force_sum_reduction = False
     if torch.distributed.is_available() and torch.distributed.is_initialized():
-        backend = ezpz.distributed.get_torch_backend() or str(torch.distributed.get_backend())
+        backend = ezpz.distributed.get_torch_backend() or str(
+            torch.distributed.get_backend()
+        )
         if backend and "nccl" not in str(backend).lower():
             force_sum_reduction = True
 
     fsdp_modules_updated = 0
     for module in model.modules():
-        # Be resilient to FSDPModule class location changes across PyTorch releases.
+        # Be resilient to FSDPModule class location changes across PyTorch
+        # releases by going through the public method.
         set_divide_factor = getattr(module, "set_gradient_divide_factor", None)
         if callable(set_divide_factor):
             set_divide_factor(1.0)
@@ -83,7 +110,6 @@ def disable_fsdp_gradient_division(model: nn.Module) -> None:
     )
 
 
-# Adapted from llama4/infra/parallelize.py
 def parallelize_moe(
     model: moeModel,
     *,
@@ -95,9 +121,11 @@ def parallelize_moe(
     ac_config: ActivationCheckpointConfig,
     dump_folder: str,
 ):
-    # TODO: TP currently cannot handle uneven seq_len because we set
-    #       `use_local_output=True` to use plain Tensors for legacy reasons.
-    #       Need to revisit this.
+    """Apply CP + TP + EP + AC + compile + FSDP to the moe model.
+
+    The passed-in model preferably should be on meta device. Otherwise
+    the model must fit on GPU or CPU memory.
+    """
     assert (
         training.seq_len % parallel_dims.seq_len_divisor == 0
     ), f"""
@@ -105,37 +133,30 @@ def parallelize_moe(
         ({parallel_dims.tp}) and 2 * CP degree ({parallel_dims.cp}).
         """
 
-    if parallel_dims.tp_enabled:
-        float8_config = find_float8_linear_config(model_converters.converters)
-        enable_float8_linear = float8_config is not None
-        float8_is_rowwise = float8_config is not None and float8_config.recipe_name in (
-            "rowwise",
-            "rowwise_with_gw_hp",
-        )
-
-        enable_float8_tensorwise_tp = enable_float8_linear and not float8_is_rowwise
-        if enable_float8_tensorwise_tp:
-            # TODO(jianiw): This branch needs to be tested and enabled
+    # CP: wrap inner attention forward BEFORE parallelize() so CP logic
+    # runs inside the local_map boundary on local tensors.
+    if parallel_dims.cp_enabled:
+        if parallel_dims.tp_enabled:
             raise NotImplementedError(
-                "Currently, float8 tensorwise TP is not tested for moe"
+                "Context Parallel with Tensor Parallel is not yet supported "
+                "for DeepSeek-V3. "
+                "See https://github.com/pytorch/torchtitan/issues/2446"
             )
-
-        enable_sp = parallelism.enable_sequence_parallel
-
-        tp_mesh = parallel_dims.get_mesh("tp")
-        apply_non_moe_tp(
-            model,
-            tp_mesh,
-            enable_loss_parallel=not parallelism.disable_loss_parallel,
-            enable_float8_tensorwise_tp=False,
-            enable_cp=parallel_dims.cp_enabled,
-            enable_sp=enable_sp,
+        apply_cp_to_forward(
+            [block.attention.inner_attention for block in model.layers.values()],
+            parallel_dims.get_mesh("cp"),
         )
+
+    # TP via the config-based sharding API. The model's sharding_config
+    # declarations were filled in by update_from_config (see model.py).
+    # MoE blocks are intentionally not handled here — apply_moe_ep_tp
+    # below does that (mirrors upstream deepseek_v3).
+    if parallel_dims.tp_enabled:
+        tp_mesh = parallel_dims.get_mesh("tp")
+        model.parallelize(tp_mesh)
         maybe_enable_async_tp(parallelism, compile_config, tp_mesh)
 
-    # EP/TP parallelization for MoE layers. The comm_backend (standard,
-    # deepep, etc.) is now configured at model creation time via the
-    # token dispatcher, not at parallelization time.
+    # EP/TP for MoE blocks.
     if parallel_dims.tp_enabled or parallel_dims.ep_enabled:
         apply_moe_ep_tp(
             model,
@@ -143,18 +164,6 @@ def parallelize_moe(
             ep_mesh=parallel_dims.get_optional_mesh("ep"),
             etp_mesh=parallel_dims.get_optional_mesh("etp"),
             ep_etp_mesh=parallel_dims.get_optional_mesh(["ep", "etp"]),
-        )
-
-    if parallel_dims.cp_enabled:
-        if parallel_dims.tp_enabled:
-            raise NotImplementedError(
-                "Context Parallel with Tensor Parallel is not yet supported for DeepSeek-V3. "
-                "See https://github.com/pytorch/torchtitan/issues/2446"
-            )
-        apply_cp_to_attention_module(
-            # pyrefly: ignore [missing-attribute, not-callable]
-            [block.attention.inner_attention for block in model.layers.values()],
-            parallel_dims.get_mesh("cp"),
         )
 
     model_compile_enabled = (
@@ -174,8 +183,6 @@ def parallelize_moe(
         # XPU after 00b7f569 removed maybe_enable_amp — MoE routing's
         # dynamic shapes cause recompilation that fullgraph=True forbids.
         # Apply compile per-block without fullgraph instead.
-        import torch
-
         torch._dynamo.config.skip_fwd_side_effects_in_bwd_under_checkpoint = True
         for layer_id, block in model.layers.named_children():
             block.compile(backend=compile_config.backend)
@@ -206,132 +213,26 @@ def parallelize_moe(
         ep_degree=parallel_dims.ep,
         edp_mesh=edp_mesh,
     )
-    disable_fsdp_gradient_division(model)
 
-    logger.info("Applied fully_shard to the model")
+    if parallel_dims.dp_replicate_enabled:
+        logger.info("Applied HSDP to the model")
+    else:
+        logger.info("Applied FSDP to the model")
 
     if training.enable_cpu_offload:
         logger.info("Applied CPU Offloading to the model")
 
-    logger.info(f"\n+{ezpz.models.summarize_model(model)}")
+    logger.info(f"\n+{summarize_model(model)}")
 
     return model
 
 
-def apply_non_moe_tp(
-    model: nn.Module,
-    tp_mesh: DeviceMesh,
-    enable_loss_parallel: bool,
-    enable_float8_tensorwise_tp: bool,
-    enable_cp: bool,
-    enable_sp: bool = True,
-):
-    """Apply tensor parallelism."""
-    sp_layout = Shard(1) if enable_sp else Replicate()
-    embed_plan = RowwiseParallel(
-        input_layouts=Replicate(),
-        output_layouts=sp_layout,
-        use_local_output=enable_sp,
-    )
-
-    parallelize_module(
-        model,
-        tp_mesh,
-        {
-            "tok_embeddings": embed_plan,
-            "norm": SequenceParallel() if enable_sp else NoParallel(),
-            "output": ColwiseParallel(
-                input_layouts=sp_layout,
-                output_layouts=Shard(-1) if enable_loss_parallel else Replicate(),
-                use_local_output=not enable_loss_parallel,
-            ),
-        },
-    )
-
-    rowwise_parallel, colwise_parallel, prepare_module_input = (
-        RowwiseParallel,
-        ColwiseParallel,
-        PrepareModuleInput,
-    )
-
-    attention_kernel_plan = prepare_module_input(
-        input_layouts=(Shard(1), Shard(1), Shard(1)),
-        desired_input_layouts=(Shard(1), Shard(1), Shard(1)),
-        use_local_output=True,
-    )
-    positions_sharding = Replicate() if enable_cp else None
-    norm_plan = SequenceParallel() if enable_sp else NoParallel()
-    rowwise_output_plan = rowwise_parallel(
-        output_layouts=sp_layout, use_local_output=enable_sp
-    )
-
-    # pyrefly: ignore [not-callable]
-    for transformer_block in model.layers.values():
-        # pyrefly: ignore [no-matching-overload]
-        layer_plan = {
-            "attention_norm": norm_plan,
-            "attention": prepare_module_input(
-                input_layouts=(sp_layout, Replicate(), None, positions_sharding),
-                desired_input_layouts=(
-                    Replicate(),
-                    Replicate(),
-                    None,
-                    positions_sharding,
-                ),
-            ),
-            "attention.wkv_a": NoParallel(),
-            "attention.wkv_b": colwise_parallel(use_local_output=False),
-            "attention.kv_norm": NoParallel(),
-            "attention.inner_attention": attention_kernel_plan,
-            "attention.wo": rowwise_output_plan,
-            "ffn_norm": norm_plan,
-        }
-
-        # pyrefly: ignore [missing-attribute]
-        if transformer_block.attention.q_lora_rank == 0:
-            layer_plan["attention.wq"] = colwise_parallel(
-                use_local_output=False
-            )  # This is only used when q_lora_rank==0
-        else:
-            layer_plan.update(
-                {
-                    "attention.wq_a": NoParallel(),
-                    "attention.wq_b": colwise_parallel(use_local_output=False),
-                    "attention.q_norm": NoParallel(),
-                }
-            )
-
-        # pyrefly: ignore [missing-attribute]
-        if not transformer_block.moe_enabled:
-            layer_plan.update(
-                {
-                    "feed_forward": prepare_module_input(
-                        input_layouts=(sp_layout,),
-                        desired_input_layouts=(Replicate(),),
-                    ),
-                    "feed_forward.w1": colwise_parallel(),
-                    "feed_forward.w2": rowwise_output_plan,
-                    "feed_forward.w3": colwise_parallel(),
-                }
-            )
-
-        parallelize_module(
-            # pyrefly: ignore [bad-argument-type]
-            module=transformer_block,
-            device_mesh=tp_mesh,
-            # pyrefly: ignore [bad-argument-type]
-            parallelize_plan=layer_plan,
-        )
-
-    logger.info(
-        f"Applied {'Float8 tensorwise ' if enable_float8_tensorwise_tp else ''}"
-        "Tensor Parallelism to the model"
-    )
-
-
 # ---------------------------------------------------------------------------
 # Inlined from torchtitan.models.llama4.parallelize to avoid importing
-# ShardPlacementResult which doesn't exist in the Aurora PyTorch framework.
+# ShardPlacementResult, which doesn't exist in Aurora's PyTorch framework
+# release. Also adds a Shard(0) fallback when the expert hidden dim isn't
+# divisible by the FSDP world size — upstream's version assumes divisibility
+# and crashes otherwise.
 # ---------------------------------------------------------------------------
 
 
@@ -345,9 +246,12 @@ def apply_fsdp(
     reshard_after_forward_policy: str = "default",
     ep_degree: int = 1,
     edp_mesh: DeviceMesh | None = None,
-    gradient_divide_factor: int | None = None,
 ):
-    mp_policy = MixedPrecisionPolicy(param_dtype=param_dtype, reduce_dtype=reduce_dtype)
+    mp_policy = MixedPrecisionPolicy(
+        param_dtype=param_dtype,
+        reduce_dtype=reduce_dtype,
+        cast_forward_inputs=False,
+    )
     fsdp_config: dict[str, Any] = {"mesh": dp_mesh, "mp_policy": mp_policy}
     if cpu_offload:
         fsdp_config["offload_policy"] = CPUOffloadPolicy()
@@ -362,9 +266,9 @@ def apply_fsdp(
             **fsdp_config,
             reshard_after_forward=reshard_after_forward,
         )
-    if model.norm is not None and model.output is not None:
+    if model.norm is not None and model.lm_head is not None:
         fully_shard(
-            [model.norm, model.output],
+            [model.norm, model.lm_head],
             **fsdp_config,
             reshard_after_forward=reshard_after_forward_policy == "always",
         )
@@ -386,7 +290,6 @@ def apply_fsdp(
             # the hidden dim to be evenly divisible by the world size.
             # Fall back to Shard(0) if not (avoids uneven sharding error).
             if efsdp_ep_size > num_experts:
-                # Check if hidden dim (dim 1 of expert weights) is divisible
                 expert_w = next(iter(transformer_block.moe.experts.parameters()))
                 if expert_w.shape[1] % efsdp_ep_size == 0:
                     expert_shard_placement = Shard(1)
@@ -417,7 +320,9 @@ def apply_fsdp(
                     shard_placement_fn=_experts_shard_placement_fn,
                 )
             else:
-                # ep_degree > 1: per-param mesh with ShardPlacementResult
+                # ep_degree > 1: per-param mesh with ShardPlacementResult.
+                # Imported lazily to avoid hard dependency on a private
+                # PyTorch API path that may not exist in older releases.
                 from torch.distributed.fsdp._fully_shard._fsdp_common import (
                     FSDPMeshInfo,
                     ShardPlacementResult,
@@ -438,10 +343,9 @@ def apply_fsdp(
                         return ShardPlacementResult(
                             placement=_expert_placement, mesh_info=_edp_mesh_info
                         )
-                    else:
-                        return ShardPlacementResult(
-                            placement=Shard(0), mesh_info=_dp_mesh_info
-                        )
+                    return ShardPlacementResult(
+                        placement=Shard(0), mesh_info=_dp_mesh_info
+                    )
 
                 fully_shard(
                     transformer_block,
@@ -466,9 +370,14 @@ def apply_moe_ep_tp(
     ep_mesh: DeviceMesh | None,
     etp_mesh: DeviceMesh | None,
     ep_etp_mesh: DeviceMesh | None,
-    comm_backend: str = "standard",
-    hybridep_non_blocking_expert_capacity_factor: float | None = None,
 ):
+    """Apply MoE expert/tensor parallelism plans to MoE-enabled blocks.
+
+    Same plan structure as upstream `llama4.parallelize.apply_moe_ep_tp`,
+    minus the DeepEP/HybridEP token-dispatcher plumbing (we don't use those
+    backends on Aurora). Token dispatching for the standard backend is
+    handled internally by the LocalTokenDispatcher class at model build.
+    """
     assert ep_mesh is not None or tp_mesh is not None
 
     for transformer_block in model.layers.values():
@@ -488,8 +397,6 @@ def apply_moe_ep_tp(
                     local_output_grad_placements=(Partial(),),
                 ),
             }
-            # Token dispatching is now handled internally by the
-            # TokenDispatcher classes (LocalTokenDispatcher, etc.).
             if transformer_block.moe.shared_experts is not None:
                 moe_layer_plan.update(
                     {
@@ -518,9 +425,6 @@ def apply_moe_ep_tp(
         elif tp_mesh is None or etp_mesh is None:
             assert ep_etp_mesh is None
             experts_mesh = ep_mesh
-            # DeepEP/HybridEP communication is now handled by the
-            # TokenDispatcher (DeepEPTokenDispatcher) configured at model
-            # creation time, not at parallelization time.
             experts_plan = ExpertParallel()
         else:
             experts_mesh = ep_etp_mesh

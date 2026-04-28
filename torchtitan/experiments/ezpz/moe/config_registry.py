@@ -290,6 +290,34 @@ def moe_10b_2b_sdpa() -> FaultTolerantTrainer.Config:
     return cfg
 
 
+def smoke_moe_500m_50steps() -> FaultTolerantTrainer.Config:
+    """50-step moe smoke test for the post-#2963/#2937 replay.
+
+    Smallest non-debug moe flavor (500M) on 2 nodes, AdamW, no checkpoint.
+    Verifies imports, model build, sharding-config population on MLA
+    attention + dense FFN, Module.parallelize, apply_moe_ep_tp,
+    per-block compile, FSDP wrap, optimizer step, loss decreasing.
+    Uses fineweb-edu HF stream so no local data is required.
+    """
+    cfg = moe(
+        "500M",
+        local_batch_size=2,
+        activation_checkpoint_mode="none",
+        seq_len=8192,
+        compile=True,
+        checkpoint_interval=10_000,
+    )
+    cfg.dataloader.dataset = "HuggingFaceFW/fineweb-edu"
+    cfg.dataloader.dataset_path = None
+    cfg.training.steps = 50
+    cfg.checkpoint.enable = False
+    cfg.optimizer.lr = 8e-4
+    cfg.lr_scheduler.warmup_steps = 5
+    cfg.lr_scheduler.decay_ratio = 0.0
+    cfg.metrics.log_freq = 1
+    return cfg
+
+
 def moe_debugmodel_from_json() -> FaultTolerantTrainer.Config:
     return _config_from_json(moe_debugmodel)
 
