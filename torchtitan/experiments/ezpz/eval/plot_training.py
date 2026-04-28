@@ -255,7 +255,8 @@ def plot_metrics_panel(
     metrics: list[tuple[str, str]] | None = None,
     output_path: str | None = None,
 ) -> matplotlib.figure.Figure:
-    """Plot a 2x2 panel of training metrics."""
+    """Plot a multi-panel grid of training metrics with tail-zoom insets."""
+    from mpl_toolkits.axes_grid1.inset_locator import inset_axes
     if metrics is None:
         # Check if any run has LR data
         has_lr = any("lr" in r.metrics for r in runs)
@@ -283,6 +284,9 @@ def plot_metrics_panel(
     for idx in range(len(metrics), nrows * ncols):
         axes.flat[idx].set_visible(False)
 
+    # Metrics that benefit from a tail-zoom inset
+    inset_metrics = {"loss", "grad_norm", "tps", "mfu"}
+
     for ax, (metric, ylabel) in zip(axes.flat, metrics):
         for i, run in enumerate(runs):
             if metric not in run.metrics:
@@ -292,6 +296,29 @@ def plot_metrics_panel(
                     color=c, linestyle=run.linestyle, linewidth=1.5)
         ax.set_xlabel("Step"); ax.set_ylabel(ylabel)
         ax.set_title(ylabel); ax.legend(fontsize=7, loc="best")
+
+        # Add inset zoom for applicable metrics
+        if metric in inset_metrics and runs:
+            valid_runs = [r for r in runs if metric in r.metrics and r.steps]
+            if valid_runs:
+                max_step = max(r.steps[-1] for r in valid_runs)
+                start = int(max_step * 0.6)
+                axins = inset_axes(
+                    ax, width="40%", height="40%",
+                    loc="center right" if metric in ("loss", "grad_norm") else "center left",
+                    bbox_to_anchor=(0, 0.05, 1, 1), bbox_transform=ax.transAxes,
+                )
+                for i, run in enumerate(valid_runs):
+                    c = run.color or colors[i % len(colors)]
+                    mask = [j for j, s in enumerate(run.steps) if s >= start]
+                    if mask:
+                        axins.plot(
+                            [run.steps[j] for j in mask],
+                            [run.metrics[metric][j] for j in mask],
+                            color=c, linestyle=run.linestyle, linewidth=1.2,
+                        )
+                axins.set_title("Tail zoom", fontsize=7)
+                axins.tick_params(labelsize=6)
 
     fig.suptitle(title, fontsize=14, y=0.98)
     plt.tight_layout(rect=[0, 0, 1, 0.96])
