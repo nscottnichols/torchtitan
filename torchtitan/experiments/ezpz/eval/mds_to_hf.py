@@ -15,12 +15,57 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import io
+import json
+import pickle
 import shutil
 from pathlib import Path
 
 import torch
 from safetensors.torch import save_file
 from transformers import LlamaConfig
+
+
+def _make_dummy(module: str, name: str):
+    def _setstate(self, state):
+        if isinstance(state, tuple) and len(state) == 2:
+            if isinstance(state[0], dict):
+                self.__dict__.update(state[0])
+            if isinstance(state[1], dict):
+                self.__dict__.update(state[1])
+        elif isinstance(state, dict):
+            self.__dict__.update(state)
+        else:
+            self.__dict__["__state__"] = state
+
+    return type(name, (), {
+        "__module__": module,
+        "__init__": lambda self, *a, **kw: None,
+        "__setstate__": _setstate,
+    })
+
+
+class _MegatronCompatUnpickler(pickle.Unpickler):
+    # MDS checkpoints reference classes from the `megatron` package (in
+    # optimizer/state objects). We only read `mds['args'].__dict__` and the
+    # weight tensors under `mds['module']`, so we never invoke those classes —
+    # the unpickler just needs to not crash on the references.
+    def find_class(self, module: str, name: str):
+        if module == "megatron" or module.startswith("megatron."):
+            return _make_dummy(module, name)
+        return super().find_class(module, name)
+
+
+class _PickleShim:
+    Unpickler = _MegatronCompatUnpickler
+
+    @staticmethod
+    def load(file, **kwargs):
+        return _MegatronCompatUnpickler(file, **kwargs).load()
+
+    @staticmethod
+    def loads(data, **kwargs):
+        return _MegatronCompatUnpickler(io.BytesIO(data), **kwargs).load()
 
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -54,7 +99,16 @@ def convert(mds_path: Path, out_dir: Path) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"Loading MDS checkpoint from {mds_path}")
-    mds = torch.load(mds_path, map_location="cpu", weights_only=False)
+    # MDS checkpoints reference `megatron.*` classes (in optimizer state and the
+    # `args` namespace). We don't need megatron itself — the shim returns dummy
+    # classes that just hold whatever __dict__ was pickled, which is enough for
+    # `mds['args'].__dict__` and the weight tensors under `mds['module']`.
+    mds = torch.load(
+        mds_path,
+        map_location="cpu",
+        weights_only=False,
+        pickle_module=_PickleShim,
+    )
     args_dict = mds["args"].__dict__
 
     cfg = build_llama_config(args_dict)
@@ -113,10 +167,21 @@ def convert(mds_path: Path, out_dir: Path) -> None:
     # Cast to bf16 to match the dtype the model was trained in.
     state_dict = {k: v.to(torch.bfloat16) for k, v in state_dict.items()}
 
-    # Save as a single safetensors shard so transformers' from_pretrained finds it.
-    safetensors_path = out_dir / "model-00001-of-00001.safetensors"
+    # Save as a single safetensors shard. Write the matching index file so
+    # transformers' `from_pretrained` finds it (it checks for the index before
+    # the sharded file pattern).
+    shard_name = "model-00001-of-00001.safetensors"
+    safetensors_path = out_dir / shard_name
     save_file(state_dict, safetensors_path)
     print(f"Saved weights: {safetensors_path}")
+
+    index = {
+        "metadata": {
+            "total_size": sum(t.numel() * t.element_size() for t in state_dict.values()),
+        },
+        "weight_map": {k: shard_name for k in state_dict},
+    }
+    (out_dir / "model.safetensors.index.json").write_text(json.dumps(index, indent=2))
 
     # Copy tokenizer files (gemma-7b — same as torchtitan-ezpz uses).
     for f in (
