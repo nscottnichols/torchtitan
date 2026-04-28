@@ -30,6 +30,7 @@ class Qwen3StateDictAdapter(MoEStateDictAdapter):
             model_config.layers[0].attention.qkv_linear, FusedQKVLinear.Config
         )
 
+        qkv_map: dict[str, str | None]
         if self.fuse_qkv:
             qkv_map = {
                 "model.layers.{}.self_attn.q_proj.weight": None,
@@ -46,7 +47,7 @@ class Qwen3StateDictAdapter(MoEStateDictAdapter):
         self.from_hf_map = {
             "model.embed_tokens.weight": "tok_embeddings.weight",
             # Attention module
-            **qkv_map,  # pyrefly: ignore [invalid-argument]
+            **qkv_map,
             "model.layers.{}.self_attn.o_proj.weight": "layers.{}.attention.wo.weight",
             "model.layers.{}.self_attn.q_norm.weight": "layers.{}.attention.q_norm.weight",
             "model.layers.{}.self_attn.k_norm.weight": "layers.{}.attention.k_norm.weight",
@@ -271,7 +272,8 @@ class Qwen3StateDictAdapter(MoEStateDictAdapter):
 
             else:
                 new_key = self.from_hf_map[key]
-                # pyrefly: ignore [unsupported-operation]
+                if new_key is None:
+                    continue
                 state_dict[new_key] = value
 
         if self.fuse_qkv and pending_qkv:

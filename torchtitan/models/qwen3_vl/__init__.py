@@ -9,6 +9,8 @@ from functools import partial
 
 import torch.nn as nn
 
+from torchtitan.components.quantization import QuantizationConverter
+
 from torchtitan.models.common import Embedding, Linear, RoPE, TransformerBlock
 from torchtitan.models.common.attention import FlexAttention
 from torchtitan.models.common.config_utils import (
@@ -559,11 +561,15 @@ def model_registry(
     flavor: str,
     attn_backend: str = "sdpa",
     moe_comm_backend: str | None = None,
+    quantization: list[QuantizationConverter.Config] | None = None,
 ) -> ModelSpec:
     kwargs = {}
     if moe_comm_backend is not None:
         kwargs["moe_comm_backend"] = moe_comm_backend
     config = qwen3_vl_configs[flavor](**kwargs)
+    if quantization is not None:
+        for q in quantization:
+            q.build().convert(config)
     return ModelSpec(
         name="qwen3_vl",
         flavor=flavor,

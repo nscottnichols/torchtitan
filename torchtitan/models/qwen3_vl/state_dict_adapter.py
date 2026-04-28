@@ -40,6 +40,7 @@ class Qwen3VLStateDictAdapter(StateDictAdapter):
             model_config.layers[0].attention.qkv_linear, FusedQKVLinear.Config
         )
 
+        qkv_map: dict[str, str | None]
         if self.fuse_qkv:
             qkv_map = {
                 "model.language_model.layers.{}.self_attn.q_proj.weight": None,
@@ -57,7 +58,7 @@ class Qwen3VLStateDictAdapter(StateDictAdapter):
             # ===== Language Model =====
             "model.language_model.embed_tokens.weight": "tok_embeddings.weight",
             # Attention
-            **qkv_map,  # pyrefly: ignore [invalid-argument]
+            **qkv_map,
             "model.language_model.layers.{}.self_attn.o_proj.weight": "layers.{}.attention.wo.weight",
             "model.language_model.layers.{}.self_attn.q_norm.weight": "layers.{}.attention.q_norm.weight",
             "model.language_model.layers.{}.self_attn.k_norm.weight": "layers.{}.attention.k_norm.weight",
