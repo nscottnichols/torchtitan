@@ -20,7 +20,14 @@ from pathlib import Path
 import matplotlib
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
+
+try:
+    import ambivalent
+    import matplotlib.pyplot as plt
+
+    plt.style.use(ambivalent.STYLES["ambivalent"])
+except ImportError:
+    import matplotlib.pyplot as plt
 
 
 TASK_COLORS = {
@@ -64,9 +71,7 @@ def make_plot(data: dict, model: str, outpath: Path) -> None:
         print(f"[skip] no data for {model}")
         return
 
-    fig, ax = plt.subplots(1, 1, figsize=(12, 7))
-    fig.patch.set_facecolor("#1a1a2e")
-    ax.set_facecolor("#16213e")
+    _, ax = plt.subplots(1, 1, figsize=(12, 7))
 
     for task, color in TASK_COLORS.items():
         steps = sorted([s for s in data if task in data[s]])
@@ -89,18 +94,12 @@ def make_plot(data: dict, model: str, outpath: Path) -> None:
                 linewidth=1,
             )
 
-    ax.set_xlabel("Training Step", color="white", fontsize=12)
-    ax.set_ylabel("Accuracy", color="white", fontsize=12)
+    ax.set_xlabel("Training Step")
+    ax.set_ylabel("Accuracy")
     ax.set_title(
-        f"agpt_{model} — Benchmark Accuracy vs Training Step ({len(data)} checkpoints)",
-        color="white",
-        fontsize=14,
+        f"agpt_{model} — Benchmark Accuracy vs Training Step ({len(data)} checkpoints)"
     )
-    ax.legend(loc="upper left", fontsize=10)
-    ax.grid(True, alpha=0.3)
-    ax.tick_params(colors="white")
-    for spine in ax.spines.values():
-        spine.set_color("#444")
+    ax.legend(loc="upper left")
     plt.tight_layout()
     outpath.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(outpath, dpi=150, bbox_inches="tight")

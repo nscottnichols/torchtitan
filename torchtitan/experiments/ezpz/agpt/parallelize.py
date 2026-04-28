@@ -4,24 +4,33 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+"""Apply PT-D parallelisms + AC + compile + FSDP to the agpt model.
+
+This is the agpt mirror of `torchtitan.models.llama3.parallelize`. It uses
+the new config-based DTensor sharding API: TP is applied via
+`model.parallelize(tp_mesh)`, which reads `sharding_config` declarations
+that were filled in by `AgptModel.Config.update_from_config`.
+
+Differences vs upstream `parallelize_llama`:
+
+- `disable_fsdp_gradient_division` additionally enables
+  `set_force_sum_reduction_for_comms(True)` for non-NCCL backends (CCL on
+  XPU). Upstream's version only sets the divide factor.
+- After `apply_compile`, resets `torch._dynamo.config.capture_scalar_outputs`
+  to False. apply_compile sets it True for MoE; that breaks the
+  separately-compiled CrossEntropyLoss for dense models.
+- Names the FSDP grouping `[norm, lm_head]` together with
+  `reshard_after_forward=False` (upstream uses
+  `reshard_after_forward=reshard_after_forward_policy == "always"`).
+"""
+
 import ezpz
-
 import ezpz.distributed
-
 import torch
 import torch.nn as nn
 from torch.distributed.device_mesh import DeviceMesh
 from torch.distributed.fsdp import CPUOffloadPolicy, fully_shard, MixedPrecisionPolicy
-from torch.distributed.tensor import Replicate, Shard
-from torch.distributed.tensor.parallel import (
-    ColwiseParallel,
-    parallelize_module,
-    PrepareModuleInput,
-    RowwiseParallel,
-    SequenceParallel,
-)
 
-from torchtitan.components.quantization.float8 import find_float8_linear_config
 from torchtitan.config import (
     ActivationCheckpointConfig,
     CompileConfig,
@@ -32,10 +41,9 @@ from torchtitan.config import (
 from torchtitan.distributed import ParallelDims
 from torchtitan.distributed.activation_checkpoint import apply_ac
 from torchtitan.distributed.compile import apply_compile
-from torchtitan.distributed.context_parallel import apply_cp_to_attention_module
+from torchtitan.distributed.context_parallel import apply_cp_to_forward
 from torchtitan.distributed.fsdp import get_fsdp_reshard_after_forward_policy
-from torchtitan.distributed.tensor_parallel import maybe_enable_async_tp, NoParallel
-from torchtitan.models.common.attention import FusedQKVLinear
+from torchtitan.distributed.tensor_parallel import maybe_enable_async_tp
 from torchtitan.models.llama3.model import Llama3Model
 from torchtitan.protocols.model_converter import ModelConvertersContainer
 from torchtitan.tools.logging import logger
@@ -52,6 +60,11 @@ def parallelize_llama(
     ac_config: ActivationCheckpointConfig,
     dump_folder: str,
 ):
+    """Apply TP, AC, compile, and FSDP to an agpt model.
+
+    The passed-in model preferably should be on meta device. Otherwise
+    the model must fit on GPU or CPU memory.
+    """
     assert (
         training.seq_len % parallel_dims.seq_len_divisor == 0
     ), f"""
@@ -59,33 +72,20 @@ def parallelize_llama(
         ({parallel_dims.tp}) and 2 * CP degree ({parallel_dims.cp}).
         """
 
-    if parallel_dims.tp_enabled:
-        float8_config = find_float8_linear_config(model_converters.converters)
-        enable_float8_linear = float8_config is not None
-        float8_is_rowwise = float8_config is not None and float8_config.recipe_name in (
-            "rowwise",
-            "rowwise_with_gw_hp",
-        )
-        enable_float8_tensorwise_tp = enable_float8_linear and not float8_is_rowwise
-
-        enable_sp = parallelism.enable_sequence_parallel
-
-        tp_mesh = parallel_dims.get_mesh("tp")
-        apply_tp(
-            model,
-            tp_mesh,
-            enable_loss_parallel=not parallelism.disable_loss_parallel,
-            enable_float8_tensorwise_tp=enable_float8_tensorwise_tp,
-            enable_cp=parallel_dims.cp_enabled,
-            enable_sp=enable_sp,
-        )
-        maybe_enable_async_tp(parallelism, compile_config, tp_mesh)
-
+    # CP: wrap inner attention forward BEFORE parallelize() so CP logic
+    # runs inside the local_map boundary on local tensors.
     if parallel_dims.cp_enabled:
-        apply_cp_to_attention_module(
+        apply_cp_to_forward(
             [block.attention.inner_attention for block in model.layers.values()],
             parallel_dims.get_mesh("cp"),
         )
+
+    # TP via the config-based sharding API. The model's sharding_config
+    # declarations were filled in by update_from_config (see model.py).
+    if parallel_dims.tp_enabled:
+        tp_mesh = parallel_dims.get_mesh("tp")
+        model.parallelize(tp_mesh)
+        maybe_enable_async_tp(parallelism, compile_config, tp_mesh)
 
     model_compile_enabled = (
         compile_config.enable and "model" in compile_config.components
@@ -102,10 +102,9 @@ def parallelize_llama(
     if model_compile_enabled:
         apply_compile(model, compile_config)
         # apply_compile unconditionally sets capture_scalar_outputs=True
-        # (needed for MoE dynamic shapes). For dense models this is harmless
-        # for model layers, but breaks the separately-compiled loss_fn when
-        # loss_parallel + ignore_index produce unbacked symbols in
-        # cross_entropy. Reset it for dense models.
+        # (needed for MoE dynamic shapes). For dense models this breaks
+        # the separately-compiled loss_fn when loss_parallel + ignore_index
+        # produce unbacked symbols in cross_entropy.
         torch._dynamo.config.capture_scalar_outputs = False
 
     names = ["dp_replicate", "fsdp"] if parallel_dims.dp_replicate_enabled else ["fsdp"]
@@ -120,7 +119,10 @@ def parallelize_llama(
         reshard_after_forward_policy=parallelism.fsdp_reshard_after_forward,
     )
 
-    logger.info("Applied fully_shard to the model")
+    if parallel_dims.dp_replicate_enabled:
+        logger.info("Applied HSDP to the model")
+    else:
+        logger.info("Applied FSDP to the model")
 
     if training.enable_cpu_offload:
         logger.info("Applied CPU Offloading to the model")
@@ -128,114 +130,25 @@ def parallelize_llama(
     return model
 
 
-def apply_tp(
-    model: nn.Module,
-    tp_mesh: DeviceMesh,
-    enable_loss_parallel: bool,
-    enable_float8_tensorwise_tp: bool,
-    enable_cp: bool = False,
-    enable_sp: bool = True,
-):
-    sp_layout = Shard(1) if enable_sp else Replicate()
-    embed_plan = RowwiseParallel(
-        input_layouts=Replicate(),
-        output_layouts=sp_layout,
-        use_local_output=enable_sp,
-    )
-
-    parallelize_module(
-        model,
-        tp_mesh,
-        {
-            "tok_embeddings": embed_plan,
-            "norm": SequenceParallel() if enable_sp else NoParallel(),
-            "output": ColwiseParallel(
-                input_layouts=sp_layout,
-                output_layouts=Shard(-1) if enable_loss_parallel else Replicate(),
-                use_local_output=not enable_loss_parallel,
-            ),
-        },
-    )
-
-    if enable_float8_tensorwise_tp:
-        from torchao.float8.float8_tensor_parallel import (
-            Float8ColwiseParallel,
-            Float8RowwiseParallel,
-            PrepareFloat8ModuleInput,
-        )
-
-        rowwise_parallel, colwise_parallel, prepare_module_input = (
-            Float8RowwiseParallel,
-            Float8ColwiseParallel,
-            PrepareFloat8ModuleInput,
-        )
-    else:
-        rowwise_parallel, colwise_parallel, prepare_module_input = (
-            RowwiseParallel,
-            ColwiseParallel,
-            PrepareModuleInput,
-        )
-
-    norm_plan = SequenceParallel() if enable_sp else NoParallel()
-    rowwise_output_plan = rowwise_parallel(
-        output_layouts=sp_layout, use_local_output=enable_sp
-    )
-
-    # Detect whether fused QKV is used by checking the first layer
-    first_block = next(iter(model.layers.values()))
-    use_fused_qkv = isinstance(first_block.attention.qkv_linear, FusedQKVLinear)
-
-    for transformer_block in model.layers.values():
-        if use_fused_qkv:
-            qkv_plan = {
-                "attention.qkv_linear.wqkv": colwise_parallel(),
-            }
-        else:
-            qkv_plan = {
-                "attention.qkv_linear.wq": colwise_parallel(),
-                "attention.qkv_linear.wk": colwise_parallel(),
-                "attention.qkv_linear.wv": colwise_parallel(),
-            }
-        layer_plan = {
-            "attention_norm": norm_plan,
-            "attention": prepare_module_input(
-                input_layouts=(sp_layout, None, None, None),
-                desired_input_layouts=(Replicate(), None, None, None),
-            ),
-            **qkv_plan,
-            "attention.wo": rowwise_output_plan,
-            "ffn_norm": norm_plan,
-            "feed_forward": prepare_module_input(
-                input_layouts=(sp_layout,),
-                desired_input_layouts=(Replicate(),),
-            ),
-            "feed_forward.w1": colwise_parallel(),
-            "feed_forward.w2": rowwise_output_plan,
-            "feed_forward.w3": colwise_parallel(),
-        }
-
-        parallelize_module(
-            module=transformer_block,
-            device_mesh=tp_mesh,
-            parallelize_plan=layer_plan,
-        )
-
-    logger.info(
-        f"Applied {'Float8 tensorwise ' if enable_float8_tensorwise_tp else ''}"
-        "Tensor Parallelism to the model"
-    )
-
-
 def disable_fsdp_gradient_division(model: nn.Module) -> None:
+    """Disable FSDP's automatic gradient division and (on XPU/CCL) force
+    sum reduction for cross-rank gradient comms.
+
+    On NCCL the default reduce-mean works correctly. On CCL (XPU) we need
+    SUM and divide ourselves to avoid losing precision.
+    """
     force_sum_reduction = False
     if torch.distributed.is_available() and torch.distributed.is_initialized():
-        backend = ezpz.distributed.get_torch_backend() or str(torch.distributed.get_backend())
+        backend = ezpz.distributed.get_torch_backend() or str(
+            torch.distributed.get_backend()
+        )
         if backend and "nccl" not in str(backend).lower():
             force_sum_reduction = True
 
     fsdp_modules_updated = 0
     for module in model.modules():
-        # Be resilient to FSDPModule class location changes across PyTorch releases.
+        # Be resilient to FSDPModule class location changes across PyTorch
+        # releases by going through the public method.
         set_divide_factor = getattr(module, "set_gradient_divide_factor", None)
         if callable(set_divide_factor):
             set_divide_factor(1.0)
@@ -263,7 +176,18 @@ def apply_fsdp(
     cpu_offload: bool = False,
     reshard_after_forward_policy: str = "default",
 ):
-    mp_policy = MixedPrecisionPolicy(param_dtype=param_dtype, reduce_dtype=reduce_dtype)
+    """FSDP2 with the same per-block grouping as upstream llama3.
+
+    Note: matches upstream's `[norm, lm_head]` joint grouping with
+    `reshard_after_forward=reshard_after_forward_policy == "always"`
+    (last layers don't reshard after forward by default — FSDP would
+    prefetch them immediately).
+    """
+    mp_policy = MixedPrecisionPolicy(
+        param_dtype=param_dtype,
+        reduce_dtype=reduce_dtype,
+        cast_forward_inputs=False,
+    )
     fsdp_config = {"mesh": dp_mesh, "mp_policy": mp_policy}
     if cpu_offload:
         fsdp_config["offload_policy"] = CPUOffloadPolicy()
@@ -286,15 +210,12 @@ def apply_fsdp(
             reshard_after_forward=reshard_after_forward,
         )
 
-    if model.norm is not None and model.output is not None:
+    if model.norm is not None and model.lm_head is not None:
         fully_shard(
-            [model.norm, model.output],
+            [model.norm, model.lm_head],
             **fsdp_config,
             reshard_after_forward=reshard_after_forward_policy == "always",
         )
 
     fully_shard(model, **fsdp_config)
     disable_fsdp_gradient_division(model)
-
-
-

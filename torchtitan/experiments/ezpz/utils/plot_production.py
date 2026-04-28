@@ -28,7 +28,15 @@ from pathlib import Path
 import matplotlib
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt  # noqa: E402
+
+try:
+    import ambivalent
+    import matplotlib.pyplot as plt  # noqa: E402
+
+    plt.style.use(ambivalent.STYLES["ambivalent"])
+except ImportError:
+    import matplotlib.pyplot as plt  # noqa: E402
+
 import numpy as np  # noqa: E402
 
 # Regex to strip ANSI escape sequences
@@ -135,7 +143,6 @@ def plot_model_dashboard(
     num_gpus = num_nodes * 12  # Aurora: 6 tiles/node * 2 (but counted as 12 GPUs/node)
 
     fig, axes = plt.subplots(3, 1, figsize=(14, 10), sharex=True)
-    fig.patch.set_facecolor("#1a1a2e")
 
     max_step = int(steps[-1])
     fig.suptitle(
@@ -144,18 +151,7 @@ def plot_model_dashboard(
         f"Step {max_step:,}",
         fontsize=14,
         fontweight="bold",
-        color="white",
     )
-
-    for ax in axes:
-        ax.set_facecolor("#1a1a2e")
-        ax.tick_params(colors="white")
-        ax.xaxis.label.set_color("white")
-        ax.yaxis.label.set_color("white")
-        ax.title.set_color("white")
-        for spine in ax.spines.values():
-            spine.set_color("#444466")
-        ax.grid(True, alpha=0.2, color="#666688")
 
     # --- Loss ---
     ax = axes[0]
@@ -163,7 +159,7 @@ def plot_model_dashboard(
     ax.plot(steps, smooth(losses, 100), color=color, linewidth=1.8, label="Loss (smoothed)")
     ax.set_ylabel("Loss")
     ax.set_title("Training Loss")
-    ax.legend(facecolor="#1a1a2e", edgecolor="#444466", labelcolor="white")
+    ax.legend()
 
     # --- TPS / GPU ---
     ax = axes[1]
@@ -178,7 +174,7 @@ def plot_model_dashboard(
     )
     ax.set_ylabel("Tokens/sec/GPU")
     ax.set_title("Throughput per GPU")
-    ax.legend(facecolor="#1a1a2e", edgecolor="#444466", labelcolor="white")
+    ax.legend()
 
     # --- MFU ---
     ax = axes[2]
@@ -187,11 +183,11 @@ def plot_model_dashboard(
     ax.set_ylabel("MFU (%)")
     ax.set_xlabel("Training Step")
     ax.set_title("Model FLOPs Utilization")
-    ax.legend(facecolor="#1a1a2e", edgecolor="#444466", labelcolor="white")
+    ax.legend()
 
-    fig.tight_layout(rect=[0, 0, 1, 0.95])
+    fig.tight_layout(rect=(0, 0, 1, 0.95))
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(output_path, dpi=200, bbox_inches="tight", facecolor=fig.get_facecolor())
+    fig.savefig(output_path, dpi=200, bbox_inches="tight")
     plt.close(fig)
     print(f"Saved: {output_path}")
     return output_path
@@ -208,15 +204,6 @@ def plot_combined_loss(
         output_path: Where to save the figure.
     """
     fig, ax = plt.subplots(figsize=(14, 6))
-    fig.patch.set_facecolor("#1a1a2e")
-    ax.set_facecolor("#1a1a2e")
-    ax.tick_params(colors="white")
-    ax.xaxis.label.set_color("white")
-    ax.yaxis.label.set_color("white")
-    ax.title.set_color("white")
-    for spine in ax.spines.values():
-        spine.set_color("#444466")
-    ax.grid(True, alpha=0.2, color="#666688")
 
     for model_name, (steps, losses) in sorted(model_data.items()):
         color = MODEL_COLORS.get(model_name, "#888888")
@@ -237,18 +224,12 @@ def plot_combined_loss(
         "AuroraGPT Production Training Loss  |  256 nodes (3072 GPUs)",
         fontsize=14,
         fontweight="bold",
-        color="white",
     )
-    ax.legend(
-        facecolor="#1a1a2e",
-        edgecolor="#444466",
-        labelcolor="white",
-        fontsize=11,
-    )
+    ax.legend(fontsize=11)
 
     fig.tight_layout()
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(output_path, dpi=200, bbox_inches="tight", facecolor=fig.get_facecolor())
+    fig.savefig(output_path, dpi=200, bbox_inches="tight")
     plt.close(fig)
     print(f"Saved: {output_path}")
     return output_path

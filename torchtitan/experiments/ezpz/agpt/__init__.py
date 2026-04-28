@@ -13,7 +13,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from torchtitan.components.loss import build_cross_entropy_loss
 from torchtitan.experiments.ezpz.agpt.parallelize import parallelize_llama
 from torchtitan.models.common import (
     compute_ffn_hidden_dim,
@@ -160,8 +159,9 @@ class ReLUSquaredFeedForward(FeedForward):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         h = F.relu(self.w1(x))
         return self.w2(h * h * self.w3(x))
+from torchtitan.experiments.ezpz.agpt.model import AgptModel
 from torchtitan.models.common.param_init import depth_scaled_std
-from torchtitan.models.llama3.model import Llama3Model, Llama3TransformerBlock
+from torchtitan.models.llama3.model import Llama3TransformerBlock
 from torchtitan.models.llama3.state_dict_adapter import Llama3StateDictAdapter
 from torchtitan.protocols.model_spec import FaultTolerantModelSpec
 
@@ -319,15 +319,15 @@ def _build_agpt_config(
     qk_norm: bool = False,
     logit_softcap: float | None = None,
     relu_squared: bool = False,
-) -> Llama3Model.Config:
-    return Llama3Model.Config(
+) -> AgptModel.Config:
+    return AgptModel.Config(
         dim=dim,
         vocab_size=vocab_size,
         tok_embeddings=Embedding.Config(
             num_embeddings=vocab_size, embedding_dim=dim, param_init=_EMBEDDING_INIT
         ),
         norm=RMSNorm.Config(normalized_shape=dim, param_init=_NORM_INIT),
-        output=Linear.Config(
+        lm_head=Linear.Config(
             in_features=dim,
             out_features=vocab_size,
             param_init=_output_linear_init(dim),
@@ -588,7 +588,6 @@ def model_registry(
         model=config,
         parallelize_fn=parallelize_llama,
         pipelining_fn=pipeline_llm,
-        build_loss_fn=build_cross_entropy_loss,
         post_optimizer_build_fn=None,
         state_dict_adapter=Llama3StateDictAdapter,
         fragment_fn=fragment_llm,
