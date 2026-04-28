@@ -42,11 +42,33 @@ was required in ezpz.
   `protocols/sharding.py`, `protocols/module.py`, `common/decoder_sharding.py`
 - **trainer.py** — 53 lines changed (model initialization flow updated)
 
-**TODO:** Replay llama3 sharding changes onto `agpt/parallelize.py` and
-deepseek_v3 changes onto `moe/parallelize.py`. This is a significant refactor
-— test with 2B smoke test before any production runs.
+**Replay status (2026-04-28):**
 
-**Changes required in ezpz:** Deferred — merge is clean but replay needed.
+- **agpt: DONE.** Three commits land the replay:
+  - `03b9f486 fix(ezpz): unbreak imports after upstream loss/lm_head refactors`
+    — drops `build_cross_entropy_loss` imports / `build_loss_fn=` kwargs
+    (#2937 removed both); renames `output=Linear.Config(...)` to
+    `lm_head=Linear.Config(...)` (Decoder.Config field rename); ezpz/trainer.py
+    switches to `config.loss.build(compile_config=...)`.
+  - `472f4743 refactor(ezpz/agpt): replay config-based DTensor sharding`
+    — adds `agpt/sharding.py` and `agpt/model.py`. Rewrites
+    `agpt/parallelize.py` as a thin orchestrator that calls
+    `model.parallelize(tp_mesh)` instead of the old `parallelize_module()` plan.
+    Preserves agpt-specific `disable_fsdp_gradient_division`
+    (force_sum_reduction for CCL/XPU), the `capture_scalar_outputs=False`
+    reset after compile, and the `[norm, lm_head]` joint FSDP grouping.
+  - Smoke test: 2N debug-scaling pending.
+- **moe: TODO.** moe/parallelize.py still uses the old API. Same replay
+  pattern needed against `models/deepseek_v3/parallelize.py` +
+  `models/deepseek_v3/sharding.py`. Not blocking — no current moe runs.
+- **qwen3: TODO.** qwen3 has its own model class that still references
+  `self.output` (pre-rename) and would need a deeper rewrite. Not
+  blocking — no current qwen3 runs.
+
+**Float8 tensorwise TP:** dropped from `agpt/parallelize.py` during the
+replay. The new sharding API doesn't expose an equivalent yet
+(`Float8ColwiseParallel` etc. were tied to the old plan API). We weren't
+using it in production. Revisit when float8 lands in the new API upstream.
 
 ---
 

@@ -625,3 +625,33 @@ def r5_schedulefree():
     cfg.lr_scheduler.decay_ratio = 0.0
     cfg.checkpoint.folder = "checkpoints/r5_schedulefree"
     return cfg
+
+
+# ---- Smoke tests (post-21st-sync replay verification) ----
+
+
+def smoke_2b_50steps():
+    """50-step AdamW smoke test — verifies the post-#2963/#2937 replay.
+
+    Minimum viable run: 2 nodes, AdamW, no compile (faster startup), no
+    checkpoint, 50 steps. Verifies imports, model build, sharding-config
+    population, Module.parallelize, FSDP wrap, optimizer step, loss
+    function, and that loss decreases. ~5 minutes wall time.
+    """
+    cfg = agpt(
+        "2b",
+        local_batch_size=LOCAL_BATCH_SIZE,
+        activation_checkpoint_mode="none",
+        seq_len=SEQ_LEN,
+        compile=False,
+        checkpoint_interval=10_000,
+    )
+    cfg.dataloader.dataset = DATASET
+    cfg.dataloader.dataset_path = None
+    cfg.training.steps = 50
+    cfg.checkpoint.enable = False
+    cfg.optimizer.lr = 1.3e-3
+    cfg.lr_scheduler.warmup_steps = 5
+    cfg.lr_scheduler.decay_ratio = 0.0
+    cfg.metrics.log_freq = 1
+    return cfg
