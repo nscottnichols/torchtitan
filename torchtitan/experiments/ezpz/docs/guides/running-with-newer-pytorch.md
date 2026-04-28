@@ -4,7 +4,7 @@
 > We will use the alias `uvi`:
 >
 > ```bash
-> alias uvi='uv pip install --no-cache --link-mode=copy
+> alias uvi='uv pip install --no-cache --link-mode=copy'
 > ```
 
 1. Clone torchtitan:
