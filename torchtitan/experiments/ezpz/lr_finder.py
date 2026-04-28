@@ -311,7 +311,14 @@ def run_lr_finder(trainer: FaultTolerantTrainer) -> None:
             import matplotlib
 
             matplotlib.use("Agg")
-            import matplotlib.pyplot as plt
+
+            try:
+                import ambivalent
+                import matplotlib.pyplot as plt
+
+                plt.style.use(ambivalent.STYLES["ambivalent"])
+            except ImportError:
+                import matplotlib.pyplot as plt
 
             fig, ax = plt.subplots(figsize=(10, 6))
             ax.plot(lrs, losses, linewidth=1.5)
