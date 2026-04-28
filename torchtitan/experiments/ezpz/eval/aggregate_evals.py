@@ -14,7 +14,6 @@ Usage:
 
 import argparse
 import csv
-import glob
 import json
 from pathlib import Path
 
