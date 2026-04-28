@@ -960,7 +960,9 @@ moe_configs["debugmodel_flex_attn_hf"] = moe_configs["debugmodel_flex_attn"]
 def model_registry(
     flavor: str,
     moe_comm_backend: str | None = None,
+    quantization: list | None = None,
 ) -> ModelSpec:
+    from torchtitan.components.quantization import QuantizationConverter
     from torchtitan.distributed.pipeline_parallel import pipeline_llm
     from torchtitan.models.common.config_utils import make_token_dispatcher_config
 
@@ -977,6 +979,13 @@ def model_registry(
                     score_before_experts=experts_cfg.token_dispatcher.score_before_experts,
                     comm_backend=moe_comm_backend,
                 )
+
+    # Quantization is now applied to the config at model_registry time
+    # rather than to the runtime model (#3127).
+    if quantization is not None:
+        for q in quantization:
+            assert isinstance(q, QuantizationConverter.Config)
+            q.build().convert(config)
 
     return ModelSpec(
         name="moe",

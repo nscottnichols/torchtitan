@@ -35,7 +35,6 @@ from torchtitan.experiments.ezpz.blendcorpus.blendcorpus_builder import (
 from torchtitan.experiments.ezpz.blendcorpus.build_tokenizer import EZPZTokenizer
 from torchtitan.experiments.ezpz.trainer import FaultTolerantTrainer
 from torchtitan.experiments.ft.config.job_config import FaultTolerance
-from torchtitan.protocols.model_converter import ModelConvertersContainer
 
 from . import model_registry
 
@@ -239,8 +238,11 @@ def moe_671b() -> FaultTolerantTrainer.Config:
     cfg.parallelism.pipeline_parallel_schedule = "Interleaved1F1B"
     cfg.checkpoint.interval = 500
     cfg.compile = CompileConfig(enable=True, components=["loss"])
-    cfg.model_converters = ModelConvertersContainer.Config(
-        converters=[
+    # Quantization is now applied to the config at model_registry time
+    # rather than to the runtime model (#3127). Re-register with Float8.
+    cfg.model_spec = model_registry(
+        "671B",
+        quantization=[
             Float8LinearConverter.Config(filter_fqns=["output", "router.gate"]),
             Float8GroupedMMConverter.Config(fqns=["experts"]),
         ],

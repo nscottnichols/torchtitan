@@ -20,6 +20,67 @@ was required in ezpz.
 
 ---
 
+## 2026-04-28 (22nd sync — quantize-on-config, LocalMapInnerAttention removal, MeshAxisName rename)
+
+**Upstream commits:**
+
+- `6348d93d` — quantize on config instead of on model (#3127). Removes
+  `protocols/model_converter.py`, drops `model_converters` from
+  `JobConfig`, drops `model_converters` argument from all `parallelize_*`
+  signatures. New pattern: pass `quantization=[Float8LinearConverter.Config(...)]`
+  to `model_registry()`, which applies the converter to the model
+  config at registry time. Also removes `FaultTolerantModelSpec` from
+  `protocols/model_spec` (moved to `experiments/ft/config/job_config`).
+- `b9e33527` — [Module] Remove LocalMapInnerAttention, use static
+  LocalMapSpec (#2986). Replaces runtime DTensor detection in
+  `LocalMapInnerAttention` with a static `LocalMapConfig` set on the
+  inner-attention sharding_config via
+  `set_gqa_inner_attention_local_map`. All inner attention types
+  (SDPA, FlexAttention, Varlen) now inherit `Module` directly.
+- `053dbf9a` — [Module] Rename MeshDimName → MeshAxisName (#3113).
+  Transparent for ezpz: our sharding files use the helpers from
+  `decoder_sharding`, which were updated upstream.
+- + 6 minor (linter fixes, MATH backend revert, qwen3 RL cleanup,
+  GraphTrainer CI, claude.md updates).
+
+**Impact on ezpz:** Three breaking changes hit at import time:
+
+- `from torchtitan.protocols.model_converter import ModelConvertersContainer` → gone
+- `from torchtitan.models.common.attention import LocalMapInnerAttention` → gone
+- `from torchtitan.protocols.model_spec import FaultTolerantModelSpec` → gone
+
+**Replay:**
+
+- `agpt/parallelize.py` — drop `model_converters` parameter and import.
+- `moe/parallelize.py` — drop `model_converters` parameter and import.
+- `agpt/__init__.py` — `LocalMapInnerAttention` → `Module` for the
+  `SoftcappedFlexAttention` base class and `_ezpz_get_attention_config`
+  return-type annotation. Re-import `FaultTolerantModelSpec` from its
+  new location.
+- `moe/model.py` — `LocalMapInnerAttention.Config` →
+  `Module.Config` for `Attention.Config.inner_attention`.
+- `agpt/sharding.py`, `moe/sharding.py` — add
+  `set_gqa_inner_attention_local_map(layer_cfg.attention.inner_attention)`
+  call so inner attention gets the static `LocalMapConfig` it now
+  needs (replaces the runtime DTensor wrapper).
+- `moe/__init__.py` — extend `model_registry` with `quantization`
+  parameter; apply each converter to the config via `q.build().convert(config)`.
+- `moe/config_registry.py` — `moe_671b()` re-registers via
+  `model_spec=model_registry("671B", quantization=[...])` instead of
+  setting `cfg.model_converters`.
+- `ezpz/trainer.py` — drop the runtime model_converters build/convert,
+  the `register_step_post_hook` post_optimizer_hook, the
+  `model_converters=` kwarg from both `parallelize_fn` and `pipelining_fn`
+  call sites, the `QuantizationConverter` import. Switch
+  `has_quantization` to read from `model_config` via
+  `torchtitan.components.quantization.utils.has_quantization`.
+
+**Verified:** agpt + moe import cleanly, `model_registry()` returns
+valid spec, `update_from_config` populates sharding_config including
+the new `LocalMapConfig` on inner_attention.
+
+---
+
 ## 2026-04-27 (21st sync — config-based DTensor sharding)
 
 **Upstream commits:**
