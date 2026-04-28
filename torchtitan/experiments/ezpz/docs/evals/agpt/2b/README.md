@@ -21,7 +21,7 @@ Tokens consumed at step *N* = `N × 3,072 × 8,192`. Random baseline is
 
 ## Benchmark Accuracy vs Training Step
 
-![2B Eval Results](figures/eval_2b.png)
+![2B Eval Results](figures/eval_2b_v2.png)
 
 ## Results
 
