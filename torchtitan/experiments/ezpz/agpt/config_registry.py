@@ -6,6 +6,7 @@ from dataclasses import is_dataclass
 from typing import Any, Literal
 
 from torchtitan.components.checkpoint import CheckpointManager
+from torchtitan.components.loss import CrossEntropyLoss
 from torchtitan.components.lr_scheduler import LRSchedulersContainer
 from torchtitan.components.metrics import MetricsProcessor
 from torchtitan.components.optimizer import OptimizersContainer
@@ -100,6 +101,7 @@ def _base_config(flavor: str) -> FaultTolerantTrainer.Config:
         hf_assets_path="./tests/assets/hf/gemma-7b",
         model_spec=model_registry(flavor),
         tokenizer=EZPZTokenizer.Config(backend="hf"),
+        loss=CrossEntropyLoss.Config(),
         optimizer=OptimizersContainer.Config(lr=8e-4),
         lr_scheduler=LRSchedulersContainer.Config(
             warmup_steps=200,
