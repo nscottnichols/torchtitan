@@ -19,6 +19,7 @@ from torchtitan.experiments.ezpz.agpt.config_registry import agpt
 from torchtitan.experiments.ezpz.optimizer import (
     ManoOptimizersContainer,
     MuonOptimizersContainer,
+    ScheduleFreeOptimizersContainer,
     SPAMOptimizersContainer,
     SophiaGOptimizersContainer,
     TorchMuonOptimizersContainer,
@@ -529,4 +530,98 @@ def r4_mano_higher_lr():
     """
     cfg = _r4_base()
     cfg.optimizer = ManoOptimizersContainer.Config(lr=8.5e-4)
+    return cfg
+
+
+# ---- Round 5: 8-node experiments (Mano LR sweep, WSM, Schedule-Free) ----
+#
+# 8 nodes = 96 tiles, LBS=2, GAS=2 → GBS=384
+# 10B tokens / (384 * 8192) = ~3,180 steps
+# ~4 hours at AdamW/Mano speed
+
+
+def _r5_base():
+    """Round 5 base: 8 nodes, GAS=2, local dataset, cosine WSD."""
+    return _full_train_base()
+
+
+# ---- Mano LR sweep ----
+
+
+def r5_mano_lr3e4():
+    """Mano at 3e-4 (baseline from LR finder)."""
+    cfg = _r5_base()
+    cfg.optimizer = ManoOptimizersContainer.Config(lr=3.0e-4)
+    cfg.checkpoint.folder = "checkpoints/r5_mano_lr3e4"
+    return cfg
+
+
+def r5_mano_lr6e4():
+    """Mano at 6e-4 (2x baseline)."""
+    cfg = _r5_base()
+    cfg.optimizer = ManoOptimizersContainer.Config(lr=6.0e-4)
+    cfg.checkpoint.folder = "checkpoints/r5_mano_lr6e4"
+    return cfg
+
+
+def r5_mano_lr1e3():
+    """Mano at 1e-3 (3.3x baseline)."""
+    cfg = _r5_base()
+    cfg.optimizer = ManoOptimizersContainer.Config(lr=1.0e-3)
+    cfg.checkpoint.folder = "checkpoints/r5_mano_lr1e3"
+    return cfg
+
+
+def r5_mano_lr2e3():
+    """Mano at 2e-3 (6.7x baseline — aggressive)."""
+    cfg = _r5_base()
+    cfg.optimizer = ManoOptimizersContainer.Config(lr=2.0e-3)
+    cfg.checkpoint.folder = "checkpoints/r5_mano_lr2e3"
+    return cfg
+
+
+# ---- WSM: constant LR, checkpoint for later merging ----
+
+
+def r5_adamw_constant_lr():
+    """AdamW at constant LR (no decay) — for WSM checkpoint merging."""
+    cfg = _r5_base()
+    cfg.optimizer.lr = 1.3e-3
+    cfg.lr_scheduler.decay_ratio = 0.0  # no decay — stable phase only
+    cfg.checkpoint.enable = True
+    cfg.checkpoint.interval = 200
+    cfg.checkpoint.folder = "checkpoints/r5_adamw_constant_lr"
+    return cfg
+
+
+def r5_mano_constant_lr():
+    """Mano at constant LR (no decay) — for WSM checkpoint merging."""
+    cfg = _r5_base()
+    cfg.optimizer = ManoOptimizersContainer.Config(lr=3.0e-4)
+    cfg.lr_scheduler.decay_ratio = 0.0
+    cfg.checkpoint.enable = True
+    cfg.checkpoint.interval = 200
+    cfg.checkpoint.folder = "checkpoints/r5_mano_constant_lr"
+    return cfg
+
+
+# ---- Schedule-Free AdamW ----
+
+
+def r5_schedulefree():
+    """Schedule-Free AdamW — no LR schedule at all.
+
+    Uses the schedule-free framework (arxiv 2405.15682) which eliminates
+    the need for a learning rate schedule. LR is set 1-10x higher than
+    with cosine/WSD (paper recommendation).
+    """
+    cfg = _r5_base()
+    cfg.optimizer = ScheduleFreeOptimizersContainer.Config(
+        lr=2.5e-3,  # ~2x higher than scheduled AdamW
+        warmup_steps=200,
+    )
+    # No LR schedule needed — schedule-free handles it internally
+    cfg.lr_scheduler.warmup_steps = 0
+    cfg.lr_scheduler.decay_ratio = 0.0
+    cfg.checkpoint.folder = "checkpoints/r5_schedulefree"
     return cfg

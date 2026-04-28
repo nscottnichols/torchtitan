@@ -12,6 +12,7 @@ from torchtitan.experiments.ezpz.optimizer.adopt import ADOPT
 from torchtitan.experiments.ezpz.optimizer.mano import Mano
 from torchtitan.experiments.ezpz.optimizer.muon import Muon, MuonClip, QKInputRecorder
 from torchtitan.experiments.ezpz.optimizer.sophia import SophiaG
+from torchtitan.experiments.ezpz.optimizer.schedule_free import AdamWScheduleFree
 from torchtitan.experiments.ezpz.optimizer.spam import SPAM
 
 __all__ = [
@@ -20,6 +21,7 @@ __all__ = [
     "MuonClipOptimizersContainer",
     "MuonOptimizersContainer",
     "SPAMOptimizersContainer",
+    "ScheduleFreeOptimizersContainer",
     "SophiaGOptimizersContainer",
     "TorchMuonOptimizersContainer",
 ]
@@ -266,6 +268,47 @@ class ManoOptimizersContainer(OptimizersContainer):
             "adamw_betas": (config.beta1, config.beta2),
             "adamw_eps": config.eps,
         }
+
+
+class ScheduleFreeOptimizersContainer(OptimizersContainer):
+    """Schedule-Free AdamW — no LR schedule needed.
+
+    Requires .train() before training and .eval() before evaluation/checkpointing.
+    Based on: https://github.com/facebookresearch/schedule_free
+    """
+
+    @dataclass(kw_only=True, slots=True)
+    class Config(OptimizersContainer.Config):
+        name: str = "ScheduleFree"
+        warmup_steps: int = 200
+        r: float = 0.0
+        weight_lr_power: float = 2.0
+
+    @staticmethod
+    def _resolve_optimizer_cls(name: str) -> type:
+        return AdamWScheduleFree
+
+    @staticmethod
+    def _build_optimizer_kwargs(config: ScheduleFreeOptimizersContainer.Config) -> dict[str, Any]:
+        return {
+            "lr": config.lr,
+            "betas": (config.beta1, config.beta2),
+            "eps": config.eps,
+            "weight_decay": config.weight_decay,
+            "warmup_steps": config.warmup_steps,
+            "r": config.r,
+            "weight_lr_power": config.weight_lr_power,
+        }
+
+    def train_mode(self) -> None:
+        """Switch all optimizers to train mode."""
+        for optimizer in self.optimizers:
+            optimizer.train()
+
+    def eval_mode(self) -> None:
+        """Switch all optimizers to eval mode."""
+        for optimizer in self.optimizers:
+            optimizer.eval()
 
 
 class SPAMOptimizersContainer(OptimizersContainer):

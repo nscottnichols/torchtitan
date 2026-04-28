@@ -4,6 +4,7 @@ from torchtitan.experiments.ezpz.optimizer.containers import (
     ManoOptimizersContainer,
     MuonClipOptimizersContainer,
     MuonOptimizersContainer,
+    ScheduleFreeOptimizersContainer,
     SPAMOptimizersContainer,
     SophiaGOptimizersContainer,
     TorchMuonOptimizersContainer,
