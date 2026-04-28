@@ -20,6 +20,36 @@ was required in ezpz.
 
 ---
 
+## 2026-04-27 (21st sync — config-based DTensor sharding)
+
+**Upstream commits:**
+
+- `1786292d` — [Module][Full DTensor] Config-based sharding infrastructure with
+  llama3 adoption (#2963). Replaces string-keyed plan dicts with `ShardingSpec`
+  attached to `Module.Config`. New `protocols/sharding.py` and `protocols/module.py`.
+- `8e820844` — [Module][Full DTensor] Config-based sharding for Qwen3, Llama4,
+  DeepSeek V3, GPT-OSS (#2969). All models now use `Module.parallelize()`.
+- `786e26f8` — ChunkedCELoss (#2937)
+- `1ea5d511` — [AutoParallel] Use autoparallel_backend() for torch.compile (#3114)
+- + 5 more (GraphTrainer, Qwen3VL, vLLM cache reset)
+
+**Impact on ezpz:**
+
+- **llama3/parallelize.py REWRITTEN** — old `parallelize_module()` API replaced
+  with `Module.parallelize()`. The ezpz `agpt/parallelize.py` still uses the old
+  API. **Needs replay** but deferred to avoid breaking running experiments.
+- **New files:** `llama3/sharding.py`, `deepseek_v3/sharding.py`,
+  `protocols/sharding.py`, `protocols/module.py`, `common/decoder_sharding.py`
+- **trainer.py** — 53 lines changed (model initialization flow updated)
+
+**TODO:** Replay llama3 sharding changes onto `agpt/parallelize.py` and
+deepseek_v3 changes onto `moe/parallelize.py`. This is a significant refactor
+— test with 2B smoke test before any production runs.
+
+**Changes required in ezpz:** Deferred — merge is clean but replay needed.
+
+---
+
 ## 2026-04-27 (20th sync)
 
 **Upstream commits:**
