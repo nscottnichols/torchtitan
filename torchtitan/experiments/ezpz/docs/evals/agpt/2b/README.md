@@ -13,7 +13,7 @@
 | Training data | olmo-mix-1124 (4.67T tokens) |
 | Training config | 256N, GBS=3072, SophiaG LR=2.28e-5 |
 | Eval tasks | hellaswag, arc_easy, arc_challenge, winogrande |
-| Eval backend | lm-eval 0.4.10, HF backend, XPU, dtype=bfloat16 |
+| Eval backend | lm-eval 0.4.10, HF backend, XPU, transformers 4.57.6 |
 | Checkpoints | DCP → HF safetensors via `eval/convert_to_hf.py` |
 
 ## Benchmark Accuracy vs Training Step
@@ -22,29 +22,30 @@
 
 ## Results
 
-| Step | Tokens | Loss | HellaSwag | ARC-Easy | ARC-Challenge | Winogrande |
-|------|--------|------|-----------|----------|---------------|------------|
-| 1,000 | 25B | 6.13 | 25.04 | 25.08 | 22.70 | 49.57 |
-| 2,000 | 50B | 5.84 | 25.04 | 25.08 | 22.70 | 49.57 |
-| 3,000 | 75B | 5.76 | 25.04 | 25.08 | 22.70 | 49.57 |
-| 4,000 | 101B | 5.72 | 25.04 | 25.08 | 22.70 | 49.57 |
-| 5,000 | 126B | 5.69 | 25.04 | — | — | — |
-| 6,000 | 151B | 5.67 | *pending* | | | |
-| 7,000 | 176B | 5.65 | *pending* | | | |
-| 8,000 | 201B | 5.64 | *pending* | | | |
-| 9,000 | 226B | 5.63 | *pending* | | | |
-| 10,000 | 252B | 5.61 | *pending* | | | |
-| 11,000 | 277B | 5.60 | *pending* | | | |
-| 12,000 | 302B | 5.59 | *pending* | | | |
-| 13,000 | 327B | 5.58 | *pending* | | | |
-| 14,000 | 352B | 5.57 | *pending* | | | |
-| 15,000 | 378B | 5.56 | *pending* | | | |
-| 16,000 | 403B | 5.55 | *pending* | | | |
-| 17,000 | 428B | 5.54 | *pending* | | | |
-| 18,000 | 453B | 5.53 | *pending* | | | |
+| Step | Tokens | Loss | HellaSwag | ARC-Easy | ARC-Chall | Winogrande |
+|------|--------|------|-----------|----------|-----------|------------|
+| 1,000 | 25B | 6.13 | 25.35 | 27.44 | 23.38 | 47.83 |
+| 2,000 | 50B | 5.84 | 25.26 | 27.19 | 24.23 | 49.57 |
+| 3,000 | 75B | 5.76 | 25.25 | 26.89 | 23.55 | 51.07 |
+| 4,000 | 101B | 5.72 | 25.12 | 26.98 | 24.06 | 48.46 |
+| 5,000 | 126B | 5.69 | 25.12 | 26.97 | 24.06 | 49.02 |
+| 6,000 | 151B | 5.67 | 25.12 | 27.48 | 24.23 | 48.46 |
+| 7,000 | 176B | 5.65 | 25.37 | 27.19 | 23.55 | 49.88 |
+| 8,000 | 201B | 5.64 | 25.37 | 27.02 | 24.49 | 51.07 |
+| 9,000 | 226B | 5.63 | 25.19 | 27.23 | 24.15 | 47.75 |
+| 10,000 | 252B | 5.61 | 25.12 | 27.78 | 23.81 | 48.94 |
+| 11,000 | 277B | — | *pending* | | | |
+| 12,000 | 302B | — | *pending* | | | |
+| 13,000 | 327B | — | *pending* | | | |
+| 14,000 | 352B | — | *pending* | | | |
+| 15,000 | 378B | — | *pending* | | | |
+| 16,000 | 403B | — | *pending* | | | |
+| 17,000 | 428B | — | *pending* | | | |
+| 18,000 | 453B | — | *pending* | | | |
 
 **Notes:**
-- All benchmarks at random baseline through step 5,000 (~126B tokens, 2.7% of target)
-- This is expected — benchmarks typically don't move above random until 100B–500B+ tokens
-- Eval jobs for steps 6K–18K submitted (8452595), results incoming
-- Tokens = step × GBS(3072) × seq_len(8192)
+- Scores near random baseline through step 10,000 (~252B tokens, 5.4% of target)
+- Slight signal in winogrande (51.1% at step 3K and 8K vs 50% random)
+- ARC-challenge fluctuating 23–25% (random = 25%)
+- Expect meaningful improvement after ~500B+ tokens
+- Note: embeddings may not be loading correctly from DCP conversion (under investigation)
