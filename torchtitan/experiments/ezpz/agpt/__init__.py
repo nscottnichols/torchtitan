@@ -24,11 +24,9 @@ from torchtitan.models.common import (
 )
 from torch.nn.attention import sdpa_kernel, SDPBackend
 
-from torchtitan.models.common.attention import (
-    LocalMapInnerAttention,
-    ScaledDotProductAttention,
-)
+from torchtitan.models.common.attention import ScaledDotProductAttention
 from torchtitan.models.common.config_utils import get_attention_config
+from torchtitan.protocols.module import Module
 
 
 class EzpzScaledDotProductAttention(ScaledDotProductAttention):
@@ -104,19 +102,24 @@ from torchtitan.models.common.config_utils import make_ffn_config, make_gqa_conf
 # ---------------------------------------------------------------------------
 
 
-class SoftcappedFlexAttention(LocalMapInnerAttention):
+class SoftcappedFlexAttention(Module):
     """FlexAttention with logit softcapping (Gemma 2 style).
 
     Uses FlexAttention's score_mod to apply tanh softcapping inside the
     fused kernel — no O(seq_len²) materialization. Requires torch.compile.
+
+    TP: relies on `set_gqa_inner_attention_local_map` setting a static
+    `LocalMapConfig` on the inner-attention sharding_config (upstream
+    #2986 replaced runtime DTensor detection in `LocalMapInnerAttention`
+    with config-driven local_map).
     """
 
     @dataclass(kw_only=True, slots=True)
-    class Config(LocalMapInnerAttention.Config):
+    class Config(Module.Config):
         logit_cap: float = 30.0
 
     def __init__(self, config: Config):
-        super().__init__(config)
+        super().__init__()
         self.logit_cap = config.logit_cap
         from torch.nn.attention.flex_attention import flex_attention
         self._flex_attention = torch.compile(flex_attention)
@@ -163,7 +166,7 @@ from torchtitan.experiments.ezpz.agpt.model import AgptModel
 from torchtitan.models.common.param_init import depth_scaled_std
 from torchtitan.models.llama3.model import Llama3TransformerBlock
 from torchtitan.models.llama3.state_dict_adapter import Llama3StateDictAdapter
-from torchtitan.protocols.model_spec import FaultTolerantModelSpec
+from torchtitan.experiments.ft.config.job_config import FaultTolerantModelSpec
 
 __all__ = [
     "EzpzScaledDotProductAttention",
@@ -217,7 +220,7 @@ def _default_inner_attention() -> ScaledDotProductAttention.Config:
 
 def _ezpz_get_attention_config(
     backend: str,
-) -> tuple[LocalMapInnerAttention.Config, str]:
+) -> tuple[Module.Config, str]:
     """XPU-aware attention config selection.
 
     For the "sdpa" backend, uses the XPU-optimized SDPA classes instead of

@@ -29,6 +29,7 @@ from torchtitan.models.common.decoder_sharding import (
     rowwise_config,
     set_decoder_sharding_config,
     set_dense_ffn_sharding,
+    set_gqa_inner_attention_local_map,
 )
 from torchtitan.protocols.sharding import ShardingConfig
 
@@ -99,6 +100,11 @@ def _set_moe_layer_sharding(
 
     attention.wkv_b.sharding_config = colwise_config()
     attention.wo.sharding_config = rowwise_config(output_sp=enable_sp)
+
+    # Static LocalMapConfig on the inner-attention config (upstream #2986
+    # replaced runtime DTensor detection in `LocalMapInnerAttention` with
+    # this config-driven approach).
+    set_gqa_inner_attention_local_map(attention.inner_attention)
 
     # Query projection: depends on q_lora_rank
     if attention.q_lora_rank == 0:

@@ -15,9 +15,9 @@ from torch import nn
 from torchtitan.models.common.attention import (
     AttentionMasksType,
     BaseAttention,
-    LocalMapInnerAttention,
     ScaledDotProductAttention,
 )
+from torchtitan.protocols.module import Module
 from torchtitan.models.common.decoder import Decoder, TransformerBlock
 from torchtitan.models.common.linear import Linear
 from torchtitan.models.common.rmsnorm import RMSNorm
@@ -51,7 +51,7 @@ class Attention(BaseAttention):
         qk_nope_head_dim: int = 128
         qk_rope_head_dim: int = 64
         v_head_dim: int = 128
-        inner_attention: LocalMapInnerAttention.Config
+        inner_attention: Module.Config
         mask_type: str = "causal"
         mscale: float = 1.0
         rope_factor: float = 1.0
