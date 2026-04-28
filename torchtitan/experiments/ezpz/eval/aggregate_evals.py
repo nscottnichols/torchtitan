@@ -1,12 +1,20 @@
 #!/usr/bin/env python3
-"""Aggregate lm-eval results across training steps and generate plots.
+"""Aggregate lm-eval results across training steps and generate plots/tables.
+
+Reads results from `outputs/evals/agpt-{model}/step-{N}/results/results.json`.
+Generates per-model plots in `docs/evals/agpt/{model}/figures/eval_{model}.png`
+and prints a markdown table of accuracies.
 
 Usage:
     python aggregate_evals.py --model 2b
-    python aggregate_evals.py --model 20b --output-dir docs/production/agpt/2b/figures/
+    python aggregate_evals.py --model 20b
+    python aggregate_evals.py --model both
+    python aggregate_evals.py --model 2b --csv outputs/evals/eval_results_2b.csv
 """
 
 import argparse
+import csv
+import glob
 import json
 from pathlib import Path
 
@@ -16,172 +24,167 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 
-def load_results(evals_dir: Path) -> list[dict]:
-    """Load all lm-eval results for a model, sorted by step."""
-    results = []
-    if not evals_dir.exists():
-        return results
+TASK_COLORS = {
+    "hellaswag": "#e74c3c",
+    "arc_easy": "#2ecc71",
+    "arc_challenge": "#3498db",
+    "winogrande": "#f39c12",
+}
 
-    for step_dir in sorted(evals_dir.iterdir()):
-        if not step_dir.is_dir() or not step_dir.name.startswith("step-"):
-            continue
+RANDOM_BASELINES = {
+    "hellaswag": 0.25,
+    "arc_easy": 0.25,
+    "arc_challenge": 0.25,
+    "winogrande": 0.5,
+}
 
-        step = int(step_dir.name.split("-")[1])
-        results_dir = step_dir / "results"
 
-        # lm-eval saves results in a subdirectory with timestamp
-        result_files = list(results_dir.glob("**/results.json"))
-        if not result_files:
-            continue
-
-        with open(result_files[0]) as f:
-            data = json.load(f)
-
-        entry = {"step": step, "tasks": {}}
-        for task_name, task_data in data.get("results", {}).items():
-            # Extract accuracy metric (acc or acc_norm)
-            acc = task_data.get("acc,none") or task_data.get("acc_norm,none")
-            acc_stderr = task_data.get("acc_stderr,none") or task_data.get(
-                "acc_norm_stderr,none"
-            )
+def load_results(model: str, evals_dir: Path) -> dict[int, dict[str, float]]:
+    """Load all eval results for a model, keyed by training step."""
+    data: dict[int, dict[str, float]] = {}
+    base = evals_dir / f"agpt-{model}"
+    for step_dir in sorted(base.glob("step-*/results/results.json")):
+        step = int(step_dir.parent.parent.name.split("-")[1])
+        with open(step_dir) as f:
+            d = json.load(f)
+        scores: dict[str, float] = {}
+        for task, m in d.items():
+            if not isinstance(m, dict):
+                continue
+            acc = m.get("acc_norm,none") or m.get("acc,none")
             if acc is not None:
-                entry["tasks"][task_name] = {
-                    "acc": acc,
-                    "acc_stderr": acc_stderr,
-                }
-
-        if entry["tasks"]:
-            results.append(entry)
-
-    return sorted(results, key=lambda x: x["step"])
+                scores[task] = acc
+        if scores:
+            data[step] = scores
+    return data
 
 
-def print_table(results: list[dict], model: str):
-    """Print markdown table of results."""
-    if not results:
-        print("No results found.")
+def make_plot(data: dict, model: str, outpath: Path) -> None:
+    """Generate accuracy-vs-step plot for a model."""
+    if not data:
+        print(f"[skip] no data for {model}")
         return
 
-    # Collect all task names
-    all_tasks = set()
-    for r in results:
-        all_tasks.update(r["tasks"].keys())
-    tasks = sorted(all_tasks)
-
-    # Header
-    header = f"| Step | " + " | ".join(tasks) + " |"
-    separator = "|------|" + "|".join(["------"] * len(tasks)) + "|"
-    print(f"\n## Evaluation Results — agpt_{model}\n")
-    print(header)
-    print(separator)
-
-    # Rows
-    for r in results:
-        row = f"| {r['step']:>5} |"
-        for task in tasks:
-            if task in r["tasks"]:
-                acc = r["tasks"][task]["acc"]
-                row += f" {acc:.4f} |"
-            else:
-                row += " — |"
-        print(row)
-
-
-def plot_results(results: list[dict], model: str, output_path: Path):
-    """Generate benchmark accuracy vs training step plot."""
-    if not results:
-        return
-
-    all_tasks = set()
-    for r in results:
-        all_tasks.update(r["tasks"].keys())
-    tasks = sorted(all_tasks)
-
-    fig, ax = plt.subplots(1, 1, figsize=(10, 6))
+    fig, ax = plt.subplots(1, 1, figsize=(12, 7))
     fig.patch.set_facecolor("#1a1a2e")
     ax.set_facecolor("#16213e")
 
-    colors = plt.cm.Set2(range(len(tasks)))
-
-    for task, color in zip(tasks, colors):
-        steps = []
-        accs = []
-        errs = []
-        for r in results:
-            if task in r["tasks"]:
-                steps.append(r["step"])
-                accs.append(r["tasks"][task]["acc"])
-                errs.append(r["tasks"][task].get("acc_stderr") or 0)
-
+    for task, color in TASK_COLORS.items():
+        steps = sorted([s for s in data if task in data[s]])
+        accs = [data[s][task] for s in steps]
         if steps:
-            ax.errorbar(
+            ax.plot(
                 steps,
                 accs,
-                yerr=errs,
-                marker="o",
-                markersize=5,
-                label=task,
+                "o-",
                 color=color,
+                label=task,
+                markersize=6,
                 linewidth=2,
-                capsize=3,
+            )
+            ax.axhline(
+                y=RANDOM_BASELINES[task],
+                color=color,
+                linestyle="--",
+                alpha=0.3,
+                linewidth=1,
             )
 
     ax.set_xlabel("Training Step", color="white", fontsize=12)
     ax.set_ylabel("Accuracy", color="white", fontsize=12)
     ax.set_title(
-        f"agpt_{model} — Benchmark Accuracy vs Training Step",
+        f"agpt_{model} — Benchmark Accuracy vs Training Step ({len(data)} checkpoints)",
         color="white",
         fontsize=14,
     )
-    ax.legend(loc="lower right", fontsize=10)
+    ax.legend(loc="upper left", fontsize=10)
     ax.grid(True, alpha=0.3)
     ax.tick_params(colors="white")
     for spine in ax.spines.values():
         spine.set_color("#444")
-
     plt.tight_layout()
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    plt.savefig(output_path, dpi=150, bbox_inches="tight")
+    outpath.parent.mkdir(parents=True, exist_ok=True)
+    plt.savefig(outpath, dpi=150, bbox_inches="tight")
     plt.close()
-    print(f"Plot saved: {output_path}")
+    print(f"Saved plot: {outpath}")
 
 
-def main():
+def print_table(data: dict, model: str) -> None:
+    """Print a markdown table of results."""
+    if not data:
+        print(f"\n## agpt_{model}: no results")
+        return
+
+    tasks = sorted({t for s in data for t in data[s]})
+    header = "| Step | " + " | ".join(tasks) + " |"
+    sep = "|------|" + "|".join(["------"] * len(tasks)) + "|"
+    print(f"\n## agpt_{model} — {len(data)} checkpoints\n")
+    print(header)
+    print(sep)
+    for step in sorted(data):
+        row = f"| {step:>5} |"
+        for task in tasks:
+            v = data[step].get(task)
+            row += f" {v:.4f} |" if v is not None else " — |"
+        print(row)
+
+
+def write_csv(data: dict, model: str, outpath: Path) -> None:
+    """Write results to CSV for downstream analysis."""
+    outpath.parent.mkdir(parents=True, exist_ok=True)
+    with open(outpath, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["model", "step", "task", "acc"])
+        for step in sorted(data):
+            for task, acc in sorted(data[step].items()):
+                w.writerow([model, step, task, acc])
+    print(f"Wrote CSV: {outpath}")
+
+
+def main() -> None:
+    repo_root = Path(__file__).resolve().parents[4]
+
     parser = argparse.ArgumentParser(description="Aggregate lm-eval results")
     parser.add_argument(
-        "--model", type=str, required=True, choices=["2b", "20b", "80b"]
+        "--model",
+        choices=["2b", "20b", "both"],
+        default="both",
+        help="Which model to process",
     )
     parser.add_argument(
         "--evals-dir",
         type=Path,
-        default=None,
-        help="Base evals directory (default: outputs/evals/agpt-{model}/)",
+        default=repo_root / "outputs/evals",
+        help="Base directory containing per-step eval results",
     )
     parser.add_argument(
-        "--output-dir",
+        "--docs-dir",
+        type=Path,
+        default=repo_root / "torchtitan/experiments/ezpz/docs/evals/agpt",
+        help="Base docs directory for plot output",
+    )
+    parser.add_argument(
+        "--csv",
         type=Path,
         default=None,
-        help="Output directory for plots",
+        help="Optional CSV output path (default: skip)",
     )
     args = parser.parse_args()
 
-    repo_root = Path(__file__).resolve().parents[4]
-    evals_dir = args.evals_dir or repo_root / f"outputs/evals/agpt-{args.model}"
-    output_dir = (
-        args.output_dir
-        or repo_root
-        / f"torchtitan/experiments/ezpz/docs/production/agpt/{args.model}/figures"
-    )
+    models = ["2b", "20b"] if args.model == "both" else [args.model]
 
-    results = load_results(evals_dir)
-    print_table(results, args.model)
-
-    if results:
-        plot_path = output_dir / f"eval_agpt_{args.model}.png"
-        plot_results(results, args.model, plot_path)
-    else:
-        print(f"\nNo eval results found in {evals_dir}")
-        print("Run convert_and_eval.sh first to generate results.")
+    for model in models:
+        data = load_results(model, args.evals_dir)
+        print_table(data, model)
+        plot_path = args.docs_dir / model / "figures" / f"eval_{model}.png"
+        make_plot(data, model, plot_path)
+        if args.csv:
+            csv_path = (
+                args.csv
+                if args.model != "both"
+                else args.csv.with_stem(f"{args.csv.stem}_{model}")
+            )
+            write_csv(data, model, csv_path)
 
 
 if __name__ == "__main__":
