@@ -4,6 +4,77 @@ Running log of what's happening, session by session. Most recent first.
 
 ---
 
+## 2026-04-28 — 21st upstream sync replay (sharding API, ChunkedCELoss)
+
+### What landed
+
+The 21st upstream sync (merged `b6c04698`) brought in three breaking
+changes that broke ezpz at import / config-build / training-init time:
+
+- **#2963 / #2969** — config-based DTensor sharding. Replaces string-keyed
+  `parallelize_module(plan)` with `Module.parallelize(mesh)` reading
+  `ShardingConfig` declarations attached to each sub-module's `.Config`.
+- **#2937** — ChunkedCELoss. Removed `build_cross_entropy_loss` and
+  `ModelSpec.build_loss_fn`; loss now lives on `JobConfig.loss`.
+- **`Decoder.Config`** renamed `output: Linear.Config` → `lm_head:
+  Linear.Config`.
+
+### Replay outcome
+
+| Module | Status | Smoke test |
+|---|---|---|
+| `agpt` | replayed | 50 steps, loss 12.96 → 7.09 (job 12465500) |
+| `moe`  | replayed | 50 steps, loss 12.93 → 6.91 (job 12465502) |
+| `qwen3` | removed | Drift too large; nobody ran it; restorable from history |
+
+### Commits (ezpz branch)
+
+- `03b9f486` — Mechanical: drop `build_cross_entropy_loss` imports +
+  `build_loss_fn=` kwargs, rename `output=` → `lm_head=` in agpt+moe
+  configs, switch `ezpz/trainer.py` to `config.loss.build()`.
+- `472f4743` — agpt sharding-API replay. New `agpt/sharding.py`
+  (handles QK-Norm), new `agpt/model.py` (`AgptModel(Llama3Model)`
+  overriding `update_from_config`), rewritten `agpt/parallelize.py` as
+  thin orchestrator. Float8 tensorwise TP path dropped (no equivalent in
+  the new API yet).
+- `9bc774a6` — Set `loss=CrossEntropyLoss.Config()` in both `_base_config`
+  helpers (was defaulting to abstract `BaseLoss.Config`).
+- `40526628` — Enable compile in `smoke_2b_50steps` (XPU CE OOMs without it
+  at vocab=256k).
+- `dd4e065a` — moe sharding-API replay. New `moe/sharding.py`, extended
+  `update_from_config`, rewritten `parallelize.py` (drops 230+ lines of
+  manual ColwiseParallel/RowwiseParallel plans). MoE block sharding still
+  done at parallelize-time by `apply_moe_ep_tp` (mirrors upstream).
+- `5f88abc3` — `smoke_moe_500m_50steps` config + submit script.
+- `80a23d41` — Removed `ezpz/qwen3` (drift too large for unused code).
+
+### Preserved agpt-/moe-specific behavior
+
+- `disable_fsdp_gradient_division` still calls
+  `set_force_sum_reduction_for_comms(True)` for non-NCCL backends (CCL/XPU).
+- After `apply_compile`, resets `torch._dynamo.config.capture_scalar_outputs`
+  to False (keeps the separately-compiled CrossEntropyLoss working on dense
+  models).
+- agpt `apply_fsdp` keeps the `[norm, lm_head]` joint grouping with
+  reshard_after_forward gated on the policy.
+- moe `apply_fsdp` is still inlined locally (avoids `ShardPlacementResult`
+  import which doesn't exist in Aurora's PyTorch) with the Shard(0)
+  fallback when expert hidden dim isn't FSDP-divisible.
+- moe `apply_compile` is per-block `block.compile(backend=...)` instead of
+  upstream's fullgraph `apply_compile_sparse` (XPU can't fullgraph compile
+  MoE routing's dynamic shapes).
+
+### Smoke-test details
+
+- agpt smoke (`12465500`): loss 12.96 → 7.09 across 50 steps, ~7,400 TPS,
+  27% MFU. Standard dense-2B numbers — replay is loss-neutral.
+- moe smoke (`12465502`): loss 12.93 → 6.91 across 50 steps, ~7,200 TPS,
+  ~10% MFU. The MFU is low because the metrics divisor uses the full
+  dense FLOP estimate but only 2/8 experts fire per token — reporting
+  artifact, not a perf regression.
+
+---
+
 ## 2026-04-27 — Full 10B training, TorchMuon, local dataset
 
 ### Local Dataset Cache
