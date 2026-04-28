@@ -18,7 +18,6 @@ from torch.distributed.elastic.multiprocessing.errors import record
 
 from torchtitan.components.dataloader import DataloaderExhaustedError
 from torchtitan.components.loss import IGNORE_INDEX
-from torchtitan.components.quantization import QuantizationConverter
 from torchtitan.config import TORCH_DTYPE_MAP
 from torchtitan.distributed import ParallelDims, utils as dist_utils
 from torchtitan.experiments.ezpz.lr_finder import LRFinderConfig
@@ -129,24 +128,15 @@ class FaultTolerantTrainer(Trainer):
             if wandb.run is not None:
                 wandb.run.watch(model, log="all")
 
-        # Build the collection of model converters. No-op if converters empty
-        model_compile_enabled = (
-            config.compile.enable and "model" in config.compile.components
-        )
-        model_converters = config.model_converters.build(
-            parallel_dims=parallel_dims,
-            model_compile_enabled=model_compile_enabled,
-        )
-        model_converters.convert(model)
+        # Quantization is now applied to the config at model_registry time
+        # (#3127). The runtime model_converters layer is gone.
 
         # Verify all submodules satisfy the Module protocol
         model.verify_module_protocol()
 
-        # Check if any converter uses quantization (FP8, MX, etc.)
-        has_quantization = any(
-            isinstance(cc, QuantizationConverter.Config)
-            for cc in config.model_converters.converters
-        )
+        # Check if any quantization converter is on the model_config
+        from torchtitan.components.quantization.utils import has_quantization as _has_quantization
+        has_quantization = _has_quantization(model_config)
 
         # metrics logging (FT addition: ft_enable, ft_replica_id)
         self.metrics_processor = config.metrics.build(
@@ -243,7 +233,6 @@ class FaultTolerantTrainer(Trainer):
                 model,
                 parallel_dims=parallel_dims,
                 training=config.training,
-                model_converters=config.model_converters,
                 parallelism=config.parallelism,
                 compile_config=config.compile,
                 ac_config=config.activation_checkpoint,
@@ -275,7 +264,6 @@ class FaultTolerantTrainer(Trainer):
                 model,
                 parallel_dims=parallel_dims,
                 training=config.training,
-                model_converters=config.model_converters,
                 parallelism=config.parallelism,
                 compile_config=config.compile,
                 ac_config=config.activation_checkpoint,
@@ -319,14 +307,9 @@ class FaultTolerantTrainer(Trainer):
             optimizers=self.optimizers,
             training_steps=config.training.steps,
         )
-        # Post optimizer step model converters hook.
-        # e.g. calculate float8 dynamic amax/scale for all-parameter for FSDP2
-        # where it issues a single all-reduce for all parameters at once for better performance
-        self.optimizers.register_step_post_hook(
-            lambda *args, **kwargs: model_converters.post_optimizer_hook(
-                self.model_parts
-            )
-        )
+        # The post-optimizer model_converters hook is gone in #3127 —
+        # quantization is applied to the config and runs as part of
+        # forward, not via a runtime post-step hook.
         self.metrics_processor.optimizers = self.optimizers
         self.metrics_processor.model_parts = self.model_parts
 

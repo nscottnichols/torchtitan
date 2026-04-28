@@ -69,7 +69,6 @@ from torchtitan.distributed.tensor_parallel import (
     NoParallel,
 )
 from torchtitan.experiments.ezpz.moe import moeModel
-from torchtitan.protocols import ModelConvertersContainer
 from torchtitan.tools.logging import logger
 
 
@@ -115,7 +114,6 @@ def parallelize_moe(
     *,
     parallel_dims: ParallelDims,
     training: TrainingConfig,
-    model_converters: ModelConvertersContainer.Config,
     parallelism: ParallelismConfig,
     compile_config: CompileConfig,
     ac_config: ActivationCheckpointConfig,
