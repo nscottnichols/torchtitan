@@ -179,7 +179,7 @@ def _build_moe_layers(
     router_route_norm: bool = False,
     score_before_experts: bool = False,
     attn_backend: str = "sdpa",
-    moe_comm_backend: str | None = None,
+    moe_comm_backend: str = "standard",
 ) -> list[TransformerBlock.Config]:
     """Build the list of per-layer TransformerBlock configs.
 
@@ -959,7 +959,7 @@ moe_configs["debugmodel_flex_attn_hf"] = moe_configs["debugmodel_flex_attn"]
 
 def model_registry(
     flavor: str,
-    moe_comm_backend: str | None = None,
+    moe_comm_backend: str = "standard",
     quantization: list | None = None,
 ) -> ModelSpec:
     from torchtitan.components.quantization import QuantizationConverter
@@ -968,17 +968,18 @@ def model_registry(
 
     config = moe_configs[flavor]()
 
-    # Rebuild token dispatchers if a comm_backend is specified (needed for EP>1)
-    if moe_comm_backend is not None:
-        for layer_cfg in config.layers:
-            if layer_cfg.moe is not None:
-                experts_cfg = layer_cfg.moe.experts
-                experts_cfg.token_dispatcher = make_token_dispatcher_config(
-                    num_experts=experts_cfg.num_experts,
-                    top_k=experts_cfg.token_dispatcher.top_k,
-                    score_before_experts=experts_cfg.token_dispatcher.score_before_experts,
-                    comm_backend=moe_comm_backend,
-                )
+    # Rebuild token dispatchers per #3125 — comm_backend is now always set
+    # (default "standard"), and AllToAllTokenDispatcher falls back to local
+    # dispatch when EP=1.
+    for layer_cfg in config.layers:
+        if layer_cfg.moe is not None:
+            experts_cfg = layer_cfg.moe.experts
+            experts_cfg.token_dispatcher = make_token_dispatcher_config(
+                num_experts=experts_cfg.num_experts,
+                top_k=experts_cfg.token_dispatcher.top_k,
+                score_before_experts=experts_cfg.token_dispatcher.score_before_experts,
+                comm_backend=moe_comm_backend,
+            )
 
     # Quantization is now applied to the config at model_registry time
     # rather than to the runtime model (#3127).
