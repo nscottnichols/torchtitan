@@ -1,13 +1,24 @@
 #!/usr/bin/env python3
 """Aggregate lm-eval results across training steps and generate plots/tables.
 
-Reads results from `outputs/evals/agpt-{model}/step-{N}/results/results.json`.
+Two layouts supported:
+
+DCP (current torchtitan training):
+    outputs/evals/agpt-{model}/step-{N}/results/results.json
+    -> single curve per task
+
+MDS (Megatron-DeepSpeed AuroraGPT-2B optimizer-experiments runs):
+    outputs/evals/agpt-{model}-mds/{stage}/step-{N}/results/results.json
+    -> one curve per (stage, task), since each stage is a different
+       continuation branch off the AdamW parent run
+
 Generates per-model plots in `docs/evals/agpt/{model}/figures/eval_{model}.png`
 and prints a markdown table of accuracies.
 
 Usage:
     python aggregate_evals.py --model 2b
     python aggregate_evals.py --model 20b
+    python aggregate_evals.py --model 2b-mds
     python aggregate_evals.py --model both
     python aggregate_evals.py --model 2b --csv outputs/evals/eval_results_2b.csv
 """
@@ -51,24 +62,51 @@ RANDOM_BASELINES = {
 }
 
 
+def _read_one(path: Path) -> dict[str, float]:
+    with open(path) as f:
+        d = json.load(f)
+    scores: dict[str, float] = {}
+    for task, m in d.items():
+        if not isinstance(m, dict):
+            continue
+        acc = m.get("acc_norm,none") or m.get("acc,none")
+        if acc is not None:
+            scores[task] = acc
+    return scores
+
+
 def load_results(model: str, evals_dir: Path) -> dict[int, dict[str, float]]:
-    """Load all eval results for a model, keyed by training step."""
+    """Load DCP-layout results (single sweep) keyed by training step."""
     data: dict[int, dict[str, float]] = {}
     base = evals_dir / f"agpt-{model}"
     for step_dir in sorted(base.glob("step-*/results/results.json")):
         step = int(step_dir.parent.parent.name.split("-")[1])
-        with open(step_dir) as f:
-            d = json.load(f)
-        scores: dict[str, float] = {}
-        for task, m in d.items():
-            if not isinstance(m, dict):
-                continue
-            acc = m.get("acc_norm,none") or m.get("acc,none")
-            if acc is not None:
-                scores[task] = acc
+        scores = _read_one(step_dir)
         if scores:
             data[step] = scores
     return data
+
+
+def load_results_mds(model: str, evals_dir: Path) -> dict[str, dict[int, dict[str, float]]]:
+    """Load MDS-layout results, returning {stage: {step: {task: acc}}}.
+
+    MDS optimizer-experiments use multiple stages (ntok4673B, ntok7064B,
+    ntok7770B), each branching off an AdamW parent at a different token
+    count. Each stage gets its own series in the plot.
+    """
+    base = evals_dir / f"agpt-{model}"  # caller passes "2b-mds" -> agpt-2b-mds
+    out: dict[str, dict[int, dict[str, float]]] = {}
+    for stage_dir in sorted(p for p in base.iterdir() if p.is_dir() and not p.name.startswith(".")):
+        stage = stage_dir.name
+        stage_data: dict[int, dict[str, float]] = {}
+        for step_path in sorted(stage_dir.glob("step-*/results/results.json")):
+            step = int(step_path.parent.parent.name.split("-")[1])
+            scores = _read_one(step_path)
+            if scores:
+                stage_data[step] = scores
+        if stage_data:
+            out[stage] = stage_data
+    return out
 
 
 def make_plot(data: dict, model: str, outpath: Path) -> None:
@@ -113,6 +151,92 @@ def make_plot(data: dict, model: str, outpath: Path) -> None:
     print(f"Saved plot: {outpath}")
 
 
+STAGE_LINESTYLES = {
+    # ntok stages map to where each SophiaG branch picked up off the AdamW parent
+    "ntok4673B": "-",
+    "ntok7064B": "--",
+    "ntok7770B": ":",
+}
+
+
+def make_plot_mds(
+    stages: dict[str, dict[int, dict[str, float]]],
+    model: str,
+    outpath: Path,
+) -> None:
+    """One subplot per task, one line per stage."""
+    if not stages:
+        print(f"[skip] no MDS data for {model}")
+        return
+
+    tasks = sorted({t for stage_d in stages.values() for s in stage_d.values() for t in s})
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10), sharex=True)
+    axes = axes.flatten()
+
+    for ax, task in zip(axes, tasks):
+        color = TASK_COLORS.get(task, "#666666")
+        for stage_name, stage_d in stages.items():
+            steps = sorted(s for s in stage_d if task in stage_d[s])
+            accs = [stage_d[s][task] for s in steps]
+            if steps:
+                ax.plot(
+                    steps,
+                    accs,
+                    "o-",
+                    color=color,
+                    linestyle=STAGE_LINESTYLES.get(stage_name, "-"),
+                    label=stage_name,
+                    markersize=4,
+                    linewidth=1.5,
+                    alpha=0.85,
+                )
+        ax.axhline(y=RANDOM_BASELINES.get(task, 0.25), color="gray", linestyle=":", alpha=0.4, linewidth=1)
+        ax.set_title(task)
+        ax.set_ylabel("Accuracy")
+        ax.legend(loc="best", fontsize=9)
+
+    for ax in axes[len(tasks):]:
+        ax.set_visible(False)
+
+    for ax in axes[-2:]:
+        ax.set_xlabel("global_step (within MDS stage)")
+
+    total = sum(len(s) for s in stages.values())
+    fig.suptitle(
+        f"agpt_{model} — MDS optimizer-experiments (SophiaG, {total} checkpoints across {len(stages)} stages)",
+        fontsize=14,
+        fontweight="bold",
+    )
+    fig.tight_layout(rect=(0, 0, 1, 0.96))
+    outpath.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(outpath, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Saved plot: {outpath}")
+
+
+def print_table_mds(stages: dict[str, dict[int, dict[str, float]]], model: str) -> None:
+    """Print one markdown table per MDS stage."""
+    if not stages:
+        print(f"\n## agpt_{model}: no MDS results")
+        return
+
+    for stage, data in stages.items():
+        print_table(data, f"{model} ({stage})")
+
+
+def write_csv_mds(stages: dict[str, dict[int, dict[str, float]]], model: str, outpath: Path) -> None:
+    """Write MDS results to CSV (adds a `stage` column)."""
+    outpath.parent.mkdir(parents=True, exist_ok=True)
+    with open(outpath, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["model", "stage", "step", "task", "acc"])
+        for stage, data in sorted(stages.items()):
+            for step in sorted(data):
+                for task, acc in sorted(data[step].items()):
+                    w.writerow([model, stage, step, task, acc])
+    print(f"Wrote CSV: {outpath}")
+
+
 def print_table(data: dict, model: str) -> None:
     """Print a markdown table of results."""
     if not data:
@@ -151,9 +275,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Aggregate lm-eval results")
     parser.add_argument(
         "--model",
-        choices=["2b", "20b", "both"],
+        choices=["2b", "20b", "2b-mds", "both"],
         default="both",
-        help="Which model to process",
+        help="Which model to process. Use `2b-mds` for the Megatron-DeepSpeed sweep.",
     )
     parser.add_argument(
         "--evals-dir",
@@ -178,17 +302,30 @@ def main() -> None:
     models = ["2b", "20b"] if args.model == "both" else [args.model]
 
     for model in models:
-        data = load_results(model, args.evals_dir)
-        print_table(data, model)
-        plot_path = args.docs_dir / model / "figures" / f"eval_{model}.png"
-        make_plot(data, model, plot_path)
-        if args.csv:
-            csv_path = (
-                args.csv
-                if args.model != "both"
-                else args.csv.with_stem(f"{args.csv.stem}_{model}")
-            )
-            write_csv(data, model, csv_path)
+        if model.endswith("-mds"):
+            stages = load_results_mds(model, args.evals_dir)
+            print_table_mds(stages, model)
+            plot_path = args.docs_dir / model / "figures" / f"eval_{model}.png"
+            make_plot_mds(stages, model, plot_path)
+            if args.csv:
+                csv_path = (
+                    args.csv
+                    if args.model != "both"
+                    else args.csv.with_stem(f"{args.csv.stem}_{model}")
+                )
+                write_csv_mds(stages, model, csv_path)
+        else:
+            data = load_results(model, args.evals_dir)
+            print_table(data, model)
+            plot_path = args.docs_dir / model / "figures" / f"eval_{model}.png"
+            make_plot(data, model, plot_path)
+            if args.csv:
+                csv_path = (
+                    args.csv
+                    if args.model != "both"
+                    else args.csv.with_stem(f"{args.csv.stem}_{model}")
+                )
+                write_csv(data, model, csv_path)
 
 
 if __name__ == "__main__":
