@@ -58,12 +58,23 @@ Tokens consumed at step *N* = `N × 3,072 × 8,192`. Random baseline is
 
 ## Caveats
 
-- The DCP → HF conversion may not be loading the embedding table correctly
-  (different DCP checkpoints produce HF safetensors with **identical**
-  `tok_embeddings.weight`). Deeper layers are loaded correctly, so the eval
-  scores reflect the trained transformer minus updated embeddings.
-- Re-running with a fixed converter is expected to produce slightly different
-  numbers, particularly for tasks that hinge on token-level predictions.
+- **All RMSNorm weights are frozen at 1.0** because the production
+  runs used `training.dtype = bfloat16` (master weights in bf16,
+  per-step update sub-ulp at scale 1.0). This is a real training
+  issue, not a converter bug. Eval scores below reflect a model
+  whose 25 RMSNorm parameters never moved from init throughout the
+  18K-step run. See
+  [`docs/guides/training-dtype-bf16-norm-freeze.md`](../../../guides/training-dtype-bf16-norm-freeze.md).
+- The earlier "embeddings stuck across checkpoints" caveat was a
+  misdiagnosis: it was based on inspecting `tok_embeddings.weight[0]`
+  (a frozen padding-token row). Non-padding embedding rows DO
+  update, and the DCP → HF converter loads them correctly.
+- Eval scores below are noise-bound at near-random levels for all
+  tasks. This is consistent with what we'd expect from a model
+  whose normalization is permanently broken: the residual stream
+  learns, but loses information through poorly-scaled norms.
+  Compare with the MDS-trained 2B (no norm freeze) which reaches
+  ~0.59 hellaswag at the same approximate token count.
 
 ## Reproducing
 

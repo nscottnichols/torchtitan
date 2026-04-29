@@ -1,5 +1,11 @@
 # Production Training — agpt 20B
 
+> **2026-04-29 — known issue affecting steps 1–4,159 of the 256N
+> SophiaG run:** same `training.dtype = bfloat16` master-weight bug
+> that froze RMSNorm.weight at 1.0 in the 2B run. Loss/grad_norm
+> curves are real but the model has no trainable normalization. See
+> [`docs/guides/training-dtype-bf16-norm-freeze.md`](../../../guides/training-dtype-bf16-norm-freeze.md).
+
 ## 20B @ 256N — SophiaG LR=2.28e-5
 
 | Field | Value |

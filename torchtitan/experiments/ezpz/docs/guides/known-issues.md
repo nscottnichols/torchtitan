@@ -2,6 +2,30 @@
 
 Troubleshooting reference for running ezpz experiments across ALCF machines.
 
+## `training.dtype = bfloat16` silently freezes RMSNorm weights
+
+**Symptoms:** RMSNorm `weight` parameters stay exactly at their `1.0`
+init for every step of training. Loss/grad_norm curves look normal,
+optimizer state shows non-zero `exp_avg` / `hessian`, but the on-disk
+parameter values never move.
+
+**Root cause:** `training.dtype = bfloat16` puts the master copy in
+bf16 (no fp32 master). The bf16 ULP at scale 1.0 is `7.8e-3`; the
+per-step optimizer update for norms is `~1.6e-5`, so updates round
+to zero forever. Linear layers initialize at much smaller scales
+(0.005-0.02) and update fine.
+
+**Affects:** Every agpt and moe production run launched before
+2026-04-29 (when the default in `agpt/config_registry.py` and
+`moe/config_registry.py` was flipped from `bfloat16` to `float32`).
+
+**Fix:** Use `training.dtype = float32`. With FSDP
+`MixedPrecisionPolicy(param_dtype=bf16, reduce_dtype=fp32)`, the
+master is fp32, forward all-gather is bf16, gradient reduce is fp32.
+Memory cost: ~1 GB extra at 2B, ~10 GB at 20B.
+
+**See full writeup:** [`training-dtype-bf16-norm-freeze.md`](training-dtype-bf16-norm-freeze.md).
+
 ## torch.compile SYCL compilation time at high rank counts
 
 **Symptoms:** `torch.compile` takes hours to complete at 512+ nodes (6144+

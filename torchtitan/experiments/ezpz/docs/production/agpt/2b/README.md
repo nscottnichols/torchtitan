@@ -1,5 +1,15 @@
 # Production Training — agpt 2B
 
+> **2026-04-29 — known issue affecting steps 1–33,740 of the 256N
+> SophiaG run:** training was launched with `training.dtype = bfloat16`
+> (default at the time), which silently freezes every RMSNorm.weight
+> at its 1.0 init because per-step updates are sub-ulp at bf16 scale.
+> Loss curves are real but the model has no trainable normalization.
+> Default flipped to `float32` going forward; existing checkpoints
+> are tainted but resumable (norms will start updating from this point
+> on). See
+> [`docs/guides/training-dtype-bf16-norm-freeze.md`](../../../guides/training-dtype-bf16-norm-freeze.md).
+
 ## 2B @ 256N — SophiaG LR=2.28e-5
 
 | Field | Value |
