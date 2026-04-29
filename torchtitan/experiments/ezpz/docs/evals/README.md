@@ -9,7 +9,7 @@ Benchmark evaluations of AuroraGPT production checkpoints using
 |-------|--------|-----------------|--------|
 | [agpt 2B](agpt/2b/) | torchtitan DCP | steps 1K–18K | Done (suspect embedding bug) |
 | [agpt 20B](agpt/20b/) | torchtitan DCP | steps 100–2,500 | Done (same suspect bug) |
-| [agpt 2B (MDS)](agpt/2b-mds/) | Megatron-DeepSpeed SophiaG | steps 5K–140K × 3 stages (84 evals) | Done — clean training signal |
+| [agpt 2B (MDS)](agpt/2b-mds/) | Megatron-DeepSpeed SophiaG | steps 5K–140K (28 unique × 3 replicates) | Done — clean training signal |
 
 ## Pipelines
 
