@@ -66,7 +66,14 @@ def agpt(
     local_batch_size: int = 1,
     activation_checkpoint_mode: Literal["none", "full"] = "full",
     seq_len: int = 8192,
-    dtype: Literal["bfloat16", "float32"] = "bfloat16",
+    # IMPORTANT: bfloat16 master weights silently freeze RMSNorm.weight.
+    # Norm weights init to 1.0 (bf16 ulp = 7.8e-3); per-step updates
+    # ~1.6e-5 round to zero forever, so the model's normalization layers
+    # never train. FSDP MixedPrecisionPolicy keeps the bf16 cast for
+    # forward/backward; reduce stays fp32 — the fp32 master copy is
+    # what enables sub-ulp accumulation.
+    # See docs/guides/known-bugs/training-dtype-bf16-norm-freeze.md.
+    dtype: Literal["bfloat16", "float32"] = "float32",
     compile: bool = True,
     fsdp_reshard_after_forward: Literal["default", "always", "never"] = "default",
     tensor_parallel_degree: int = 1,

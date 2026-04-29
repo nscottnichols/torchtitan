@@ -126,7 +126,11 @@ def moe(
     local_batch_size: int = 1,
     activation_checkpoint_mode: Literal["none", "full", "selective"] = "full",
     seq_len: int = 8192,
-    dtype: Literal["bfloat16", "float32"] = "bfloat16",
+    # See agpt/config_registry.py for the full reasoning. bf16 master
+    # weights silently freeze RMSNorm.weight at init=1.0 because the
+    # per-step update (~lr * exp_avg / sqrt(hessian)) is sub-ulp at
+    # bf16 scale 1.0.
+    dtype: Literal["bfloat16", "float32"] = "float32",
     compile: bool = True,
     checkpoint_interval: int = 50,
     hf_assets_path: str = "./assets/hf/gemma-7b",
