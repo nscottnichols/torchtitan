@@ -24,6 +24,41 @@ tests and checking against the saved baselines — see
 
 ---
 
+## 2026-04-29 (24th sync — All2All token dispatcher consolidation)
+
+**Upstream commits:**
+
+- `20628f4e` — [MoE][3/n] consolidate EP=1 and EP>1 to all use
+  `All2AllTokenDispatcher` (#3125). `AllToAllTokenDispatcher` now falls
+  back to `LocalTokenDispatcher` behavior when `ep_mesh is None`.
+  Default `comm_backend` changed from `None` to `"standard"`; the
+  `None` → `LocalTokenDispatcher` path was removed entirely.
+  `make_token_dispatcher_config` and `make_experts_config` now require
+  a non-None `comm_backend`.
+- `35c5d529` — [graph_trainer] Remove `apply_graph_ac` (#3147). No
+  impact on ezpz (graph_trainer experiment only).
+
+**Impact on ezpz:** `moe.model_registry()` and `_build_moe_layers()` both
+defaulted `moe_comm_backend` to `None`, which is no longer valid. At
+build time `make_experts_config(comm_backend=None)` raises
+`ValueError: Unknown comm_backend: 'None'`.
+
+**Replay:**
+- `moe/__init__.py`: change both `moe_comm_backend: str | None = None`
+  defaults to `moe_comm_backend: str = "standard"` (mirrors upstream).
+  Drop the `if moe_comm_backend is not None` guard around the
+  token-dispatcher rebuild loop in `model_registry` — the dispatcher is
+  now always rebuilt with the user's chosen backend (or "standard" by
+  default), and EP=1 is handled by the dispatcher's local-fallback path
+  rather than by skipping the rebuild.
+
+**Verified:** Both smoke configs build cleanly post-fix. Existing
+`moe_debugmodel_ep` / `moe_7b_ep` configs that pass
+`moe_comm_backend="standard"` explicitly continue to work (kwarg is
+redundant but not wrong).
+
+---
+
 ## 2026-04-28 (23rd sync — graph_trainer experiment + ROCm CI only)
 
 **Upstream commits:**
