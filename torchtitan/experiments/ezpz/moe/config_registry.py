@@ -18,7 +18,7 @@ from torchtitan.components.lr_scheduler import LRSchedulersContainer
 from torchtitan.components.metrics import MetricsProcessor
 from torchtitan.components.optimizer import OptimizersContainer
 from torchtitan.components.quantization.float8 import (
-    Float8GroupedMMConverter,
+    Float8GroupedExpertsConverter,
     Float8LinearConverter,
 )
 from torchtitan.config import (
@@ -244,7 +244,7 @@ def moe_671b() -> FaultTolerantTrainer.Config:
         "671B",
         quantization=[
             Float8LinearConverter.Config(filter_fqns=["output", "router.gate"]),
-            Float8GroupedMMConverter.Config(fqns=["experts"]),
+            Float8GroupedExpertsConverter.Config(),
         ],
     )
     return cfg
