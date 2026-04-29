@@ -37,6 +37,12 @@ from torchtitan.experiments.ezpz.optimizer import (
 from torchtitan.tools.logging import logger
 
 import torchtitan.experiments.ezpz.datasets  # noqa: F401 — enable arbitrary HF datasets
+from torchtitan.experiments.ezpz.checkpoint_compat import patch_checkpoint_manager
+
+# Bridge old `output.weight` <-> new `lm_head.weight` for DCP load.
+# Production checkpoints saved before the upstream rename still have the
+# legacy keys; this shim renames them on the fly during dcp.load.
+patch_checkpoint_manager()
 
 DEFAULT_MODULE = "ezpz.agpt"
 DEFAULT_CONFIG = "ezpz_agpt_2b"
