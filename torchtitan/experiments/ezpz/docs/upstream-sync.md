@@ -24,6 +24,40 @@ tests and checking against the saved baselines — see
 
 ---
 
+## 2026-04-29 (post-21st-sync regression: legacy `output.weight` checkpoint load)
+
+**Symptom:** Both 20B continuation jobs (`8453664`, `8453665`) crashed at
+checkpoint load with:
+
+    RuntimeError: Missing key in checkpoint state_dict: lm_head.weight
+
+The 2B continuation (`8453662`) didn't reach checkpoint load — segfaulted
+on a bad node during `set_determinism()` — but would have hit the same
+error.
+
+**Root cause:** The 21st upstream sync (`b6c04698`) renamed
+`Decoder.Config.output` to `Decoder.Config.lm_head`, replayed in ezpz
+`03b9f486`. Production checkpoints saved before the rename
+(2B step 33,700+, 20B step 4,100+) still have `output.*` keys on disk;
+new code's state_dict has `lm_head.*`; DCP's strict matching crashes.
+
+**Fix:** `experiments/ezpz/checkpoint_compat.py` monkey-patches
+`CheckpointManager.dcp_load` to bridge the rename on the fly:
+state_dict keys go `lm_head.*` -> `output.*` before `dcp.load`, then
+back to `lm_head.*` before `model.load_state_dict`. Applied from
+`train.py`, idempotent.
+
+Verified by `utils/verify_checkpoint_compat.py` round-tripping the 20B
+step-4100 `output.weight` ([256128, 5120] bf16): non-zero, finite,
+sensible values.
+
+**Lesson:** Field renames in `Decoder.Config` (and any upstream `Module`
+attribute rename) need an explicit DCP backwards-compat plan. Going
+forward, when replaying upstream renames, also save a fresh checkpoint
+with the new naming on the next opportunity so the shim can be removed.
+
+---
+
 ## 2026-04-28 (23rd sync — graph_trainer experiment + ROCm CI only)
 
 **Upstream commits:**
