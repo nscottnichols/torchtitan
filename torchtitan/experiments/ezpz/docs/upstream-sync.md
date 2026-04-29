@@ -24,6 +24,24 @@ tests and checking against the saved baselines — see
 
 ---
 
+## 2026-04-28 (23rd sync — graph_trainer experiment + ROCm CI only)
+
+**Upstream commits:**
+
+- `a364b4b4` — [GraphTrainer] Add full inductor compilation pass (#3141)
+- `9ed1a028` — [graph_trainer] Joint graph bucketing + prefetching
+  composes with SAC (#3056)
+- `69761ca8` — [ROCm][CI] Re-disable experimental workflows for ROCm (#3140)
+
+**Impact on ezpz:** None. All three commits are scoped to
+`experiments/graph_trainer/` and `.github/workflows/`. No changes to
+`models/`, `protocols/`, `distributed/`, `trainer.py`, or `components/`.
+
+**Replay status:** Clean fast-forward merge. ezpz imports verified.
+No baseline re-check needed (no code path that affects agpt/moe changed).
+
+---
+
 ## 2026-04-28 (22nd sync — quantize-on-config, LocalMapInnerAttention removal, MeshAxisName rename)
 
 **Upstream commits:**
