@@ -4,6 +4,46 @@ Running log of what's happening, session by session. Most recent first.
 
 ---
 
+## 2026-04-29 — 24th upstream sync replay (All2All token dispatcher consolidation)
+
+### What landed
+
+Two upstream commits, one breaking:
+
+- `20628f4e` (#3125) consolidates EP=1 and EP>1 to all use
+  `AllToAllTokenDispatcher` (with a local-fallback path when ep_mesh is
+  None). `make_token_dispatcher_config` and `make_experts_config` now
+  require a non-None `comm_backend`; default changed from `None` to
+  `"standard"`.
+- `35c5d529` graph_trainer-only (no impact).
+
+### Replay (1 commit)
+
+`23b8ba59 fix(ezpz/moe)`: `moe_comm_backend: str | None = None` →
+`moe_comm_backend: str = "standard"` in both `_build_moe_layers` and
+`model_registry`. Drop the now-dead `if moe_comm_backend is not None`
+guard around the dispatcher rebuild loop. (No agpt changes — agpt
+doesn't use the moe-only helpers.)
+
+### Smoke results — both PASS within ±0.10
+
+| Config | Final loss | vs v22 baseline | tail10 mean | Δ tail10 |
+|---|---|---|---|---|
+| agpt 2b (job 12465533) | 7.108 | -0.029 | 7.221 | -0.037 |
+| moe 500m (job 12465534) | 6.912 | -0.014 | 6.978 | -0.016 |
+
+Both deltas dominated by streaming-data shuffle noise. Baselines
+refreshed to v24.
+
+### Side cleanup
+
+`b9a324f3` renamed `docs/upstream-sync/` → `docs/baselines/` to remove
+the visual collision with the neighboring `docs/upstream-sync.md` log
+file. Updated path references in `loss_baseline.py`, the workflow
+README, and the link from `upstream-sync.md`.
+
+---
+
 ## 2026-04-28 — 22nd upstream sync replay (quantize-on-config, LocalMapInnerAttention removal)
 
 ### What landed
