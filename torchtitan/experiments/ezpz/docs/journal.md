@@ -4,6 +4,75 @@ Running log of what's happening, session by session. Most recent first.
 
 ---
 
+## 2026-04-28 — 22nd upstream sync replay (quantize-on-config, LocalMapInnerAttention removal)
+
+### What landed
+
+The 22nd sync (merged `4b0a4fd5`) brought in 9 commits, three breaking:
+
+- **#3127 `6348d93d` quantize on config instead of on model.** Removes
+  `protocols/model_converter.py`, drops `model_converters` field from
+  `JobConfig` and from every `parallelize_*` signature. Quantization
+  converters are now applied to the model *config* at registry time
+  (`q.build().convert(config)`). Also moves `FaultTolerantModelSpec`
+  from `protocols/model_spec.py` into `experiments/ft/config/job_config.py`.
+- **#2986 `b9e33527` Remove LocalMapInnerAttention.** Replaces the
+  runtime DTensor wrapper class with a static `LocalMapConfig` set on
+  the inner-attention sharding_config via
+  `set_gqa_inner_attention_local_map`. All inner attention types now
+  inherit `Module` directly.
+- **#3113 `053dbf9a` MeshDimName → MeshAxisName.** Transparent for ezpz
+  (we only use the upstream helpers).
+
+### Replay outcome
+
+| Module | Status | Smoke test |
+|---|---|---|
+| `agpt` | replayed | 50 steps, loss 12.92 → 7.14 (job 12465527, exit 0) |
+| `moe`  | replayed | 50 steps, loss 12.92 → ~7 (job 12465529, in flight) |
+
+### Commits (ezpz branch)
+
+- `4b0a4fd5` — Merge upstream/main into ezpz (clean automatic merge).
+- `69a8cfc7` — Drop `model_converters=` kwarg from `parallelize_llama` /
+  `parallelize_moe` signatures and from both `parallelize_fn` /
+  `pipelining_fn` call sites in `ezpz/trainer.py`. Drop runtime
+  `model_converters.build/convert/post_optimizer_hook`. Switch
+  `has_quantization` to read from `model_config` via the upstream
+  `torchtitan.components.quantization.utils.has_quantization` helper.
+- `59d9f37d` — `LocalMapInnerAttention` → `Module` for
+  `SoftcappedFlexAttention` (agpt) and `Attention.Config.inner_attention`
+  (moe). Add `set_gqa_inner_attention_local_map(...)` calls in both
+  `sharding.py` files so inner attention gets the static `LocalMapConfig`
+  it now needs.
+- `cd29417e` — moe `model_registry` accepts `quantization=[...]`
+  parameter; `moe_671b()` re-registers via
+  `model_spec=model_registry("671B", quantization=[...])` instead of
+  mutating `cfg.model_converters`. Also re-import
+  `FaultTolerantModelSpec` from `experiments/ft/config/job_config`.
+- `1b87fa38` — `Float8GroupedMMConverter` → `Float8GroupedExpertsConverter`
+  (rename caught at smoke-test import time).
+
+### Smoke-test details
+
+- agpt smoke (`12465527`): loss 12.92 → 7.14 across 50 steps,
+  ~7,400 TPS, 28% MFU. Exit 0. Numerics match the v21 run within
+  data-shuffle variance — replay is loss-neutral.
+- moe smoke (`12465529`): 12.92 → 7 (in flight at step 12, on track),
+  ~7,200 TPS at steady state. Same compile-warmup pattern as v21.
+
+### Why moe failed once first
+
+`12465528` failed with `ImportError: Cannot import config_registry for
+module 'ezpz.moe'`. The underlying error was the
+`Float8GroupedMMConverter` rename to `Float8GroupedExpertsConverter`
+(and dropping `fqns=["experts"]` since the new Config takes no
+extra args). `config/manager.py` swallows the underlying `ImportError`
+which made the cause invisible — only resubmittable after grepping the
+upstream class names.
+
+---
+
 ## 2026-04-28 — 21st upstream sync replay (sharding API, ChunkedCELoss)
 
 ### What landed
