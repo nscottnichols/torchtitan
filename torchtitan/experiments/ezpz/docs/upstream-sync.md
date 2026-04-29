@@ -20,7 +20,7 @@ was required in ezpz.
 
 After replaying, verify convergence didn't break by running both smoke
 tests and checking against the saved baselines — see
-[`upstream-sync/README.md`](upstream-sync/README.md).
+[`baselines/README.md`](baselines/README.md).
 
 ---
 
