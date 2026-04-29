@@ -87,26 +87,30 @@ def load_results(model: str, evals_dir: Path) -> dict[int, dict[str, float]]:
     return data
 
 
-def load_results_mds(model: str, evals_dir: Path) -> dict[str, dict[int, dict[str, float]]]:
-    """Load MDS-layout results, returning {stage: {step: {task: acc}}}.
+def load_results_mds(
+    model: str, evals_dir: Path
+) -> dict[int, dict[str, list[float]]]:
+    """Load MDS-layout results aggregated across replicate eval runs.
 
-    MDS optimizer-experiments use multiple stages (ntok4673B, ntok7064B,
-    ntok7770B), each branching off an AdamW parent at a different token
-    count. Each stage gets its own series in the plot.
+    The on-disk layout has three sibling directories
+    (`ntok4673B`, `ntok7064B`, `ntok7770B`). For our SophiaG sweep these
+    are symlinks to the same physical checkpoint directory, so the
+    eval was effectively run three times against the same 28
+    checkpoints — 3 measurement replicates per step (XPU lm-eval is
+    not bitwise-deterministic, so the replicates differ at the ~1pp
+    level).
+
+    Returns ``{step: {task: [acc1, acc2, ...]}}`` with one entry per
+    replicate found at that (step, task).
     """
     base = evals_dir / f"agpt-{model}"  # caller passes "2b-mds" -> agpt-2b-mds
-    out: dict[str, dict[int, dict[str, float]]] = {}
-    for stage_dir in sorted(p for p in base.iterdir() if p.is_dir() and not p.name.startswith(".")):
-        stage = stage_dir.name
-        stage_data: dict[int, dict[str, float]] = {}
-        for step_path in sorted(stage_dir.glob("step-*/results/results.json")):
-            step = int(step_path.parent.parent.name.split("-")[1])
-            scores = _read_one(step_path)
-            if scores:
-                stage_data[step] = scores
-        if stage_data:
-            out[stage] = stage_data
-    return out
+    by_step: dict[int, dict[str, list[float]]] = {}
+    for step_path in sorted(base.glob("*/step-*/results/results.json")):
+        step = int(step_path.parent.parent.name.split("-")[1])
+        scores = _read_one(step_path)
+        for task, acc in scores.items():
+            by_step.setdefault(step, {}).setdefault(task, []).append(acc)
+    return dict(sorted(by_step.items()))
 
 
 def make_plot(data: dict, model: str, outpath: Path) -> None:
@@ -151,59 +155,74 @@ def make_plot(data: dict, model: str, outpath: Path) -> None:
     print(f"Saved plot: {outpath}")
 
 
-STAGE_LINESTYLES = {
-    # ntok stages map to where each SophiaG branch picked up off the AdamW parent
-    "ntok4673B": "-",
-    "ntok7064B": "--",
-    "ntok7770B": ":",
-}
+def _mean_stderr(xs: list[float]) -> tuple[float, float]:
+    n = len(xs)
+    if n == 0:
+        return float("nan"), 0.0
+    mean = sum(xs) / n
+    if n == 1:
+        return mean, 0.0
+    var = sum((x - mean) ** 2 for x in xs) / (n - 1)
+    return mean, (var / n) ** 0.5
 
 
 def make_plot_mds(
-    stages: dict[str, dict[int, dict[str, float]]],
+    by_step: dict[int, dict[str, list[float]]],
     model: str,
     outpath: Path,
 ) -> None:
-    """One subplot per task, one line per stage."""
-    if not stages:
+    """4-panel figure (one per task), mean ± stderr across replicates."""
+    if not by_step:
         print(f"[skip] no MDS data for {model}")
         return
 
-    tasks = sorted({t for stage_d in stages.values() for s in stage_d.values() for t in s})
+    tasks = sorted({t for s in by_step.values() for t in s})
     fig, axes = plt.subplots(2, 2, figsize=(14, 10), sharex=True)
     axes = axes.flatten()
 
+    n_replicates = max(len(by_step[s].get(tasks[0], [])) for s in by_step)
+
     for ax, task in zip(axes, tasks):
         color = TASK_COLORS.get(task, "#666666")
-        for stage_name, stage_d in stages.items():
-            steps = sorted(s for s in stage_d if task in stage_d[s])
-            accs = [stage_d[s][task] for s in steps]
-            if steps:
-                ax.plot(
-                    steps,
-                    accs,
-                    "o-",
-                    color=color,
-                    linestyle=STAGE_LINESTYLES.get(stage_name, "-"),
-                    label=stage_name,
-                    markersize=4,
-                    linewidth=1.5,
-                    alpha=0.85,
-                )
-        ax.axhline(y=RANDOM_BASELINES.get(task, 0.25), color="gray", linestyle=":", alpha=0.4, linewidth=1)
+        steps = sorted(s for s in by_step if task in by_step[s])
+        means = []
+        errs = []
+        for s in steps:
+            m, e = _mean_stderr(by_step[s][task])
+            means.append(m)
+            errs.append(e)
+        ax.errorbar(
+            steps,
+            means,
+            yerr=errs,
+            fmt="o-",
+            color=color,
+            markersize=4,
+            linewidth=1.5,
+            capsize=2,
+            alpha=0.9,
+            label=f"{task} (mean ± SE, n={n_replicates})",
+        )
+        ax.axhline(
+            y=RANDOM_BASELINES.get(task, 0.25),
+            color="gray",
+            linestyle=":",
+            alpha=0.5,
+            linewidth=1,
+            label="random baseline",
+        )
         ax.set_title(task)
         ax.set_ylabel("Accuracy")
         ax.legend(loc="best", fontsize=9)
 
     for ax in axes[len(tasks):]:
         ax.set_visible(False)
-
     for ax in axes[-2:]:
-        ax.set_xlabel("global_step (within MDS stage)")
+        ax.set_xlabel("global_step")
 
-    total = sum(len(s) for s in stages.values())
     fig.suptitle(
-        f"agpt_{model} — MDS optimizer-experiments (SophiaG, {total} checkpoints across {len(stages)} stages)",
+        f"agpt_{model} — MDS SophiaG sweep ({len(by_step)} unique checkpoints, "
+        f"{n_replicates}x replicate evals each)",
         fontsize=14,
         fontweight="bold",
     )
@@ -214,26 +233,51 @@ def make_plot_mds(
     print(f"Saved plot: {outpath}")
 
 
-def print_table_mds(stages: dict[str, dict[int, dict[str, float]]], model: str) -> None:
-    """Print one markdown table per MDS stage."""
-    if not stages:
+def print_table_mds(
+    by_step: dict[int, dict[str, list[float]]], model: str
+) -> None:
+    """Print a markdown table of mean accuracies per (step, task)."""
+    if not by_step:
         print(f"\n## agpt_{model}: no MDS results")
         return
+    tasks = sorted({t for s in by_step.values() for t in s})
+    n_replicates = max(len(by_step[s].get(tasks[0], [])) for s in by_step)
+    header = "| Step | " + " | ".join(tasks) + " |"
+    sep = "|------|" + "|".join(["------"] * len(tasks)) + "|"
+    print(
+        f"\n## agpt_{model} — {len(by_step)} unique steps "
+        f"({n_replicates}x replicate evals; values shown are means)\n"
+    )
+    print(header)
+    print(sep)
+    for step in sorted(by_step):
+        row = f"| {step:>6} |"
+        for task in tasks:
+            xs = by_step[step].get(task, [])
+            if xs:
+                m, _ = _mean_stderr(xs)
+                row += f" {m:.4f} |"
+            else:
+                row += " — |"
+        print(row)
 
-    for stage, data in stages.items():
-        print_table(data, f"{model} ({stage})")
 
+def write_csv_mds(
+    by_step: dict[int, dict[str, list[float]]], model: str, outpath: Path
+) -> None:
+    """Write per-replicate MDS results to CSV.
 
-def write_csv_mds(stages: dict[str, dict[int, dict[str, float]]], model: str, outpath: Path) -> None:
-    """Write MDS results to CSV (adds a `stage` column)."""
+    One row per (step, task, replicate) so downstream analysis can
+    recompute means/stderrs or plot replicate spread.
+    """
     outpath.parent.mkdir(parents=True, exist_ok=True)
     with open(outpath, "w", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["model", "stage", "step", "task", "acc"])
-        for stage, data in sorted(stages.items()):
-            for step in sorted(data):
-                for task, acc in sorted(data[step].items()):
-                    w.writerow([model, stage, step, task, acc])
+        w.writerow(["model", "step", "task", "replicate", "acc"])
+        for step in sorted(by_step):
+            for task in sorted(by_step[step]):
+                for i, acc in enumerate(by_step[step][task]):
+                    w.writerow([model, step, task, i, acc])
     print(f"Wrote CSV: {outpath}")
 
 
