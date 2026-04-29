@@ -18,6 +18,10 @@ After each `git merge upstream/main`, check if the incoming commits touch:
 Add an entry below with the date, upstream commits, what changed, and what
 was required in ezpz.
 
+After replaying, verify convergence didn't break by running both smoke
+tests and checking against the saved baselines — see
+[`upstream-sync/README.md`](upstream-sync/README.md).
+
 ---
 
 ## 2026-04-28 (22nd sync — quantize-on-config, LocalMapInnerAttention removal, MeshAxisName rename)
