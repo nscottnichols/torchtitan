@@ -18,6 +18,17 @@
 
 ![20B 256N Training](figures/production_20b_256n.png)
 
+### Diagnostics (grad_norm / lr / max_loss)
+
+![20B 256N Diagnostics](figures/training_diagnostics_20b_256n.png)
+
+### Tokens vs Wall Clock
+
+![20B 256N Tokens vs Time](figures/tokens_vs_time_20b_256n.png)
+
+> Diagnostic and tokens-vs-time figures are pulled from W&B by
+> `torchtitan/experiments/ezpz/utils/plot_production_wandb.py`.
+
 ### Progress
 
 | Job ID | Steps | Loss (start → end) | TPS/GPU | MFU | Memory | Status |
