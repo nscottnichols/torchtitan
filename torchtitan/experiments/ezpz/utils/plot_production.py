@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """Plot production training metrics from PBS output files.
 
+DEPRECATED: prefer ``plot_production_wandb.py``, which pulls history
+from W&B and therefore captures in-progress runs whose PBS log files
+haven't been written yet. This script is retained for plotting old
+runs that pre-date W&B logging, or as a fallback if W&B is
+unavailable.
+
 Parses PBS job output files containing training step logs, extracts
 loss/throughput/MFU metrics, and generates publication-quality plots.
 

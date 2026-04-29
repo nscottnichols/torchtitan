@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """Plot production training metrics pulled from W&B.
 
-Generates two figures per model size, complementing
-``plot_production.py`` (which builds the loss/tps/mfu dashboard from
-PBS logs):
+W&B is the single source of truth for production training history,
+since PBS log files only exist for jobs that have already exited and
+the active runs span multiple resumes. Generates three figures per
+model size:
 
-  - ``training_diagnostics_<model>_<num_nodes>n.png``: grad_norm, lr, and
-    max_loss vs training step.
+  - ``production_<model>_<num_nodes>n.png``: loss / tps-per-gpu / mfu
+    vs step (overwrites the same filename produced by the legacy
+    ``plot_production.py``).
+  - ``training_diagnostics_<model>_<num_nodes>n.png``: grad_norm, lr,
+    and max_loss vs step.
   - ``tokens_vs_time_<model>_<num_nodes>n.png``: cumulative
-    ``n_tokens_seen`` vs wall-clock datetime, concatenated across the
-    run's resumes.
+    ``n_tokens_seen`` vs wall-clock datetime.
 
 Run from the repo root:
 
@@ -92,8 +95,11 @@ METRIC_KEYS = (
     "_timestamp",
     "grad_norm",
     "lr",
+    "loss_metrics/global_avg_loss",
     "loss_metrics/global_max_loss",
     "n_tokens_seen",
+    "throughput(tps)",
+    "mfu(%)",
 )
 
 
@@ -145,6 +151,79 @@ def smooth(values: np.ndarray, window: int = 100) -> np.ndarray:
     smoothed[:half] = values[:half]
     smoothed[-half:] = values[-half:]
     return smoothed
+
+
+def plot_dashboard(
+    data: dict[str, np.ndarray],
+    model_name: str,
+    num_nodes: int,
+    output_path: Path,
+) -> Path:
+    """3-panel figure: loss, tps/gpu, mfu vs step.
+
+    Replaces the log-parsing version in ``plot_production.py``: pulls
+    from W&B so it reflects in-progress runs whose PBS log files
+    haven't been written yet.
+    """
+    color = MODEL_COLORS.get(model_name, "#1E88E5")
+    num_gpus = num_nodes * 12
+    steps = data["_step"].astype(float)
+    loss = data["loss_metrics/global_avg_loss"].astype(float)
+    # `throughput(tps)` is already logged per-rank (per-GPU) by torchtitan,
+    # not aggregated — values for the 2B run sit around 1k-3k, matching
+    # the per-GPU numbers in the PBS-log dashboards. Don't divide.
+    tps_per_gpu = data["throughput(tps)"].astype(float)
+    mfu = data["mfu(%)"].astype(float)
+
+    valid = ~np.isnan(steps)
+    steps = steps[valid]
+    loss = loss[valid]
+    tps_per_gpu = tps_per_gpu[valid]
+    mfu = mfu[valid]
+
+    fig, axes = plt.subplots(3, 1, figsize=(14, 10), sharex=True)
+    fig.suptitle(
+        f"AuroraGPT {model_name.upper()} Production Training  |  "
+        f"{num_nodes} nodes ({num_gpus} GPUs)  |  "
+        f"step {int(steps[-1]):,}",
+        fontsize=14,
+        fontweight="bold",
+    )
+
+    ax = axes[0]
+    ax.plot(steps, loss, color=color, alpha=0.25, linewidth=0.5)
+    ax.plot(steps, smooth(loss), color=color, linewidth=1.8, label="Loss (smoothed)")
+    ax.set_ylabel("Loss")
+    ax.set_title("Training Loss")
+    ax.legend()
+
+    ax = axes[1]
+    ax.plot(steps, tps_per_gpu, color="#43A047", alpha=0.25, linewidth=0.5)
+    ax.plot(
+        steps,
+        smooth(tps_per_gpu),
+        color="#43A047",
+        linewidth=1.8,
+        label="TPS/GPU (smoothed)",
+    )
+    ax.set_ylabel("Tokens/sec/GPU")
+    ax.set_title("Throughput per GPU")
+    ax.legend()
+
+    ax = axes[2]
+    ax.plot(steps, mfu, color="#FF9800", alpha=0.25, linewidth=0.5)
+    ax.plot(steps, smooth(mfu), color="#FF9800", linewidth=1.8, label="MFU (smoothed)")
+    ax.set_ylabel("MFU (%)")
+    ax.set_xlabel("Training Step")
+    ax.set_title("Model FLOPs Utilization")
+    ax.legend()
+
+    fig.tight_layout(rect=(0, 0, 1, 0.95))
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=200, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Saved: {output_path}")
+    return output_path
 
 
 def plot_diagnostics(
@@ -291,6 +370,12 @@ def main() -> None:
         data = concat_runs(api, cfg["run_ids"])
         print(f"  Concatenated: {len(data['_step'])} unique steps")
 
+        plot_dashboard(
+            data,
+            model_name,
+            cfg["num_nodes"],
+            out_dir / f"production_{model_name}_{cfg['num_nodes']}n.png",
+        )
         plot_diagnostics(
             data,
             model_name,
