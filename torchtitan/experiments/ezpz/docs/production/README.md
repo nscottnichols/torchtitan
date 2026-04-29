@@ -2,7 +2,7 @@
 
 > **Living document** — updated as jobs complete and new runs are submitted.
 >
-> Last updated: 2026-04-26
+> Last updated: 2026-04-28
 
 ## Scaling Performance
 
@@ -20,22 +20,28 @@ Full-scale production training of AuroraGPT models on the
 
 ![Production Training Loss](../experiments/agpt/aurora/figures/production_training_loss.png)
 
+## Tokens vs Wall Clock (256N runs)
+
+| 2B | 20B |
+|----|-----|
+| ![2B Tokens vs Time](agpt/2b/figures/tokens_vs_time_2b_256n.png) | ![20B Tokens vs Time](agpt/20b/figures/tokens_vs_time_20b_256n.png) |
+
 ## Runs
 
 ### Dense (agpt)
 
-| Run | Model | Nodes | Optimizer | LR | Compile | Steps Done | Loss | Status |
-|-----|-------|-------|-----------|------|---------|------------|------|--------|
-| [2B-256N](agpt/2b/) | 2B | 256 | SophiaG | 2.28e-5 | on | 17,518+ | 5.73 | **Running** |
-| [2B-512N](agpt/2b/) | 2B | 512 | SophiaG | 2.28e-5 | off | 0 | — | Segfault |
-| [2B-512N](agpt/2b/) | 2B | 512 | SophiaG | 2.28e-5 | — | 0 | — | Killed (yeet-env) |
-| [20B-256N](agpt/20b/) | 20B | 256 | SophiaG | 2.28e-5 | on | 2,562 | 4.83 | Complete (walltime) |
-| [20B-512N](agpt/20b/) | 20B | 512 | SophiaG | 2.28e-5 | on | 458 | 7.09 | Segfault |
-| [20B-512N](agpt/20b/) | 20B | 512 | SophiaG | 2.28e-5 | — | 0 | — | Killed (yeet-env) |
-| [80B-256N](agpt/80b/) | 80B | 256 | AdamW | 1.1e-5 | on | 777 | NaN | NaN@138 (killed) |
-| [80B-256N](agpt/80b/) | 80B | 256 | AdamW | 1e-6 | on | 51 | 12.91 | Crashed (bad node) |
-| [80B-512N](agpt/80b/) | 80B | 512 | AdamW | 1.1e-5 | off | 495 | NaN | NaN@15 (killed) |
-| [80B-512N](agpt/80b/) | 80B | 512 | AdamW | 1e-6 | — | 0 | — | Killed (yeet-env) |
+| Run | Model | Nodes | Optimizer | LR | Compile | Steps Done | Loss | Tokens | Status |
+|-----|-------|-------|-----------|------|---------|------------|------|--------|--------|
+| [2B-256N](agpt/2b/) | 2B | 256 | SophiaG | 2.28e-5 | on | 33,740+ | 5.69 | 849.1B (18.2%) | **Running** |
+| [2B-512N](agpt/2b/) | 2B | 512 | SophiaG | 2.28e-5 | off | 0 | — | — | Segfault |
+| [2B-512N](agpt/2b/) | 2B | 512 | SophiaG | 2.28e-5 | — | 0 | — | — | Killed (yeet-env) |
+| [20B-256N](agpt/20b/) | 20B | 256 | SophiaG | 2.28e-5 | on | 4,159+ | 4.59 | 104.7B (2.2%) | **Running** |
+| [20B-512N](agpt/20b/) | 20B | 512 | SophiaG | 2.28e-5 | on | 458 | 7.09 | 23.1B | Segfault |
+| [20B-512N](agpt/20b/) | 20B | 512 | SophiaG | 2.28e-5 | — | 0 | — | — | Killed (yeet-env) |
+| [80B-256N](agpt/80b/) | 80B | 256 | AdamW | 1.1e-5 | on | 777 | NaN | — | NaN@138 (killed) |
+| [80B-256N](agpt/80b/) | 80B | 256 | AdamW | 1e-6 | on | 51 | 12.91 | — | Crashed (bad node) |
+| [80B-512N](agpt/80b/) | 80B | 512 | AdamW | 1.1e-5 | off | 495 | NaN | — | NaN@15 (killed) |
+| [80B-512N](agpt/80b/) | 80B | 512 | AdamW | 1e-6 | — | 0 | — | — | Killed (yeet-env) |
 
 ### MoE
 
