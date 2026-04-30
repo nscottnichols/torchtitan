@@ -13,8 +13,9 @@
 # - Restart from scratch under /flare/AuroraGPT/foremans/runs/agpt-20b-v2/
 #   on the new clone (HEAD has the dtype=float32 RMSNorm fix).
 # - LBS=2 with the new venv (was LBS=1 on torch 2.10).
-# - Defaults to ChunkedCELoss (config=agpt_20b_chunkedce). Override with
-#   `CONFIG_SUFFIX="" qsub ...` to use plain CrossEntropyLoss.
+# - Defaults to plain CrossEntropyLoss (config=agpt_20b). Set
+#   `CONFIG_SUFFIX=_chunkedce qsub ...` to use ChunkedCELoss instead
+#   (saves memory at the cost of ~10% throughput).
 
 # ---- Environment (torch 2.13+ .venv) ----
 module load oneapi/release/2025.3.1 hdf5 pti-gpu
@@ -104,7 +105,7 @@ log_message INFO "==========================================="
 # ---- Launch ----
 ezpz launch python3 -m torchtitan.experiments.ezpz.train \
     --module=ezpz.agpt \
-    --config="agpt_${MODEL}${CONFIG_SUFFIX:-_chunkedce}" \
+    --config="agpt_${MODEL}${CONFIG_SUFFIX:-}" \
     --checkpoint.enable \
     --checkpoint.folder="${CKPT_DIR}" \
     --checkpoint.interval="${CKPT_INTERVAL}" \

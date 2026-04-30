@@ -13,8 +13,9 @@
 # - Restart from scratch under /flare/AuroraGPT/foremans/runs/agpt-2b-v2/
 #   on the new clone (HEAD has the dtype=float32 RMSNorm fix).
 # - LBS=2 with the new venv (was LBS=1 on torch 2.10).
-# - Defaults to ChunkedCELoss (config=agpt_2b_chunkedce). Override with
-#   `CONFIG_SUFFIX="" qsub ...` to use plain CrossEntropyLoss.
+# - Defaults to plain CrossEntropyLoss (config=agpt_2b). Set
+#   `CONFIG_SUFFIX=_chunkedce qsub ...` to use ChunkedCELoss instead
+#   (saves ~10pp memory headroom but ~10% slower than plain CE on 2B).
 
 # ---- Environment (torch 2.13+ .venv) ----
 module load oneapi/release/2025.3.1 hdf5 pti-gpu
@@ -104,7 +105,7 @@ log_message INFO "==========================================="
 # ---- Launch ----
 ezpz launch python3 -m torchtitan.experiments.ezpz.train \
     --module=ezpz.agpt \
-    --config="agpt_${MODEL}${CONFIG_SUFFIX:-_chunkedce}" \
+    --config="agpt_${MODEL}${CONFIG_SUFFIX:-}" \
     --checkpoint.enable \
     --checkpoint.folder="${CKPT_DIR}" \
     --checkpoint.interval="${CKPT_INTERVAL}" \
