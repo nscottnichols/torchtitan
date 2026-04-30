@@ -117,6 +117,16 @@ attribute rename) need an explicit DCP backwards-compat plan. Going
 forward, when replaying upstream renames, also save a fresh checkpoint
 with the new naming on the next opportunity so the shim can be removed.
 
+**Removal (2026-04-29):** Shim and verifier deleted. The bf16-tainted
+production checkpoints were renamed to `*.bf16-norm-bug-20260429` and
+will not be resumed from. The shim was unconditionally renaming
+`lm_head` -> `output` in the load path, which BROKE auto-resume from
+new-style checkpoints (the new restart writes `lm_head.*` keys; the
+shim rewrote the load state_dict to ask for `output.*`, missed the
+on-disk metadata). Files removed: `experiments/ezpz/checkpoint_compat.py`,
+`experiments/ezpz/utils/verify_checkpoint_compat.py`. The
+`patch_checkpoint_manager()` call removed from `train.py`.
+
 ---
 
 ## 2026-04-28 (23rd sync — graph_trainer experiment + ROCm CI only)
