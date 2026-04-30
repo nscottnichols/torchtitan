@@ -6,7 +6,7 @@ from dataclasses import is_dataclass
 from typing import Any, Literal
 
 from torchtitan.components.checkpoint import CheckpointManager
-from torchtitan.components.loss import CrossEntropyLoss
+from torchtitan.components.loss import ChunkedCELoss, CrossEntropyLoss
 from torchtitan.components.lr_scheduler import LRSchedulersContainer
 from torchtitan.components.metrics import MetricsProcessor
 from torchtitan.components.optimizer import OptimizersContainer
@@ -144,6 +144,19 @@ def ezpz_agpt_2b() -> FaultTolerantTrainer.Config:
     return agpt("2b", activation_checkpoint_mode="none")
 
 
+def agpt_2b_chunkedce() -> FaultTolerantTrainer.Config:
+    """agpt_2b with ChunkedCELoss to keep peak memory low.
+
+    With vocab=256128 the unchunked logits are ~16 GB at LBS=2 / seq=8192,
+    which OOMs on Aurora's 64 GB tiles. ChunkedCELoss(num_chunks=8) caps
+    the peak slice at ~2 GB. Set lm_head module reference at trainer init
+    via the set_lm_head plumbing in `experiments/ezpz/trainer.py`.
+    """
+    cfg = ezpz_agpt_2b()
+    cfg.loss = ChunkedCELoss.Config(num_chunks=8)
+    return cfg
+
+
 def ezpz_agpt_2b_flex_attn() -> FaultTolerantTrainer.Config:
     return agpt("2b_flex_attn", local_batch_size=2)
 
@@ -240,6 +253,13 @@ def agpt_20b() -> FaultTolerantTrainer.Config:
     return agpt("20b")
 
 
+def agpt_20b_chunkedce() -> FaultTolerantTrainer.Config:
+    """agpt_20b with ChunkedCELoss. See agpt_2b_chunkedce for rationale."""
+    cfg = ezpz_agpt_20b()
+    cfg.loss = ChunkedCELoss.Config(num_chunks=8)
+    return cfg
+
+
 def ezpz_agpt_50b() -> FaultTolerantTrainer.Config:
     return agpt("50b")
 
@@ -254,6 +274,13 @@ def ezpz_agpt_80b() -> FaultTolerantTrainer.Config:
 
 def agpt_80b() -> FaultTolerantTrainer.Config:
     return agpt("80B", tensor_parallel_degree=2)
+
+
+def agpt_80b_chunkedce() -> FaultTolerantTrainer.Config:
+    """agpt_80b with ChunkedCELoss. See agpt_2b_chunkedce for rationale."""
+    cfg = ezpz_agpt_80b()
+    cfg.loss = ChunkedCELoss.Config(num_chunks=8)
+    return cfg
 
 
 def ezpz_agpt_80b_alt() -> FaultTolerantTrainer.Config:
