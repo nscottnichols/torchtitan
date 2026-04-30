@@ -236,10 +236,19 @@ class moeModel(Decoder):
                     layer_cfg.moe.router._debug_force_load_balance = (
                         debug.moe_force_load_balance
                     )
-                    if parallelism.expert_parallel_comm_backend in (
-                        "deepep",
-                        "hybridep",
-                    ):
+                    # ETP was deprecated upstream (#3167); the comm_backend now
+                    # lives on the token_dispatcher, not on parallelism config.
+                    comm_backend = getattr(
+                        layer_cfg.moe.experts.token_dispatcher,
+                        "comm_backend",
+                        "standard",
+                    )
+                    if comm_backend in ("deepep", "hybridep"):
+                        if parallelism.expert_parallel_degree == 1:
+                            raise ValueError(
+                                f"{comm_backend.upper()} requires expert "
+                                "parallelism (expert_parallel_degree > 1)."
+                            )
                         from torchtitan.models.common.moe_deepep import DeepEPMoE
 
                         init_kwargs = {

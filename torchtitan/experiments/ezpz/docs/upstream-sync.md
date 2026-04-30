@@ -24,6 +24,65 @@ tests and checking against the saved baselines — see
 
 ---
 
+## 2026-04-30 (26th sync — ETP deprecation + varlen window + CI)
+
+**Upstream commits:**
+
+- `c4b409af` — [MoE][4/n] deprecate expert tensor parallel (ETP) (#3167).
+  Removes `ExpertTensorParallel` class, the `etp` mesh axis, the
+  `expert_tensor_parallel_degree` and `expert_parallel_comm_backend`
+  config fields, and all ETP references across models and experiments.
+  `comm_backend` now lives on `moe.experts.token_dispatcher`, not on
+  `parallelism`.
+- `a2b5ee66` — varlen window size configurable (#3173). Adds
+  `attention.window_size` plumbing for varlen attention; additive only.
+- `47d3045f` — [CI] Move lychee link checker to nightly workflow (#3158).
+- `efebe6de` — [GraphTrainer] Remove SAC peak-memory test from H100 CI
+  (#3170).
+- `4e48ebec` — Add MoE loss comparison guard to CI workflow (#3081).
+- `6495ce57` — [GraphTrainer] Clean up precompile bitwise deterministic
+  tests (#3169).
+
+**Impact on ezpz:**
+- `ezpz/moe/parallelize.py` imported `ExpertTensorParallel` (now deleted)
+  and called `apply_moe_ep_tp` with `etp_mesh` / `ep_etp_mesh` kwargs that
+  the upstream signature no longer accepts.
+- `ezpz/moe/model.py` referenced `parallelism.expert_parallel_comm_backend`
+  to decide between `MoE` and `DeepEPMoE`. That config field is gone;
+  `comm_backend` now lives on the per-expert token_dispatcher config.
+- `ezpz/agpt/`, `ezpz/qwen3/`, and the trainer don't touch ETP — no
+  changes needed.
+- `experiments/ezpz/moe_runs/*.json` snapshots still contain
+  `"expert_tensor_parallel_degree": 1`. These are historical run records;
+  not stripping. Re-running them through the current config parser would
+  fail and require dropping that key.
+
+**Replay (mirrors `c4b409af` deepseek_v3 changes):**
+- `ezpz/moe/parallelize.py`:
+  - Drop `ExpertTensorParallel` from the `expert_parallel` import.
+  - `apply_moe_ep_tp(...)` signature: drop `etp_mesh` / `ep_etp_mesh`.
+  - Drop the `etp_mesh`/`ep_etp_mesh` kwargs from the call inside
+    `parallelize_moe`.
+  - Collapse the `experts_mesh` / `experts_plan` selection to the two
+    surviving cases (EP disabled → TP-shard experts; EP enabled →
+    `ExpertParallel()`).
+- `ezpz/moe/model.py`:
+  - Read `comm_backend` from
+    `layer_cfg.moe.experts.token_dispatcher` (matches upstream
+    `deepseek_v3.model`).
+  - Raise `ValueError` if `comm_backend in ("deepep","hybridep")` and
+    `expert_parallel_degree == 1` (was previously implicit — now
+    explicit, matching upstream).
+  - Keep the `MoE → DeepEPMoE.Config` swap inside the same
+    `comm_backend in ("deepep","hybridep")` branch.
+
+**Verified:** Both modified files parse with `ast.parse`. No baseline
+re-check needed — ezpz/moe doesn't run on Aurora MoE production right
+now (MoE SIGABRT regression is still open from the 00b7f569 sync), so
+there's nothing live to break. Will smoke when MoE work resumes.
+
+---
+
 ## 2026-04-29 (25th sync — graph_trainer + VLM deletion + minor)
 
 **Upstream commits:**

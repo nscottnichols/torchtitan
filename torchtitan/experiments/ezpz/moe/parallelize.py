@@ -59,7 +59,6 @@ from torchtitan.distributed.activation_checkpoint import apply_ac
 from torchtitan.distributed.context_parallel import apply_cp_to_forward
 from torchtitan.distributed.expert_parallel import (
     ExpertParallel,
-    ExpertTensorParallel,
     TensorParallel,
 )
 from torchtitan.distributed.fsdp import get_fsdp_reshard_after_forward_policy
@@ -160,8 +159,6 @@ def parallelize_moe(
             model,
             tp_mesh=parallel_dims.get_optional_mesh("tp"),
             ep_mesh=parallel_dims.get_optional_mesh("ep"),
-            etp_mesh=parallel_dims.get_optional_mesh("etp"),
-            ep_etp_mesh=parallel_dims.get_optional_mesh(["ep", "etp"]),
         )
 
     model_compile_enabled = (
@@ -366,8 +363,6 @@ def apply_moe_ep_tp(
     model: nn.Module,
     tp_mesh: DeviceMesh | None,
     ep_mesh: DeviceMesh | None,
-    etp_mesh: DeviceMesh | None,
-    ep_etp_mesh: DeviceMesh | None,
 ):
     """Apply MoE expert/tensor parallelism plans to MoE-enabled blocks.
 
@@ -415,18 +410,14 @@ def apply_moe_ep_tp(
                 parallelize_plan=moe_layer_plan,
             )
 
-        experts_mesh, experts_plan = None, None
+        # EP disabled: shard routed expert weights across TP mesh.
+        # EP enabled: shard across EP mesh (ETP deprecated upstream — see #3167).
         if ep_mesh is None:
-            assert ep_etp_mesh is None
             experts_mesh = tp_mesh
             experts_plan = TensorParallel()
-        elif tp_mesh is None or etp_mesh is None:
-            assert ep_etp_mesh is None
+        else:
             experts_mesh = ep_mesh
             experts_plan = ExpertParallel()
-        else:
-            experts_mesh = ep_etp_mesh
-            experts_plan = ExpertTensorParallel()
 
         parallelize_module(
             module=transformer_block.moe.experts,
