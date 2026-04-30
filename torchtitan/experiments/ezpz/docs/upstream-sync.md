@@ -24,6 +24,33 @@ tests and checking against the saved baselines — see
 
 ---
 
+## 2026-04-30 (27th sync — HybridEP comm_backend cleanup + autoparallel/deepseek_v3 deletion)
+
+**Upstream commits (truly new — most others were patch-equivalent
+duplicates of the ETP deprecation already replayed at `97e44a5a`):**
+
+- `f7940d5b` — Remove stale `experiments/autoparallel/deepseek_v3/`
+  (#2271). 5 files / 534 lines deleted.
+- `0138bde8` — [HybridEP] Read comm_backend from model config instead
+  of ParallelismConfig (#3177). Adds optional `non_blocking_capacity_factor`
+  kwarg to deepseek_v3 model factory functions.
+- `115f4c9c` — [HybridEP] Enable HybridEP with graph_trainer (#3007).
+  graph_trainer + 1-line deepseek_v3/__init__.py change.
+
+**Impact on ezpz:** None.
+- ezpz/moe doesn't use `non_blocking_capacity_factor` (no HybridEP code path)
+- We don't depend on `experiments/autoparallel/deepseek_v3/`
+
+**Merge conflicts:** Two modify/delete conflicts on
+`experiments/autoparallel/deepseek_v3/{config_registry,parallelize_deepseekv3}.py`
+— ezpz had local mods to those files from a previous ETP-removal patch
+sequence. Accepted upstream's deletion (we don't use the dir).
+
+**Replay status:** Clean otherwise. ezpz imports verified.
+No baseline re-check needed (no code path that affects agpt/moe changed).
+
+---
+
 ## 2026-04-30 (26th sync — ETP deprecation + varlen window + CI)
 
 **Upstream commits:**
