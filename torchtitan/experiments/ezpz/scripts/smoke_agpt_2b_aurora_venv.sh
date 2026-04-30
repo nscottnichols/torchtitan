@@ -49,7 +49,13 @@ ezpz_setup_job
 
 cd "${PBS_O_WORKDIR:-$(pwd)}"
 source .venv/bin/activate
-ezpz yeet-env
+if [[ -f .venv.tar.gz ]]; then
+    log_message INFO "yeet-env via tarball: .venv.tar.gz"
+    ezpz yeet-env --src .venv.tar.gz
+else
+    log_message INFO "yeet-env via rsync (.venv.tar.gz not present)"
+    ezpz yeet-env
+fi
 deactivate
 source /tmp/.venv/bin/activate
 
