@@ -24,6 +24,32 @@ tests and checking against the saved baselines — see
 
 ---
 
+## 2026-04-29 (25th sync — graph_trainer + VLM deletion + minor)
+
+**Upstream commits:**
+
+- `01a8b068` — [GraphTrainer] log_activation_memory_policy (#3062)
+- `533795ee` — [graph_trainer] simple_fsdp unconditional for NGPU=1 (#3148)
+- `a890192e` — [graph_trainer] Fix test_trace_module backends (#3155)
+- `ef8e2820` — [graph_trainer] Async TP graph pass (#3129)
+- `0ad6772a` — [VLM] deprecate vlm experiment (#3151) — deletes 18
+  files / 2,248 lines from `experiments/vlm/`
+- `a3a01604` — fix(hf_datasets): ChatDataset shuffle before split (#3131)
+- `719085ae` — Use CrossEntropyLoss for torchcomms 3D compile tests (#3157)
+
+**Impact on ezpz:** None.
+- 4 commits scoped to `experiments/graph_trainer/`
+- 1 commit deletes `experiments/vlm/` (ezpz doesn't depend on it)
+- 1 commit touches `hf_datasets/text_datasets.py` for `ChatDataset`
+  only — ezpz uses BlendCorpus or HuggingFaceFW streaming via
+  `datasets.py`, not `ChatDataset`
+- 1 commit is a single line in CI test config
+
+**Replay status:** Clean fast-forward merge. ezpz imports verified.
+No baseline re-check needed (no code path that affects agpt/moe changed).
+
+---
+
 ## 2026-04-29 (24th sync — All2All token dispatcher consolidation)
 
 **Upstream commits:**
