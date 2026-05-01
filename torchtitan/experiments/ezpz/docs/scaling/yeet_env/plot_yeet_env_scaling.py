@@ -33,7 +33,7 @@ except ImportError:
 plt.rcParams["font.family"] = "monospace"
 
 DEFAULT_CSV = (
-    Path(__file__).resolve().parents[4]  # ezpz/docs/scaling/yeet_env/ -> repo root
+    Path(__file__).resolve().parents[6]  # ezpz/docs/scaling/yeet_env/ -> repo root
     / ".yeet-env-scaling-results.csv"
 )
 FIG_DIR = Path(__file__).parent / "figures"

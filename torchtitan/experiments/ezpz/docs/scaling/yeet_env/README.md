@@ -47,6 +47,39 @@ done
 python3 torchtitan/experiments/ezpz/docs/scaling/yeet_env/plot_yeet_env_scaling.py
 ```
 
-## Results
+## Results (2026-04-30 to 2026-05-01)
 
-(populated as jobs complete — see `figures/`)
+9 of 10 sweep points landed; 4096N still queued in `large` at time of
+write.
+
+| Nodes | yeet-env (s) | Per-node (ms) |
+|------:|-------------:|--------------:|
+| 8 | 69.7 | 8,712 |
+| 16 | 89.7 | 5,606 |
+| 32 | 89.2 | 2,788 |
+| 64 | 91.2 | 1,425 |
+| 128 | 110.4 | 862 |
+| 256 | 132.9 | 519 |
+| 512 | 174.5 | 341 |
+| 1024 | 255.4 | 249 |
+| 2048 | 421.4 | 206 |
+| 4096 | (pending) | (pending) |
+
+![Total wall-clock](figures/yeet_env_seconds.png)
+
+![Per-node amortized](figures/yeet_env_per_node.png)
+
+### Observations
+
+- **Two regimes**: 8-64N is extract-bound (total wall-clock ~70-91s flat,
+  per-node cost falls 8.7s → 1.4s as more nodes share the fixed-cost
+  extraction); ≥128N is broadcast-bound (total wall-clock grows
+  linearly-ish up to ~1024N then super-linearly at 2048N).
+- **Per-node amortized cost** drops monotonically from 8.7s/node (N=8)
+  to 0.21s/node (N=2048) — a 42× efficiency gain over the sweep.
+- **Practical takeaway**: pre-yeet-env overhead at production scale is
+  <8 minutes even at 2048N. The "1-2 hour" estimate in CLAUDE.md was for
+  the pre-tarball per-file rsync mode; tarball broadcast doesn't reach
+  that regime.
+- The 421s at 2048N is still well within the typical PBS startup window
+  for a multi-hour training job.
