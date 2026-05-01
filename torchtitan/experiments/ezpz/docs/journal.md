@@ -4,6 +4,118 @@ Running log of what's happening, session by session. Most recent first.
 
 ---
 
+## 2026-05-01 — 1024N production runs, yeet-env scaling sweep
+
+### Production training
+
+- **2B 1024N** (8463182, 12h walltime, small queue) and **20B 1024N**
+  (8463183, 12h, small) both submitted. Same configs as the running
+  256N/512N v2 runs (LBS=2, SophiaG LR=2.28e-5, plain CE, fp32 master,
+  `.venv.tar.gz` yeet-env, no compile). Currently queued behind the
+  in-flight 20B 512N (8460302).
+- Submitted **chained 12h continuations** for the 512N runs:
+  - 2B: fresh 8463626 + 8463627 (depend=afterany:8463626)
+  - 20B: 8463628 (depend=afterany:8460302)
+- 2B 256N (8459818) and 2B 512N (8460301) v2 runs both hit NODE_FAIL
+  at end-of-walltime (step 2070 and 1387 respectively) — bad-node TPS
+  degradation pattern (TPS dropped from ~5K to ~30 in the final few
+  hundred steps before kill). All checkpoints survived (`keep_latest_k=0`
+  keeps everything; 20 ckpts at step 100..2000 for the 256N, 13 ckpts
+  step 100..1300 for the 512N).
+
+### yeet-env tarball-broadcast scaling sweep
+
+Measured `ezpz yeet-env --src .venv.tar.gz` at 8/16/32/64/128/256/512/
+1024/2048 N (4096N still queued in `large`). Submitted via
+`scripts/yeet_env_scaling_test.sh` chained one-at-a-time through
+`/tmp/yeet_chain.sh` (per-user PBS-Q limit forces serial submission).
+
+| Nodes | yeet-env (s) | Per-node (ms) |
+|------:|-------------:|--------------:|
+| 8     | 70           | 8,712 |
+| 16    | 90           | 5,606 |
+| 32    | 89           | 2,788 |
+| 64    | 91           | 1,425 |
+| 128   | 110          | 862 |
+| 256   | 133          | 519 |
+| 512   | 175          | 341 |
+| 1024  | 255          | 249 |
+| 2048  | 421          | 206 |
+
+Two regimes: 8-64N is extract-bound (flat ~90s total), ≥128N is
+broadcast-bound (linear-ish growth, super-linear knee at 2048N).
+Per-node amortized cost drops 42× from N=8 to N=2048. Even at 2048N,
+total wall-clock is <8 min — vs the "1-2 hours" the old per-file rsync
+mode in CLAUDE.md predicted.
+
+Plots + script: [`docs/scaling/yeet_env/`](scaling/yeet_env/README.md).
+
+### Docs refresh
+
+- Added `docs/evals/agpt/2b-mds/{loss_data, figures}` train+val loss,
+  grad_norm, TFLOP/s, TPS plots pulled from W&B (113 SophiaG MDS
+  continuation runs stitched by iteration).
+- Refactored `experiments/ezpz/scripts/`: moved 14 hidden one-off
+  shell scripts out of the repo root into `scripts/{eval,debug,lr-finder}/`
+  subdirs; consolidated the existing 3 eval shell scripts there too.
+- Refreshed all production READMEs with the v2 run state (this entry).
+
+---
+
+## 2026-04-30 — bf16-master RMSNorm freeze diagnosis + v2 restart
+
+### What broke
+
+The 2B/20B/80B SophiaG production runs from Apr 14-29 were all silently
+training with frozen RMSNorm weights:
+
+- `training.dtype = bfloat16` (default at the time) was being used as
+  the *master* weight dtype for FSDP MixedPrecisionPolicy.
+- bf16 ULP at 1.0 is ~7.8e-3; per-step RMSNorm.weight updates from
+  SophiaG were ~1.6e-5 — sub-ULP, so every update rounded to zero.
+- Loss curves looked plausible because attention/FFN weights were
+  unfrozen and the model could still descend, but the model has no
+  trainable normalization. Eval scores reflected this: the
+  DCP→HF-converted checkpoints scored near-random on hellaswag/arc_easy
+  while the parallel MDS pipeline (which used different defaults) was
+  cleanly converging.
+
+Full diagnosis writeup at
+[`docs/guides/training-dtype-bf16-norm-freeze.md`](guides/training-dtype-bf16-norm-freeze.md).
+
+### Fix + v2 restart
+
+- Default `training.dtype` flipped to `float32` in `agpt` and `moe`
+  config registries.
+- ChunkedCELoss opt-in support ported to the ezpz trainer (sets
+  `lm_head` for the chunked path; off by default).
+- Restarted training from scratch in fresh per-model clones:
+  `/flare/AuroraGPT/foremans/runs/agpt-{2b,20b}-v2/torchtitan-ezpz/`.
+- Built fresh torch 2.13 + xpu venvs in each clone (~2.7 GB tarball).
+- Adapted `scripts/submit_agpt_{2b,20b}_aurora_venv.sh` for Aurora:
+  proxy env vars set inline, ezpz-utils source cached locally to dodge
+  bit.ly hangs, tarball-aware yeet-env, plain-CE default with optional
+  `CONFIG_SUFFIX=_chunkedce` opt-in.
+
+### Smoke + scaling validation
+
+Validated v2 stack at 2/4/8/16/64 N via short PBS jobs before
+launching production. 2B v2 16N test ran ~57 min and reached step 2117
+(loss 5.16 → 3.57, TPS ~5K, MFU ~17-20%) before NODE_FAIL — flaky-node
+issue, not a code issue. 20B v2 16N test (capacity queue, 1h) submitted
+in parallel.
+
+### 26th + 27th upstream syncs
+
+Replayed the MoE ETP deprecation (#3167) onto `experiments/ezpz/moe/`:
+removed `ExpertTensorParallel` import, dropped `etp_mesh`/`ep_etp_mesh`
+from `apply_moe_ep_tp` signature + call site, switched to reading
+`comm_backend` off `experts.token_dispatcher` (matches upstream
+deepseek_v3.model). Pulled the 27th sync (HybridEP cleanup +
+autoparallel/deepseek_v3 deletion) — no impact on ezpz.
+
+---
+
 ## 2026-04-29 — 24th upstream sync replay (All2All token dispatcher consolidation)
 
 ### What landed

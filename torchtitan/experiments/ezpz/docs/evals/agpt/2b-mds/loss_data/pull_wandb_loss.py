@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
-"""Pull train+val loss history for the MDS AuroraGPT-2B SophiaG run.
+"""Pull train history (loss + grad_norm + tflops + TPS) and val loss
+for the MDS AuroraGPT-2B SophiaG run.
 
-The Megatron-DeepSpeed run was restarted ~191 times — every PBS job became
-its own W&B run under aurora_gpt/AuroraGPT — so we identify the slice via
-config.args.optimizer == "sophiag" + hidden_size == 2048 and stitch
+The Megatron-DeepSpeed run was restarted ~113 times — every PBS job became
+its own W&B run under aurora_gpt/AuroraGPT — so we filter to the production
+config (nl=12, hs=2048, seq=8192, gbs=6144, optimizer=sophiag) and stitch
 all per-run histories together by the `iteration` axis (deduping on
 collision; later starts win).
 
 Output:
-    train_loss.csv   columns: iteration, lm_loss, run_id
-    val_loss.csv     columns: iteration, val_loss, run_id
+    train_metrics.csv   columns: iteration, lm_loss, grad_norm, tflops, tps_per_gpu, run_id
+    val_loss.csv        columns: iteration, val_loss, run_id
 
 Usage:
     python3 pull_wandb_loss.py [--limit N]
@@ -26,8 +27,12 @@ import wandb
 ENTITY = "aurora_gpt"
 PROJECT = "AuroraGPT"
 
-TRAIN_KEY = "loss/lm loss"
 TRAIN_ITER_KEY = "loss/iteration"
+TRAIN_LOSS_KEY = "loss/lm loss"
+GRAD_NORM_KEY = "loss/grad_norm"
+TFLOPS_KEY = "throughput/tflops"
+TPS_KEY = "throughput/tokens_per_gpu_per_sec"
+
 VAL_KEY = "val/lm loss"
 VAL_ITER_KEY = "val/iteration"
 
@@ -47,11 +52,6 @@ def main() -> None:
     args.out_dir.mkdir(parents=True, exist_ok=True)
 
     api = wandb.Api(timeout=60)
-    # Filter to the *production* AuroraGPT-2B SophiaG continuation:
-    # nl=12, hs=2048, seq=8192, gbs=6144. Loosening any of these brings
-    # in unrelated 24-layer Sophia experiments at smaller seq lengths
-    # whose iteration counters collide with this run's timeline and
-    # produce spurious sub-2 loss dips.
     runs = api.runs(
         f"{ENTITY}/{PROJECT}",
         filters={
@@ -65,25 +65,40 @@ def main() -> None:
         order="+created_at",
     )
 
-    train_rows: dict[int, tuple[float, str]] = {}
+    # Per-iteration train metrics dict: it -> (lm_loss, grad_norm, tflops, tps, run_id)
+    train_rows: dict[int, tuple[float | None, float | None, float | None, float | None, str]] = {}
     val_rows: dict[int, tuple[float, str]] = {}
     n = 0
     for r in runs:
         n += 1
         if args.limit and n > args.limit:
             break
-        # Pull train history (loss/lm loss + loss/iteration)
         added_train = 0
         try:
-            for row in r.scan_history(keys=[TRAIN_KEY, TRAIN_ITER_KEY]):
+            for row in r.scan_history(
+                keys=[TRAIN_ITER_KEY, TRAIN_LOSS_KEY, GRAD_NORM_KEY, TFLOPS_KEY, TPS_KEY],
+            ):
                 it = row.get(TRAIN_ITER_KEY)
-                tl = row.get(TRAIN_KEY)
-                if it is not None and tl is not None:
-                    train_rows[int(it)] = (float(tl), r.id)
-                    added_train += 1
+                if it is None:
+                    continue
+                it = int(it)
+                lm = row.get(TRAIN_LOSS_KEY)
+                gn = row.get(GRAD_NORM_KEY)
+                tf = row.get(TFLOPS_KEY)
+                tps = row.get(TPS_KEY)
+                # Require at least one metric beyond the iteration anchor.
+                if lm is None and gn is None and tf is None and tps is None:
+                    continue
+                train_rows[it] = (
+                    float(lm) if lm is not None else None,
+                    float(gn) if gn is not None else None,
+                    float(tf) if tf is not None else None,
+                    float(tps) if tps is not None else None,
+                    r.id,
+                )
+                added_train += 1
         except Exception as e:
             print(f"  [{n}] {r.name} ({r.id}): train scan err {e}")
-        # Pull val history (val/lm loss + val/iteration)
         added_val = 0
         try:
             for row in r.scan_history(keys=[VAL_KEY, VAL_ITER_KEY]):
@@ -101,13 +116,20 @@ def main() -> None:
         )
 
     # Write CSVs sorted by iteration
-    train_csv = args.out_dir / "train_loss.csv"
+    train_csv = args.out_dir / "train_metrics.csv"
     with train_csv.open("w") as f:
         w = csv.writer(f)
-        w.writerow(["iteration", "lm_loss", "run_id"])
+        w.writerow(["iteration", "lm_loss", "grad_norm", "tflops", "tps_per_gpu", "run_id"])
         for it in sorted(train_rows):
-            tl, rid = train_rows[it]
-            w.writerow([it, tl, rid])
+            lm, gn, tf, tps, rid = train_rows[it]
+            w.writerow([
+                it,
+                "" if lm is None else lm,
+                "" if gn is None else gn,
+                "" if tf is None else tf,
+                "" if tps is None else tps,
+                rid,
+            ])
     print(f"wrote {train_csv} ({len(train_rows)} rows)")
 
     val_csv = args.out_dir / "val_loss.csv"
