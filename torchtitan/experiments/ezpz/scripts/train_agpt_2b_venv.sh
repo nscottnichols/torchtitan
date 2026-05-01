@@ -28,7 +28,7 @@ else
     ezpz yeet-env
 fi
 deactivate
-source .venv/bin/activate
+source /tmp/.venv/bin/activate
 
 # ---- Configuration ----
 MODEL="2b"
