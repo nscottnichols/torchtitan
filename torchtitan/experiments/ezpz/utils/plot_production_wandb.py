@@ -365,6 +365,96 @@ def plot_tokens_vs_time(
     return output_path
 
 
+def plot_overlay(
+    series: list[dict],
+    model_name: str,
+    output_path: Path,
+) -> Path:
+    """Overlay multiple PRODUCTION_RUNS entries on a 3-panel loss/TPS/MFU
+    dashboard.
+
+    Each ``series`` entry is a dict with:
+        - ``key``    : PRODUCTION_RUNS key (used in the legend)
+        - ``data``   : already-fetched + concatenated W&B history
+        - ``color``  : matplotlib color
+        - ``alpha``  : line alpha (raw curve uses 0.4× this)
+
+    The point is to make the v1 (bf16-tainted) vs v2 (fp32) contrast
+    visually unmissable: the loss curves descend together but their
+    *eval-time* behavior diverges because v1 has frozen RMSNorm
+    weights. See docs/guides/training-dtype-bf16-norm-freeze.md.
+    """
+    fig, axes = plt.subplots(3, 1, figsize=(14, 10), sharex=True)
+    fig.suptitle(
+        f"AuroraGPT {model_name.upper()} — v1 (bf16-master) vs v2 (fp32-master)",
+        fontsize=14,
+        fontweight="bold",
+    )
+
+    last_steps = []
+    for s in series:
+        data = s["data"]
+        steps = data["_step"].astype(float)
+        loss = data["loss_metrics/global_avg_loss"].astype(float)
+        tps = data["throughput(tps)"].astype(float)
+        mfu = data["mfu(%)"].astype(float)
+        valid = ~np.isnan(steps)
+        steps = steps[valid]
+        loss = loss[valid]
+        tps = tps[valid]
+        mfu = mfu[valid]
+        if len(steps) == 0:
+            continue
+        last_steps.append(int(steps[-1]))
+
+        color = s["color"]
+        alpha = s["alpha"]
+        label = s["key"]
+
+        axes[0].plot(steps, loss, color=color, alpha=0.4 * alpha, linewidth=0.5)
+        axes[0].plot(steps, smooth(loss), color=color, alpha=alpha, linewidth=1.8, label=label)
+
+        axes[1].plot(steps, tps, color=color, alpha=0.4 * alpha, linewidth=0.5)
+        axes[1].plot(steps, smooth(tps), color=color, alpha=alpha, linewidth=1.8, label=label)
+
+        axes[2].plot(steps, mfu, color=color, alpha=0.4 * alpha, linewidth=0.5)
+        axes[2].plot(steps, smooth(mfu), color=color, alpha=alpha, linewidth=1.8, label=label)
+
+    axes[0].set_ylabel("Loss")
+    axes[0].set_title("Training Loss")
+    axes[0].legend(loc="upper right")
+    axes[1].set_ylabel("Tokens/sec/GPU")
+    axes[1].set_title("Throughput per GPU")
+    axes[1].legend(loc="lower right")
+    axes[2].set_ylabel("MFU (%)")
+    axes[2].set_xlabel("Training Step")
+    axes[2].set_title("Model FLOPs Utilization")
+    axes[2].legend(loc="lower right")
+
+    fig.tight_layout(rect=(0, 0, 1, 0.95))
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=200, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Saved: {output_path}")
+    return output_path
+
+
+# Color/alpha presets per PRODUCTION_RUNS key. Lower alpha for the
+# v1 (bf16-tainted) entries so v2 reads as the "real" curve.
+OVERLAY_STYLE: dict[str, dict] = {
+    "2b_v1_256":  {"color": "#94a3b8", "alpha": 0.55},  # slate, faded
+    "2b_v2_256":  {"color": "#1E88E5", "alpha": 1.00},
+    "2b_v2_512":  {"color": "#0d47a1", "alpha": 1.00},
+    "20b_v1_256": {"color": "#94a3b8", "alpha": 0.55},
+    "20b_v2_512": {"color": "#D32F2F", "alpha": 1.00},
+}
+
+
+def overlay_keys_for_model(model: str) -> list[str]:
+    """Return PRODUCTION_RUNS keys whose `model` field matches `model`."""
+    return [k for k, v in PRODUCTION_RUNS.items() if v.get("model", k) == model]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -376,6 +466,15 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--overlay", type=str, default=None, choices=["2b", "20b"],
+        help=(
+            "Generate a v1-vs-v2 overlay dashboard for the given model, "
+            "instead of (or in addition to) per-run dashboards. The "
+            "figure goes to docs/production/agpt/<model>/figures/"
+            "overlay_<model>_v1_vs_v2.png."
+        ),
+    )
+    parser.add_argument(
         "--output-dir",
         type=Path,
         default=None,
@@ -384,6 +483,37 @@ def main() -> None:
     args = parser.parse_args()
 
     api = wandb.Api()
+
+    if args.overlay is not None:
+        keys_to_overlay = overlay_keys_for_model(args.overlay)
+        if not keys_to_overlay:
+            raise SystemExit(
+                f"no PRODUCTION_RUNS entries found for model={args.overlay!r}"
+            )
+        out_dir = args.output_dir or (
+            DOCS_BASE / "production" / "agpt" / args.overlay / "figures"
+        )
+        series = []
+        for key in keys_to_overlay:
+            cfg = PRODUCTION_RUNS[key]
+            print(f"\n=== Pulling {key} ({len(cfg['run_ids'])} runs) ===")
+            data = concat_runs(api, cfg["run_ids"])
+            print(f"  Concatenated: {len(data['_step'])} unique steps")
+            if len(data["_step"]) == 0:
+                print(f"  no data, skipping {key}")
+                continue
+            style = OVERLAY_STYLE.get(
+                key, {"color": MODEL_COLORS.get(args.overlay, "#666"), "alpha": 1.0}
+            )
+            series.append({"key": key, "data": data, **style})
+        if not series:
+            raise SystemExit("no series with data — nothing to overlay")
+        plot_overlay(
+            series,
+            args.overlay,
+            out_dir / f"overlay_{args.overlay}_v1_vs_v2.png",
+        )
+        return
 
     keys = [args.model] if args.model else list(PRODUCTION_RUNS)
     for key in keys:

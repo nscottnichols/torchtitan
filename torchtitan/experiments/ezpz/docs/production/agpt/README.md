@@ -18,6 +18,25 @@
 | 20B-1024N v2 | [details](20b/) | 1024 | 12h | — | — | — | **Queued** (8463183) |
 | 80B-256N | [details](80b/) | 256 | — | — | — | — | Not yet restarted in v2 |
 
+## v1 (bf16-master, broken) vs v2 (fp32-master, current)
+
+The original 2026-04-{14..29} runs were trained with
+`--training.dtype=bfloat16`, which silently froze every RMSNorm.weight
+at 1.0 (sub-ULP master-weight updates). v2 is the clean restart on
+`--training.dtype=float32`. See
+[`guides/training-dtype-bf16-norm-freeze.md`](../../guides/training-dtype-bf16-norm-freeze.md)
+for the full diagnosis. Per-model overlays:
+
+| 2B (v1 256N vs v2 256N + 512N) | 20B (v1 256N vs v2 512N) |
+|--------------------------------|--------------------------|
+| ![2B overlay](2b/figures/overlay_2b_v1_vs_v2.png) | ![20B overlay](20b/figures/overlay_20b_v1_vs_v2.png) |
+
+Reproduce:
+```bash
+python3 torchtitan/experiments/ezpz/utils/plot_production_wandb.py --overlay 2b
+python3 torchtitan/experiments/ezpz/utils/plot_production_wandb.py --overlay 20b
+```
+
 ## Diagnostics
 
 ### 2B v2 256N
