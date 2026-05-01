@@ -23,13 +23,17 @@
 # write time only step-100 + step-200 are saved; later runs of this
 # script will pick up newer ckpts as they land.
 
-set -uo pipefail
+# PBS scripts must NOT use `set -euo pipefail` per CLAUDE.md — venv
+# activate has unbound vars and would trigger on first source.
+set -o pipefail
 
 export http_proxy=http://proxy.alcf.anl.gov:3128
 export https_proxy=http://proxy.alcf.anl.gov:3128
 export HF_HUB_ENABLE_HF_TRANSFER=0
 
-module load oneapi/release/2025.3.1 hdf5 pti-gpu frameworks/2025.3.1 2>/dev/null
+module load oneapi/release/2025.3.1 hdf5 pti-gpu frameworks/2025.3.1
+echo "PWD: $(pwd)"
+echo "Modules loaded."
 
 cd "${PBS_O_WORKDIR:-/lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz}"
 
