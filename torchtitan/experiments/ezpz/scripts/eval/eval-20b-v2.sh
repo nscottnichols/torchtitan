@@ -81,11 +81,18 @@ for step in $STEPS; do
         echo "[1/2] Converting DCP -> HF (via v2 venv, from ${V2_REPO})..."
         mkdir -p "${HF_DIR_ABS}"
         # Run conversion from the v2 clone so its torchtitan + venv +
-        # local model registry are all on PYTHONPATH.
+        # local model registry are all on PYTHONPATH. Use PYTHONPATH=.
+        # to force-add the v2 clone's torchtitan/ ahead of any system
+        # python tree.
         (
-            cd "${V2_REPO}"
+            cd "${V2_REPO}" || exit 1
             source .venv/bin/activate
-            python3 torchtitan/experiments/ezpz/eval/convert_to_hf.py \
+            echo "  subshell: pwd=$(pwd)"
+            echo "  subshell: which python3=$(which python3)"
+            echo "  subshell: torchtitan check..."
+            PYTHONPATH=".:${PYTHONPATH:-}" python3 -c "import torchtitan; print('  torchtitan from:', torchtitan.__file__)" \
+                || { echo "  ERROR: torchtitan import failed"; exit 1; }
+            PYTHONPATH=".:${PYTHONPATH:-}" python3 torchtitan/experiments/ezpz/eval/convert_to_hf.py \
                 "${DCP_DIR}" \
                 "${HF_DIR_ABS}" \
                 --model_name "experiments.ezpz.agpt" \
