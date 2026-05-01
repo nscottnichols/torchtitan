@@ -24,6 +24,28 @@ tests and checking against the saved baselines — see
 
 ---
 
+## 2026-05-01 (28th sync — graph_trainer qwen3 + CI lint + FT llama3 attn_backend)
+
+**Upstream commits:**
+
+- `2b935fa3` — [GraphTrainer] Add Qwen3 MoE bitwise deterministic tests
+  and fix weight-tying gradient bug (#3174). graph_trainer + qwen3 only.
+- `70340f4e` — [CI] Use replace-imports-with-any (#3180). Removes
+  `# pyrefly: ignore[missing-module-attribute]` comments now redundant
+  with the new pyrefly config; lint-only.
+- `9732db4a` — [ft] Forward attn_backend to llama3 config functions
+  (#3182). 2-line change to `experiments/ft/llama3/__init__.py` —
+  adds `attn_backend="sdpa"` parameter to that registry. We don't use
+  `ft.llama3` (we have our own `ezpz.agpt.model_registry`).
+
+**Impact on ezpz:** None. All three commits scoped to graph_trainer,
+linter cleanups, or ft.llama3 (which we don't use).
+
+**Replay status:** Clean fast-forward merge. ezpz imports verified.
+No baseline re-check needed (no code path that affects agpt/moe changed).
+
+---
+
 ## 2026-04-30 (27th sync — HybridEP comm_backend cleanup + autoparallel/deepseek_v3 deletion)
 
 **Upstream commits (truly new — most others were patch-equivalent
