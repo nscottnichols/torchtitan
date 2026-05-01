@@ -373,6 +373,8 @@ from torchtitan.experiments.ezpz.competition.configs import (  # noqa: E402, F40
     r5_mano_lr6e4,
     r5_schedulefree,
     smoke_2b_50steps,
+    smoke_2b_async_ckpt,
+    smoke_2b_async_ckpt_pinned,
     speedrun_2b_kitchen_sink,
     speedrun_2b_mano_kitchen_sink,
     speedrun_2b_relu2,

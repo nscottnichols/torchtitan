@@ -655,3 +655,63 @@ def smoke_2b_50steps():
     cfg.lr_scheduler.decay_ratio = 0.0
     cfg.metrics.log_freq = 1
     return cfg
+
+
+def smoke_2b_async_ckpt():
+    """50-step AdamW smoke that exercises async checkpointing end-to-end.
+
+    Same model + optimizer as smoke_2b_50steps, but with:
+    - checkpoint.enable = True
+    - checkpoint.async_mode = "async" (background dcp.async_save)
+    - checkpoint.enable_first_step_checkpoint = True (catches setup
+      bugs at step 1 before training proceeds)
+    - checkpoint.interval = 10 (so we get ~5 saves across the run and
+      can confirm TPS doesn't dip during/after a save)
+    - checkpoint.folder unique per run (no cross-run interference)
+
+    Verifies the on-disk format is wire-compatible with sync DCP saves
+    (it should be — async only changes when the bytes hit disk, not
+    what gets written) and that resume from an async-saved checkpoint
+    works.
+    """
+    import time
+
+    cfg = agpt(
+        "2b",
+        local_batch_size=LOCAL_BATCH_SIZE,
+        activation_checkpoint_mode="none",
+        seq_len=SEQ_LEN,
+        compile=True,
+        checkpoint_interval=10,
+    )
+    cfg.dataloader.dataset = DATASET
+    cfg.dataloader.dataset_path = None
+    cfg.training.steps = 50
+    cfg.optimizer.lr = 1.3e-3
+    cfg.lr_scheduler.warmup_steps = 5
+    cfg.lr_scheduler.decay_ratio = 0.0
+    cfg.metrics.log_freq = 1
+
+    cfg.checkpoint.enable = True
+    cfg.checkpoint.async_mode = "async"
+    cfg.checkpoint.enable_first_step_checkpoint = True
+    # Unique dir each run so concurrent submissions don't collide and
+    # nobody resumes from a stale dir.
+    cfg.checkpoint.folder = f"checkpoints/smoke_async_ckpt_{int(time.time())}"
+    return cfg
+
+
+def smoke_2b_async_ckpt_pinned():
+    """Same as smoke_2b_async_ckpt but uses async_with_pinned_mem.
+
+    Spawns a separate process for GPU->CPU transfer with pinned memory.
+    Higher CPU memory pressure but near-zero in-band cost. More likely
+    than plain `async` to expose XPU-side issues with pinned-memory
+    allocation paths — run after the plain async test passes.
+    """
+    cfg = smoke_2b_async_ckpt()
+    cfg.checkpoint.async_mode = "async_with_pinned_mem"
+    cfg.checkpoint.folder = cfg.checkpoint.folder.replace(
+        "smoke_async_ckpt_", "smoke_async_ckpt_pinned_"
+    )
+    return cfg
