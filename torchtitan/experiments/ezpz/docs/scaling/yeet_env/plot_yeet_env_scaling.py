@@ -22,6 +22,7 @@ import matplotlib
 matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 
 try:
     import ambivalent  # noqa: F401
@@ -55,6 +56,19 @@ def load_csv(path: Path) -> list[dict]:
     return rows
 
 
+def _decimal_log_axes(ax, x_ticks, y_ticks) -> None:
+    """Use log-log scaling but show actual decimal numbers on the ticks
+    instead of 2^N exponents."""
+    ax.set_xscale("log", base=2)
+    ax.set_yscale("log", base=2)
+    ax.xaxis.set_major_locator(mticker.FixedLocator(x_ticks))
+    ax.xaxis.set_major_formatter(mticker.FuncFormatter(lambda v, _: f"{int(v)}"))
+    ax.xaxis.set_minor_locator(mticker.NullLocator())
+    ax.yaxis.set_major_locator(mticker.FixedLocator(y_ticks))
+    ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda v, _: f"{int(v)}"))
+    ax.yaxis.set_minor_locator(mticker.NullLocator())
+
+
 def plot_total(rows: list[dict], out_path: Path) -> None:
     nodes = [r["nodes"] for r in rows]
     secs = [r["yeet_seconds"] for r in rows]
@@ -66,10 +80,13 @@ def plot_total(rows: list[dict], out_path: Path) -> None:
             xy=(n, s), xytext=(0, 8), textcoords="offset points",
             ha="center", fontsize=9, color="#0c4a6e",
         )
-    ax.set_xscale("log", base=2)
-    ax.set_yscale("log", base=2)
-    ax.set_xlabel("Number of Nodes (log₂)")
-    ax.set_ylabel("yeet-env wall-clock — seconds (log₂)")
+    # Choose y ticks at meaningful round seconds covering the data range.
+    y_min, y_max = min(secs), max(secs)
+    y_candidates = [50, 70, 100, 150, 200, 300, 500, 750, 1000, 1500, 2000]
+    y_ticks = [t for t in y_candidates if y_min * 0.85 <= t <= y_max * 1.15]
+    _decimal_log_axes(ax, x_ticks=nodes, y_ticks=y_ticks)
+    ax.set_xlabel("Number of Nodes")
+    ax.set_ylabel("yeet-env wall-clock (seconds)")
     ax.set_title(
         "Aurora yeet-env tarball broadcast — total wall-clock vs node count"
     )
@@ -91,10 +108,12 @@ def plot_per_node(rows: list[dict], out_path: Path) -> None:
             xy=(n, m), xytext=(0, 8), textcoords="offset points",
             ha="center", fontsize=9, color="#3b0764",
         )
-    ax.set_xscale("log", base=2)
-    ax.set_yscale("log", base=2)
-    ax.set_xlabel("Number of Nodes (log₂)")
-    ax.set_ylabel("Per-node wall-clock — ms (log₂)")
+    y_min, y_max = min(per_node_ms), max(per_node_ms)
+    y_candidates = [100, 200, 300, 500, 750, 1000, 1500, 2000, 3000, 5000, 7500, 10000]
+    y_ticks = [t for t in y_candidates if y_min * 0.85 <= t <= y_max * 1.15]
+    _decimal_log_axes(ax, x_ticks=nodes, y_ticks=y_ticks)
+    ax.set_xlabel("Number of Nodes")
+    ax.set_ylabel("Per-node wall-clock (ms)")
     ax.set_title(
         "Aurora yeet-env tarball broadcast — per-node amortized cost"
     )
