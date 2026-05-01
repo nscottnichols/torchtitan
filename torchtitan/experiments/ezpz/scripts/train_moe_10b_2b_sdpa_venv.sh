@@ -1,5 +1,5 @@
 #!/bin/bash --login
-#PBS -A datascience
+#PBS -A AuroraGPT
 #PBS -l walltime=06:00:00
 #PBS -l filesystems=tegu:home
 #PBS -q workq
@@ -17,7 +17,16 @@ source <(curl -fsSL https://bit.ly/ezpz-utils) && ezpz_setup_job
 
 cd "${PBS_O_WORKDIR:-$(pwd)}"
 source .venv/bin/activate
-ezpz yeet-env
+# Prefer tarball broadcast over per-file rsync — single ~3GB sequential read
+# per node beats thousands of small-file rsyncs at scale (Lustre metadata).
+# Falls back to plain yeet-env if tarball isn't built yet.
+if [[ -f .venv.tar.gz ]]; then
+    log_message INFO "yeet-env via tarball: .venv.tar.gz"
+    ezpz yeet-env --src .venv.tar.gz
+else
+    log_message INFO "yeet-env via rsync (.venv.tar.gz not present)"
+    ezpz yeet-env
+fi
 deactivate
 source /tmp/.venv/bin/activate
 
