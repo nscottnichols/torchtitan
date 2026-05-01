@@ -38,7 +38,27 @@ files = 28 unique steps × 3 measurement replicates**. The replicates
 differ at the ~1pp level because XPU lm-eval is not bitwise
 deterministic; we average them.
 
-## Results (mean across 3 replicates)
+## Training Loss
+
+Pulled from W&B (`aurora_gpt/AuroraGPT`, 113 SophiaG continuation runs
+matching the production config: nl=12, hs=2048, seq=8192, gbs=6144) and
+stitched by iteration. Reproduce with `loss_data/pull_wandb_loss.py` then
+`loss_data/plot_loss.py`.
+
+| | |
+|---|---|
+| ![Train](figures/train_loss.png) | ![Validation](figures/val_loss.png) |
+
+![Train + Validation](figures/train_val_loss.png)
+
+- **Training loss** drops from 12.6 → 2.0 across 154,391 iterations.
+- **Validation loss** drops from 8.8 → 2.0 across 1,547 eval points.
+- Two distinct downward steps in val loss line up with the data-mix
+  transitions:
+  - **iter ≈ 95K**: ntok4673B → ntok7064B (val ~2.65 → ~2.45)
+  - **iter ≈ 134K**: ntok7064B → ntok7770B (val ~2.40 → ~2.05)
+
+## Eval Results (mean across 3 replicates)
 
 ![2B MDS Eval Results](figures/eval_2b-mds.png)
 
