@@ -24,6 +24,23 @@ tests and checking against the saved baselines — see
 
 ---
 
+## 2026-05-01 (29th sync — RL vLLM compile-time + graph_trainer skill)
+
+**Upstream commits:**
+
+- `2e5f1371` — Improve compilation time (~50s → ~15s for vLLM) (#3145).
+  Scoped to `experiments/rl/{generate,grpo,models}` + RL tests.
+- `37fe579a` — [GraphTrainer] Add weekly report generator skill (#3200).
+  One new file: `experiments/graph_trainer/.claude/weekly_report.md`.
+
+**Impact on ezpz:** None.
+- ezpz doesn't depend on `experiments/rl/` or `experiments/graph_trainer/`.
+
+**Replay status:** Clean fast-forward merge. ezpz imports verified.
+No baseline re-check needed.
+
+---
+
 ## 2026-05-01 (28th sync — graph_trainer qwen3 + CI lint + FT llama3 attn_backend)
 
 **Upstream commits:**
