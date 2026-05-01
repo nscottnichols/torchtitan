@@ -21,11 +21,11 @@
 
 ### Loss / Throughput / MFU
 
-![20B v2 512N Training](figures/production_20b_v2_512_512n.png)
+![20B v2 512N Training](figures/production_20b_v2_512n.png)
 
 ### Diagnostics
 
-![20B v2 512N Diagnostics](figures/training_diagnostics_20b_v2_512_512n.png)
+![20B v2 512N Diagnostics](figures/training_diagnostics_20b_v2_512n.png)
 
 ### Progress
 
@@ -40,12 +40,13 @@
 
 ---
 
-## Historical (bf16-tainted, superseded by v2)
+## v1 — Historical (bf16-tainted, superseded by v2)
 
-The runs below are kept for the record. They use `training.dtype = bfloat16`
-and have frozen RMSNorm weights — see the warning at the top.
+The runs below are kept for the record. They use `--training.dtype=bfloat16`
+and have **frozen RMSNorm weights** — see the warning at the top of this
+file. Don't draw conclusions from these loss curves.
 
-## 20B @ 256N — SophiaG LR=2.28e-5
+## v1 — 20B @ 256N — SophiaG LR=2.28e-5 (bf16 master, BROKEN)
 
 | Field | Value |
 |-------|-------|
@@ -61,15 +62,15 @@ and have frozen RMSNorm weights — see the warning at the top.
 
 ### Loss / Throughput / MFU (256N)
 
-![20B 256N Training](figures/production_20b_256n.png)
+![20B v1 256N Training](figures/production_20b_v1_256n.png)
 
 ### Diagnostics (grad_norm / lr / max_loss)
 
-![20B 256N Diagnostics](figures/training_diagnostics_20b_256n.png)
+![20B v1 256N Diagnostics](figures/training_diagnostics_20b_v1_256n.png)
 
 ### Tokens vs Wall Clock
 
-![20B 256N Tokens vs Time](figures/tokens_vs_time_20b_256n.png)
+![20B v1 256N Tokens vs Time](figures/tokens_vs_time_20b_v1_256n.png)
 
 > Diagnostic and tokens-vs-time figures are pulled from W&B by
 > `torchtitan/experiments/ezpz/utils/plot_production_wandb.py`.
@@ -96,7 +97,7 @@ copies saturating the flare filesystem. Effective training time was ~8h of the 1
 
 ---
 
-## 20B @ 512N — SophiaG LR=2.28e-5
+## v1 — 20B @ 512N — SophiaG LR=2.28e-5 (bf16 master, BROKEN)
 
 | Field | Value |
 |-------|-------|
@@ -112,7 +113,7 @@ copies saturating the flare filesystem. Effective training time was ~8h of the 1
 
 ### Loss / Throughput / MFU (512N)
 
-![20B 512N Training](figures/production_20b_512n.png)
+![20B v1 512N Training](figures/production_20b_v1_512n.png)
 
 ### Progress
 

@@ -22,8 +22,8 @@
 
 ### 2B v2 256N
 
-![2B v2 256N Diagnostics](2b/figures/training_diagnostics_2b_v2_256_256n.png)
+![2B v2 256N Diagnostics](2b/figures/training_diagnostics_2b_v2_256n.png)
 
 ### 20B v2 512N
 
-![20B v2 512N Diagnostics](20b/figures/training_diagnostics_20b_v2_512_512n.png)
+![20B v2 512N Diagnostics](20b/figures/training_diagnostics_20b_v2_512n.png)

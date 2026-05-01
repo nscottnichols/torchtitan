@@ -27,15 +27,15 @@
 
 ### Loss / Throughput / MFU
 
-![2B v2 256N Training](figures/production_2b_v2_256_256n.png)
+![2B v2 256N Training](figures/production_2b_v2_256n.png)
 
 ### Diagnostics
 
-![2B v2 256N Diagnostics](figures/training_diagnostics_2b_v2_256_256n.png)
+![2B v2 256N Diagnostics](figures/training_diagnostics_2b_v2_256n.png)
 
 ### Tokens vs Wall Clock
 
-![2B v2 256N Tokens vs Time](figures/tokens_vs_time_2b_v2_256_256n.png)
+![2B v2 256N Tokens vs Time](figures/tokens_vs_time_2b_v2_256n.png)
 
 ### Progress
 
@@ -64,11 +64,11 @@
 
 ### Loss / Throughput / MFU
 
-![2B v2 512N Training](figures/production_2b_v2_512_512n.png)
+![2B v2 512N Training](figures/production_2b_v2_512n.png)
 
 ### Diagnostics
 
-![2B v2 512N Diagnostics](figures/training_diagnostics_2b_v2_512_512n.png)
+![2B v2 512N Diagnostics](figures/training_diagnostics_2b_v2_512n.png)
 
 ### Progress
 
@@ -84,12 +84,13 @@
 
 ---
 
-## Historical (bf16-tainted, superseded by v2)
+## v1 — Historical (bf16-tainted, superseded by v2)
 
-The runs below are kept for the record. They use `training.dtype = bfloat16`
-and have frozen RMSNorm weights — see the warning at the top.
+The runs below are kept for the record. They use `--training.dtype=bfloat16`
+and have **frozen RMSNorm weights** — see the warning at the top of this
+file. Don't draw conclusions from these loss curves.
 
-## 2B @ 256N — SophiaG LR=2.28e-5
+## v1 — 2B @ 256N — SophiaG LR=2.28e-5 (bf16 master, BROKEN)
 
 | Field | Value |
 |-------|-------|
@@ -107,15 +108,15 @@ and have frozen RMSNorm weights — see the warning at the top.
 
 ### Loss / Throughput / MFU
 
-![2B 256N Training](figures/production_2b_256n.png)
+![2B v1 256N Training](figures/production_2b_v1_256n.png)
 
 ### Diagnostics (grad_norm / lr / max_loss)
 
-![2B 256N Diagnostics](figures/training_diagnostics_2b_256n.png)
+![2B v1 256N Diagnostics](figures/training_diagnostics_2b_v1_256n.png)
 
 ### Tokens vs Wall Clock
 
-![2B 256N Tokens vs Time](figures/tokens_vs_time_2b_256n.png)
+![2B v1 256N Tokens vs Time](figures/tokens_vs_time_2b_v1_256n.png)
 
 > Diagnostic and tokens-vs-time figures are pulled from W&B by
 > `torchtitan/experiments/ezpz/utils/plot_production_wandb.py`.

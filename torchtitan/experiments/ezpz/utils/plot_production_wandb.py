@@ -51,32 +51,42 @@ PROJECT = "aurora_gpt/torchtitan.ezpz.train"
 
 # Production runs identified by step ranges (cross-checked with PBS logs).
 # Listed oldest first so concatenation matches resume order.
+# Each key here drives the figure filename: figures land at
+#   docs/production/agpt/<model>/figures/<scope>_<key>n.png
+# So the key MUST encode model + version + node count, e.g. "2b_v1_256",
+# "20b_v2_512". Don't include the trailing "n" — the template adds it.
+#
+# v1 = original 2026-04-{14..29} runs (torch 2.10, LBS=1) trained with
+#      `--training.dtype=bfloat16`. Sub-ULP master-weight updates froze
+#      every RMSNorm.weight at its 1.0 init; loss curves are real but
+#      the model has no trainable normalization. Tainted, superseded
+#      by v2. Kept here for the historical record. See
+#      docs/guides/training-dtype-bf16-norm-freeze.md.
+# v2 = fresh restarts on 2026-04-30 from /flare/AuroraGPT/foremans/runs/
+#      agpt-{2b,20b}-v2/ (torch 2.13 venv, LBS=2,
+#      `--training.dtype=float32`, plain CrossEntropyLoss). These are
+#      the current production runs.
 PRODUCTION_RUNS: dict[str, dict] = {
-    # Original 2026-04-{14..29} runs (torch 2.10, LBS=1, bf16-master taint
-    # affecting RMSNorm.weight; loss curves are real but model has no
-    # trainable normalization). Kept here for the historical record;
-    # superseded by the *_v2 entries below.
-    "2b": {
+    "2b_v1_256": {
         "run_ids": [
             "v5ytgu0o", "pjanidnw", "4u9w23p9", "tahlsmy9", "iy1xbv0t",
             "11jzfnno", "hqwaw075", "6ictshbs", "wviyqysc",
         ],
         "num_nodes": 256,
+        "model": "2b",
     },
-    "20b": {
+    "20b_v1_256": {
         "run_ids": [
             "q9oq5huj", "pnkaurba", "lrlv3xsc", "pigwfqkg", "lvyzlocg",
             "e2anhgt2", "he01jr7f", "t0ja3dl4",
         ],
         "num_nodes": 256,
+        "model": "20b",
     },
-    # v2 fresh restarts on 2026-04-30 from /flare/AuroraGPT/foremans/runs/
-    # agpt-{2b,20b}-v2/ (torch 2.13 venv, LBS=2, dtype=float32 master,
-    # plain CrossEntropyLoss). These supersede the bf16-tainted runs above.
     "2b_v2_256": {
         "run_ids": ["lytjeegk"],
         "num_nodes": 256,
-        "model": "2b",  # what to label/color as
+        "model": "2b",
     },
     "2b_v2_512": {
         "run_ids": ["i252kps9"],
@@ -357,7 +367,14 @@ def plot_tokens_vs_time(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--model", type=str, default=None, help="2b, 20b, or omit for all")
+    parser.add_argument(
+        "--model", type=str, default=None,
+        help=(
+            "Run key from PRODUCTION_RUNS to plot (e.g. 2b_v1_256, "
+            "2b_v2_256, 2b_v2_512, 20b_v1_256, 20b_v2_512), or omit "
+            "to plot all."
+        ),
+    )
     parser.add_argument(
         "--output-dir",
         type=Path,
@@ -390,19 +407,19 @@ def main() -> None:
             data,
             model_name,
             cfg["num_nodes"],
-            out_dir / f"production_{key}_{cfg['num_nodes']}n.png",
+            out_dir / f"production_{key}n.png",
         )
         plot_diagnostics(
             data,
             model_name,
             cfg["num_nodes"],
-            out_dir / f"training_diagnostics_{key}_{cfg['num_nodes']}n.png",
+            out_dir / f"training_diagnostics_{key}n.png",
         )
         plot_tokens_vs_time(
             data,
             model_name,
             cfg["num_nodes"],
-            out_dir / f"tokens_vs_time_{key}_{cfg['num_nodes']}n.png",
+            out_dir / f"tokens_vs_time_{key}n.png",
         )
 
 
