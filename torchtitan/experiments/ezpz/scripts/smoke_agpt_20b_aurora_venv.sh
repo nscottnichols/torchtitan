@@ -5,7 +5,6 @@
 #PBS -l filesystems=home:flare
 #PBS -l select=4
 #PBS -q debug-scaling
-#PBS -k doe
 #PBS -j oe
 
 # Smoke test for the agpt-20b-v2 clone:

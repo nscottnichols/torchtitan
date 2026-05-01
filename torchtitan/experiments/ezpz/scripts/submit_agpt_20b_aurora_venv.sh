@@ -5,7 +5,6 @@
 #PBS -l filesystems=home:flare
 #PBS -l select=256
 #PBS -q prod
-#PBS -k doe
 #PBS -j oe
 
 # Aurora-adapted variant of train_agpt_20b_venv.sh.
