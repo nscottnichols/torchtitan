@@ -38,12 +38,15 @@ files = 28 unique steps × 3 measurement replicates**. The replicates
 differ at the ~1pp level because XPU lm-eval is not bitwise
 deterministic; we average them.
 
-## Training Loss
+## Training Curves
 
 Pulled from W&B (`aurora_gpt/AuroraGPT`, 113 SophiaG continuation runs
 matching the production config: nl=12, hs=2048, seq=8192, gbs=6144) and
-stitched by iteration. Reproduce with `loss_data/pull_wandb_loss.py` then
-`loss_data/plot_loss.py`.
+stitched by iteration. The first 1,000 iterations are dropped from every
+plot to skip the warm-up transient. Reproduce with
+`loss_data/pull_wandb_loss.py` then `loss_data/plot_loss.py`.
+
+### Loss
 
 | | |
 |---|---|
@@ -51,12 +54,25 @@ stitched by iteration. Reproduce with `loss_data/pull_wandb_loss.py` then
 
 ![Train + Validation](figures/train_val_loss.png)
 
-- **Training loss** drops from 12.6 → 2.0 across 154,391 iterations.
-- **Validation loss** drops from 8.8 → 2.0 across 1,547 eval points.
 - Two distinct downward steps in val loss line up with the data-mix
   transitions:
   - **iter ≈ 95K**: ntok4673B → ntok7064B (val ~2.65 → ~2.45)
   - **iter ≈ 134K**: ntok7064B → ntok7770B (val ~2.40 → ~2.05)
+
+### Optimization & Throughput
+
+| | |
+|---|---|
+| ![Gradient Norm](figures/grad_norm.png) | ![TFLOPS](figures/tflops.png) |
+
+![TPS / GPU](figures/tps.png)
+
+- **Gradient norm** plotted on a log y-axis; SophiaG's hessian-clipped
+  updates keep grad-norm in a tight band after warm-up, with brief
+  spikes around each data-mix transition.
+- **TFLOP/s** and **TPS / GPU** are per-replica throughput as logged by
+  Megatron-DeepSpeed; both are dominated by node-level variance (PBS
+  reschedules across slightly different node counts and topologies).
 
 ## Eval Results (mean across 3 replicates)
 
