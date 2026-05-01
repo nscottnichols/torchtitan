@@ -26,9 +26,24 @@
 | Eval backend | lm-eval 0.4.10, HF backend, XPU, dtype=bfloat16 |
 | Checkpoints | DCP → HF safetensors via `eval/convert_to_hf.py` |
 
-## Benchmark Accuracy vs Training Step
+## v1 vs v2 — benchmark accuracy
 
-![20B Eval Results](figures/eval_20b_v2.png)
+The v1 (bf16-master) and v2 (fp32-master) 20B runs share the same
+architecture, optimizer, and dataset; the only difference is the
+master-weight dtype. v1 hovers within ~1pp of the random baseline on
+every task (frozen RMSNorm), while v2 — once it has enough tokens
+under its belt — should descend visibly. Re-render with new v2
+ckpts as they become available:
+
+```bash
+python3 torchtitan/experiments/ezpz/docs/evals/agpt/20b/plot_v1_vs_v2.py
+```
+
+![v1 vs v2 — 20B benchmark accuracy](figures/v1_vs_v2.png)
+
+## Benchmark Accuracy vs Training Step (v1)
+
+![20B v1 Eval Results](figures/eval_20b_v2.png)
 
 ## Results
 
