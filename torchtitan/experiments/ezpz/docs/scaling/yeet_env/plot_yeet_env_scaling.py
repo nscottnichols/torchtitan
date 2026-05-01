@@ -67,8 +67,9 @@ def plot_total(rows: list[dict], out_path: Path) -> None:
             ha="center", fontsize=9, color="#0c4a6e",
         )
     ax.set_xscale("log", base=2)
-    ax.set_xlabel("Number of Nodes")
-    ax.set_ylabel("yeet-env wall-clock (seconds)")
+    ax.set_yscale("log", base=2)
+    ax.set_xlabel("Number of Nodes (log₂)")
+    ax.set_ylabel("yeet-env wall-clock — seconds (log₂)")
     ax.set_title(
         "Aurora yeet-env tarball broadcast — total wall-clock vs node count"
     )
@@ -91,8 +92,9 @@ def plot_per_node(rows: list[dict], out_path: Path) -> None:
             ha="center", fontsize=9, color="#3b0764",
         )
     ax.set_xscale("log", base=2)
-    ax.set_xlabel("Number of Nodes")
-    ax.set_ylabel("Per-node wall-clock (ms = total_seconds × 1000 / nodes)")
+    ax.set_yscale("log", base=2)
+    ax.set_xlabel("Number of Nodes (log₂)")
+    ax.set_ylabel("Per-node wall-clock — ms (log₂)")
     ax.set_title(
         "Aurora yeet-env tarball broadcast — per-node amortized cost"
     )
