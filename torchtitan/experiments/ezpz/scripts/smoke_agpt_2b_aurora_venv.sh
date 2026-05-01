@@ -94,6 +94,7 @@ ezpz launch python3 -m torchtitan.experiments.ezpz.train \
     --checkpoint.interval="${TRAINING_STEPS}" \
     --checkpoint.keep-latest-k=2 \
     --checkpoint.no-last-save-model-only \
+    --checkpoint.async-mode="${CHECKPOINT_ASYNC_MODE:-async}" \
     --dataloader.dataset=blendcorpus \
     --dataloader.dataset-path="${DFL}" \
     --dataloader.data-cache-path="${DATA_CACHE_PATH}" \
