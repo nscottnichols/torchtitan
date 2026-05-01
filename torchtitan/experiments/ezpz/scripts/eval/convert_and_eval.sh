@@ -18,6 +18,14 @@ EVAL_ONLY=false
 EXPORT_DTYPE="${EXPORT_DTYPE:-bfloat16}"
 BATCH_SIZE="${BATCH_SIZE:-auto}"
 NUM_FEWSHOT="${NUM_FEWSHOT:-0}"
+# `--ckpt-name` overrides the auto-derived "agpt-${MODEL}-sophiag-olmo-mix-1124-n256-gbs3072"
+# checkpoint name. Use this for v2 runs (e.g. n256-gbs6144 or n512-gbs12288).
+CKPT_NAME_OVERRIDE=""
+# `--repo-root` overrides the path to the clone whose outputs/ holds
+# the DCP checkpoints. Defaults to this script's enclosing repo.
+REPO_ROOT_OVERRIDE=""
+# `--label` is appended to the output dir so v1 vs v2 results don't collide.
+EVAL_LABEL=""
 
 # ---- Parse args ----
 while [[ $# -gt 0 ]]; do
@@ -30,6 +38,9 @@ while [[ $# -gt 0 ]]; do
         --export-dtype) EXPORT_DTYPE="$2"; shift 2 ;;
         --batch-size) BATCH_SIZE="$2"; shift 2 ;;
         --num-fewshot) NUM_FEWSHOT="$2"; shift 2 ;;
+        --ckpt-name) CKPT_NAME_OVERRIDE="$2"; shift 2 ;;
+        --repo-root) REPO_ROOT_OVERRIDE="$2"; shift 2 ;;
+        --label) EVAL_LABEL="$2"; shift 2 ;;
         *) echo "Unknown arg: $1"; exit 1 ;;
     esac
 done
@@ -40,18 +51,22 @@ if [[ -z "$MODEL" || -z "$STEP" ]]; then
 fi
 
 # ---- Paths ----
-REPO_ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
-EVAL_DIR="${REPO_ROOT}/torchtitan/experiments/ezpz/eval"
+SCRIPT_REPO_ROOT="$(cd "$(dirname "$0")/../../../../.." && pwd)"
+REPO_ROOT="${REPO_ROOT_OVERRIDE:-$SCRIPT_REPO_ROOT}"
+EVAL_DIR="${SCRIPT_REPO_ROOT}/torchtitan/experiments/ezpz/eval"
 CKPT_BASE="${REPO_ROOT}/outputs/checkpoints"
-TOKENIZER_DIR="${REPO_ROOT}/assets/hf/gemma-7b"
+TOKENIZER_DIR="${SCRIPT_REPO_ROOT}/assets/hf/gemma-7b"
 
-# Checkpoint input (DCP format)
-CKPT_NAME="agpt-${MODEL}-sophiag-olmo-mix-1124-n256-gbs3072"
+# Checkpoint input (DCP format). Default name is the v1 layout
+# (n256-gbs3072) — v2 callers MUST pass --ckpt-name.
+CKPT_NAME="${CKPT_NAME_OVERRIDE:-agpt-${MODEL}-sophiag-olmo-mix-1124-n256-gbs3072}"
 DCP_DIR="${CKPT_BASE}/${CKPT_NAME}/step-${STEP}"
 
-# Output dirs
-HF_DIR="${REPO_ROOT}/outputs/evals/agpt-${MODEL}/step-${STEP}/hf"
-RESULTS_DIR="${REPO_ROOT}/outputs/evals/agpt-${MODEL}/step-${STEP}/results"
+# Output dirs. The label suffix prevents v1/v2 result collisions when
+# they share a step number (e.g. both have a step-100).
+LABEL_SUFFIX="${EVAL_LABEL:+-${EVAL_LABEL}}"
+HF_DIR="${SCRIPT_REPO_ROOT}/outputs/evals/agpt-${MODEL}${LABEL_SUFFIX}/step-${STEP}/hf"
+RESULTS_DIR="${SCRIPT_REPO_ROOT}/outputs/evals/agpt-${MODEL}${LABEL_SUFFIX}/step-${STEP}/results"
 
 # HF config for this model size
 HF_CONFIG="${EVAL_DIR}/configs/agpt_${MODEL}_config.json"
