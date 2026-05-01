@@ -19,11 +19,27 @@
 Tokens consumed at step *N* = `N × 3,072 × 8,192`. Random baseline is
 25% for the four-choice tasks (hellaswag, arc_*) and 50% for winogrande.
 
-## Benchmark Accuracy vs Training Step
+## v1 vs v2 — benchmark accuracy
+
+The v1 (bf16-master) and v2 (fp32-master) 2B runs share the same
+architecture, optimizer, and dataset; the only difference is the
+master-weight dtype. v1 hovers within ~1pp of the random baseline on
+every task across all 18K steps (~453B tokens) — this looked like
+"slow learning" at the time but is actually the bf16-RMSNorm-freeze
+bug talking. v2 — once it has enough tokens — should descend visibly.
+Re-render with new v2 ckpts as they become available:
+
+```bash
+python3 torchtitan/experiments/ezpz/docs/evals/agpt/2b/plot_v1_vs_v2.py
+```
+
+![v1 vs v2 — 2B benchmark accuracy](figures/v1_vs_v2.png)
+
+## Benchmark Accuracy vs Training Step (v1)
 
 ![2B Eval Results](figures/eval_2b_v2.png)
 
-## Results
+## Results (v1)
 
 | Step | Tokens | HellaSwag | ARC-Easy | ARC-Chall | Winogrande |
 |-----:|------:|------:|------:|------:|------:|
