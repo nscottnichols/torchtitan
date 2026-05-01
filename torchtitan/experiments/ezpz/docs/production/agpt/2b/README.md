@@ -1,14 +1,93 @@
 # Production Training — agpt 2B
 
-> **2026-04-29 — known issue affecting steps 1–33,740 of the 256N
-> SophiaG run:** training was launched with `training.dtype = bfloat16`
-> (default at the time), which silently freezes every RMSNorm.weight
-> at its 1.0 init because per-step updates are sub-ulp at bf16 scale.
-> Loss curves are real but the model has no trainable normalization.
-> Default flipped to `float32` going forward; existing checkpoints
-> are tainted but resumable (norms will start updating from this point
-> on). See
-> [`docs/guides/training-dtype-bf16-norm-freeze.md`](../../../guides/training-dtype-bf16-norm-freeze.md).
+> **2026-04-30 — restarted from scratch in `agpt-2b-v2/` clone.** The
+> original 2B 256N run (and its 80B/20B siblings) was found to have a
+> silent `training.dtype = bfloat16` master-weight bug that freezes
+> every RMSNorm.weight at its 1.0 init (per-step updates are sub-ULP
+> at bf16). Loss curves looked plausible but the model had no
+> trainable normalization. Default flipped to `float32`; v2 runs
+> below are clean restarts on the new clone. See
+> [`docs/guides/training-dtype-bf16-norm-freeze.md`](../../../guides/training-dtype-bf16-norm-freeze.md)
+> for the diagnosis.
+
+## v2 — 2B @ 256N — SophiaG LR=2.28e-5 (fp32 master)
+
+| Field | Value |
+|-------|-------|
+| Clone | `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/` |
+| Stack | torch 2.13 venv (yeet-env tarball mode) |
+| Optimizer | SophiaG, LR=2.28e-5 |
+| Compile | off |
+| GBS | 6,144 (LBS=2) |
+| Total steps | 92,859 |
+| Total tokens | 4.67T |
+| Checkpoint dir | `outputs/checkpoints/agpt-2b-sophiag-olmo-mix-1124-n256-gbs6144` |
+| Checkpoint interval | 100 steps, keep_latest_k=0 (keep all) |
+| W&B | [lytjeegk](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/lytjeegk) |
+
+### Loss / Throughput / MFU
+
+![2B v2 256N Training](figures/production_2b_v2_256_256n.png)
+
+### Diagnostics
+
+![2B v2 256N Diagnostics](figures/training_diagnostics_2b_v2_256_256n.png)
+
+### Tokens vs Wall Clock
+
+![2B v2 256N Tokens vs Time](figures/tokens_vs_time_2b_v2_256_256n.png)
+
+### Progress
+
+| Job ID | Steps | Loss (start → end) | TPS/GPU | MFU | Status |
+|--------|-------|---------------------|---------|-----|--------|
+| 8459818 | 1–2070 | 12.93 → 3.33 | ~3,500 | ~13% | NODE_FAIL after step 2070 (single bad node dragged TPS to ~30 then killed). 20 ckpts saved (every 100 steps). |
+
+**Latest checkpoint:** step-2000
+
+**Tokens consumed:** 2070 × 6144 × 8192 = **104B tokens** (2.2% of target)
+
+---
+
+## v2 — 2B @ 512N — SophiaG LR=2.28e-5 (fp32 master)
+
+| Field | Value |
+|-------|-------|
+| Clone | `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/` |
+| Stack | torch 2.13 venv (yeet-env tarball mode) |
+| Compile | off |
+| GBS | 12,288 (LBS=2) |
+| Total steps | 46,429 |
+| Total tokens | 4.67T |
+| Checkpoint dir | `outputs/checkpoints/agpt-2b-sophiag-olmo-mix-1124-n512-gbs12288` |
+| W&B | [i252kps9](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/i252kps9) |
+
+### Loss / Throughput / MFU
+
+![2B v2 512N Training](figures/production_2b_v2_512_512n.png)
+
+### Diagnostics
+
+![2B v2 512N Diagnostics](figures/training_diagnostics_2b_v2_512_512n.png)
+
+### Progress
+
+| Job ID | Steps | Loss (start → end) | TPS/GPU | MFU | Status |
+|--------|-------|---------------------|---------|-----|--------|
+| 8460301 | 1–1387 | 12.65 → 3.59 | ~2,700 | ~10% | NODE_FAIL after step 1387 (same bad-node end-of-run pattern). 13 ckpts saved. |
+| 8463626 | 1300+ | (continuing) | — | — | **Queued** (12h walltime) |
+| 8463627 | (cont.) | — | — | — | Held (`afterany:8463626`) |
+
+**Latest checkpoint:** step-1300
+
+**Tokens consumed:** 1387 × 12288 × 8192 = **140B tokens** (3.0% of target)
+
+---
+
+## Historical (bf16-tainted, superseded by v2)
+
+The runs below are kept for the record. They use `training.dtype = bfloat16`
+and have frozen RMSNorm weights — see the warning at the top.
 
 ## 2B @ 256N — SophiaG LR=2.28e-5
 

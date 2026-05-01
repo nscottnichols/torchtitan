@@ -2,13 +2,15 @@
 
 > **Living document** — updated as jobs complete and new runs are submitted.
 >
-> Last updated: 2026-04-28
+> Last updated: 2026-05-01
 
 ## Scaling Performance
 
-See [scaling-performance.md](scaling-performance.md) for the detailed
-experiment log from Apr 18-21 (compile scaling, 80B at 4-512N, interactive
-workflow validation).
+- [`scaling-performance.md`](scaling-performance.md) — detailed
+  experiment log from Apr 18-21 (compile scaling, 80B at 4-512N,
+  interactive workflow validation).
+- [`docs/scaling/yeet_env/`](../scaling/yeet_env/README.md) —
+  yeet-env tarball broadcast scaling (8N to 4096N) on Aurora.
 
 ## Overview
 
@@ -16,60 +18,55 @@ Full-scale production training of AuroraGPT models on the
 [olmo-mix-1124](https://huggingface.co/datasets/allenai/olmo-mix-1124) dataset
 (4.67T tokens) across Aurora compute nodes.
 
-## Loss Curves
+**Restarted on 2026-04-30 (v2)** after discovering the bf16-master
+RMSNorm-freeze bug. All current production runs use `dtype=float32`
+master weights, plain CrossEntropyLoss, LBS=2 with the torch 2.13 venv
+(yeet-env tarball mode). See
+[`docs/guides/training-dtype-bf16-norm-freeze.md`](../guides/training-dtype-bf16-norm-freeze.md)
+for the diagnosis.
 
-![Production Training Loss](../experiments/agpt/aurora/figures/production_training_loss.png)
+## Active Runs
 
-## Tokens vs Wall Clock (256N runs)
+### Dense (agpt) — v2 (fp32 master)
 
-| 2B | 20B |
-|----|-----|
-| ![2B Tokens vs Time](agpt/2b/figures/tokens_vs_time_2b_256n.png) | ![20B Tokens vs Time](agpt/20b/figures/tokens_vs_time_20b_256n.png) |
+| Run | Model | Nodes | Optimizer | Compile | Steps | Loss | Tokens | Status |
+|-----|-------|------:|-----------|---------|------:|-----:|-------:|--------|
+| [2B-256N](agpt/2b/) | 2B | 256 | SophiaG | off | 2,070 | 3.33 | 104B | NODE_FAIL @ step 2070 (ckpt-2000 saved) |
+| [2B-512N](agpt/2b/) | 2B | 512 | SophiaG | off | 1,387 | 3.59 | 140B | NODE_FAIL; chained continuation queued |
+| [2B-1024N](agpt/2b/) | 2B | 1024 | SophiaG | off | — | — | — | **Queued** (8463182) |
+| [20B-512N](agpt/20b/) | 20B | 512 | SophiaG | off | 148+ | 6.13 | 15B | **Running** (8460302) |
+| [20B-1024N](agpt/20b/) | 20B | 1024 | SophiaG | off | — | — | — | **Queued** (8463183) |
 
-## Runs
+### Dense (agpt) — bf16-tainted (superseded, kept for record)
 
-### Dense (agpt)
-
-| Run | Model | Nodes | Optimizer | LR | Compile | Steps Done | Loss | Tokens | Status |
-|-----|-------|-------|-----------|------|---------|------------|------|--------|--------|
-| [2B-256N](agpt/2b/) | 2B | 256 | SophiaG | 2.28e-5 | on | 33,740+ | 5.69 | 849.1B (18.2%) | **Running** |
-| [2B-512N](agpt/2b/) | 2B | 512 | SophiaG | 2.28e-5 | off | 0 | — | — | Segfault |
-| [2B-512N](agpt/2b/) | 2B | 512 | SophiaG | 2.28e-5 | — | 0 | — | — | Killed (yeet-env) |
-| [20B-256N](agpt/20b/) | 20B | 256 | SophiaG | 2.28e-5 | on | 4,159+ | 4.59 | 104.7B (2.2%) | **Running** |
-| [20B-512N](agpt/20b/) | 20B | 512 | SophiaG | 2.28e-5 | on | 458 | 7.09 | 23.1B | Segfault |
-| [20B-512N](agpt/20b/) | 20B | 512 | SophiaG | 2.28e-5 | — | 0 | — | — | Killed (yeet-env) |
-| [80B-256N](agpt/80b/) | 80B | 256 | AdamW | 1.1e-5 | on | 777 | NaN | — | NaN@138 (killed) |
-| [80B-256N](agpt/80b/) | 80B | 256 | AdamW | 1e-6 | on | 51 | 12.91 | — | Crashed (bad node) |
-| [80B-512N](agpt/80b/) | 80B | 512 | AdamW | 1.1e-5 | off | 495 | NaN | — | NaN@15 (killed) |
-| [80B-512N](agpt/80b/) | 80B | 512 | AdamW | 1e-6 | — | 0 | — | — | Killed (yeet-env) |
+See per-model READMEs (`agpt/2b/`, `agpt/20b/`, `agpt/80b/`).
 
 ### MoE
 
 | Run | Model | Nodes | Status |
-|-----|-------|-------|--------|
+|-----|-------|------:|--------|
 | [10B_2B EP=12](moe/10b_2b_sdpa_ep/) | 10B_2B_sdpa | TBD | Planned |
 
 ## Known Issues
 
-1. **torch.compile OOM at 512N** — 2B OOMs on GPU, 80B OOMs on CPU. Use
-   `--compile.no-enable` for 512N jobs.
-2. **SophiaG/Muon broken at 80B** — bf16 overflow in Hessian/Newton-Schulz.
-   Use AdamW only.
-3. **80B AdamW LR=1.1e-5 → NaN** — loss diverges at step 138 (256N) and
-   step 15 (512N). LR from LR finder (2-node, GBS=12) may be too high for
-   production GBS (1536-3072). Need to re-run LR finder at production GBS
-   or reduce LR to ~1e-6.
-4. **Transient segfaults** — single bad nodes crash the whole job. Retry
-   usually works. Both 512N jobs (2B and 20B) segfaulted on their first
-   continuation attempt.
-5. **Compile time at 256N** — ~7-15 min depending on model size. Eats into
-   the 12h walltime.
-6. **80B Gloo timeout on bad nodes** — 80B-256N AdamW LR=1e-6 (8451226)
-   crashed at 11 min during dataloader init with `Gloo connectFullMesh
-   failed ... No route to host`. Transient bad node. Needs resubmit.
-7. **yeet-env saturates flare at 512N** — three concurrent 512N jobs
-   rsyncing the same 8.6GB `.venv` to 1,536 nodes (~13TB total reads)
-   saturated the Lustre filesystem for 2+ hours. Training TPS on co-running
-   256N jobs dropped from ~2,400 to ~30. Even an 8-node job couldn't finish
-   yeet-env in 2h. **Mitigation:** stagger venv submissions, use DAOS, or
-   use tar+broadcast instead of per-node rsync.
+1. **bf16-master RMSNorm freeze (RESOLVED 2026-04-30):** Default
+   `training.dtype` flipped from `bfloat16` to `float32` after we
+   discovered RMSNorm.weight was frozen at 1.0 by sub-ULP updates at
+   bf16. v2 runs fix this; checkpoints from before the fix are
+   tainted. See [bf16-norm-freeze guide](../guides/training-dtype-bf16-norm-freeze.md).
+2. **NODE_FAIL at end-of-walltime is common** — both v2 2B runs hit
+   NODE_FAIL after 6 hours of clean training, with TPS dragging from
+   ~5K → ~30 in the final few hundred steps before kill. Single bad
+   node taking down the whole job. Mitigation: keep_latest_k=0 (keep
+   all ckpts) so `step-N00` snapshots survive the failure.
+3. **torch.compile OOM at 512N** — 2B OOMs on GPU, 80B OOMs on CPU.
+   Use `--compile.no-enable` for 512+ node jobs.
+4. **SophiaG/Muon broken at 80B** — bf16 overflow in Hessian/Newton-Schulz.
+   Use AdamW only at 80B.
+5. **80B AdamW LR=1.1e-5 → NaN** — loss diverges at step 138 (256N) and
+   step 15 (512N). Pending v2 restart with LR=1e-6.
+6. **yeet-env saturates flare at 512N (RESOLVED via tarball mode)** —
+   the per-file rsync mode used to take hours and saturate Lustre. The
+   tarball mode (`ezpz yeet-env --src .venv.tar.gz`, default in v2
+   submit scripts) does the same broadcast in 70-420 seconds at
+   8-2048N. See [yeet_env scaling](../scaling/yeet_env/README.md).

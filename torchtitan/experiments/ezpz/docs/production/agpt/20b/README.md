@@ -1,10 +1,49 @@
 # Production Training — agpt 20B
 
-> **2026-04-29 — known issue affecting steps 1–4,159 of the 256N
-> SophiaG run:** same `training.dtype = bfloat16` master-weight bug
-> that froze RMSNorm.weight at 1.0 in the 2B run. Loss/grad_norm
-> curves are real but the model has no trainable normalization. See
+> **2026-04-30 — restarted from scratch in `agpt-20b-v2/` clone.** Same
+> bf16-master RMSNorm-freeze bug that affected the 2B and 80B runs.
+> v2 below is the clean restart on `dtype=float32`. See
 > [`docs/guides/training-dtype-bf16-norm-freeze.md`](../../../guides/training-dtype-bf16-norm-freeze.md).
+
+## v2 — 20B @ 512N — SophiaG LR=2.28e-5 (fp32 master)
+
+| Field | Value |
+|-------|-------|
+| Clone | `/flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/` |
+| Stack | torch 2.13 venv (yeet-env tarball mode) |
+| Optimizer | SophiaG, LR=2.28e-5 |
+| Compile | off |
+| GBS | 12,288 (LBS=2) |
+| Total steps | 46,429 |
+| Total tokens | 4.67T |
+| Checkpoint dir | `outputs/checkpoints/agpt-20b-sophiag-olmo-mix-1124-n512-gbs12288` |
+| W&B | [9tsyx5us](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/9tsyx5us) |
+
+### Loss / Throughput / MFU
+
+![20B v2 512N Training](figures/production_20b_v2_512_512n.png)
+
+### Diagnostics
+
+![20B v2 512N Diagnostics](figures/training_diagnostics_20b_v2_512_512n.png)
+
+### Progress
+
+| Job ID | Steps | Loss (start → end) | TPS/GPU | MFU | Status |
+|--------|-------|---------------------|---------|-----|--------|
+| 8460302 | 1–148+ | 12.94 → 6.13 | ~350 | ~17.6% | **Running** (3:42 elapsed at writing) |
+| 8463628 | (cont.) | — | — | — | Held (`afterany:8460302`, 12h continuation) |
+
+**Latest checkpoint:** step-100 (244 GB on disk per ckpt)
+
+**Tokens consumed:** 148 × 12288 × 8192 = **15B tokens** (0.32% of target)
+
+---
+
+## Historical (bf16-tainted, superseded by v2)
+
+The runs below are kept for the record. They use `training.dtype = bfloat16`
+and have frozen RMSNorm weights — see the warning at the top.
 
 ## 20B @ 256N — SophiaG LR=2.28e-5
 

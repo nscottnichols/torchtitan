@@ -52,32 +52,41 @@ PROJECT = "aurora_gpt/torchtitan.ezpz.train"
 # Production runs identified by step ranges (cross-checked with PBS logs).
 # Listed oldest first so concatenation matches resume order.
 PRODUCTION_RUNS: dict[str, dict] = {
+    # Original 2026-04-{14..29} runs (torch 2.10, LBS=1, bf16-master taint
+    # affecting RMSNorm.weight; loss curves are real but model has no
+    # trainable normalization). Kept here for the historical record;
+    # superseded by the *_v2 entries below.
     "2b": {
         "run_ids": [
-            "v5ytgu0o",
-            "pjanidnw",
-            "4u9w23p9",
-            "tahlsmy9",
-            "iy1xbv0t",
-            "11jzfnno",
-            "hqwaw075",
-            "6ictshbs",
-            "wviyqysc",
+            "v5ytgu0o", "pjanidnw", "4u9w23p9", "tahlsmy9", "iy1xbv0t",
+            "11jzfnno", "hqwaw075", "6ictshbs", "wviyqysc",
         ],
         "num_nodes": 256,
     },
     "20b": {
         "run_ids": [
-            "q9oq5huj",
-            "pnkaurba",
-            "lrlv3xsc",
-            "pigwfqkg",
-            "lvyzlocg",
-            "e2anhgt2",
-            "he01jr7f",
-            "t0ja3dl4",
+            "q9oq5huj", "pnkaurba", "lrlv3xsc", "pigwfqkg", "lvyzlocg",
+            "e2anhgt2", "he01jr7f", "t0ja3dl4",
         ],
         "num_nodes": 256,
+    },
+    # v2 fresh restarts on 2026-04-30 from /flare/AuroraGPT/foremans/runs/
+    # agpt-{2b,20b}-v2/ (torch 2.13 venv, LBS=2, dtype=float32 master,
+    # plain CrossEntropyLoss). These supersede the bf16-tainted runs above.
+    "2b_v2_256": {
+        "run_ids": ["lytjeegk"],
+        "num_nodes": 256,
+        "model": "2b",  # what to label/color as
+    },
+    "2b_v2_512": {
+        "run_ids": ["i252kps9"],
+        "num_nodes": 512,
+        "model": "2b",
+    },
+    "20b_v2_512": {
+        "run_ids": ["9tsyx5us"],
+        "num_nodes": 512,
+        "model": "20b",
     },
 }
 
@@ -359,34 +368,41 @@ def main() -> None:
 
     api = wandb.Api()
 
-    models = [args.model] if args.model else list(PRODUCTION_RUNS)
-    for model_name in models:
-        cfg = PRODUCTION_RUNS[model_name]
+    keys = [args.model] if args.model else list(PRODUCTION_RUNS)
+    for key in keys:
+        cfg = PRODUCTION_RUNS[key]
+        # `model` (for color + figure title) defaults to the dict key.
+        model_name = cfg.get("model", key)
+        # Output dir comes from the dict key so v2 runs land in the
+        # parent model folder, not a separate "2b_v2" tree.
         out_dir = args.output_dir or (
             DOCS_BASE / "production" / "agpt" / model_name / "figures"
         )
 
-        print(f"\n=== Pulling {model_name.upper()} ({len(cfg['run_ids'])} runs) ===")
+        print(f"\n=== Pulling {key} ({len(cfg['run_ids'])} runs) ===")
         data = concat_runs(api, cfg["run_ids"])
         print(f"  Concatenated: {len(data['_step'])} unique steps")
+        if len(data["_step"]) == 0:
+            print(f"  no data, skipping {key}")
+            continue
 
         plot_dashboard(
             data,
             model_name,
             cfg["num_nodes"],
-            out_dir / f"production_{model_name}_{cfg['num_nodes']}n.png",
+            out_dir / f"production_{key}_{cfg['num_nodes']}n.png",
         )
         plot_diagnostics(
             data,
             model_name,
             cfg["num_nodes"],
-            out_dir / f"training_diagnostics_{model_name}_{cfg['num_nodes']}n.png",
+            out_dir / f"training_diagnostics_{key}_{cfg['num_nodes']}n.png",
         )
         plot_tokens_vs_time(
             data,
             model_name,
             cfg["num_nodes"],
-            out_dir / f"tokens_vs_time_{model_name}_{cfg['num_nodes']}n.png",
+            out_dir / f"tokens_vs_time_{key}_{cfg['num_nodes']}n.png",
         )
 
 
