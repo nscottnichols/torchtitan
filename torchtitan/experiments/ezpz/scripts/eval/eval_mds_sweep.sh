@@ -11,7 +11,7 @@
 # from the optimizer-experiments directory at 5K-step intervals.
 #
 # Usage:
-#   qsub torchtitan/experiments/ezpz/eval/eval_mds_sweep.sh
+#   qsub torchtitan/experiments/ezpz/scripts/eval/eval_mds_sweep.sh
 #
 # Override which stages/steps to evaluate via env vars:
 #   STAGES="ntok4673B ntok7064B ntok7770B"   (default)

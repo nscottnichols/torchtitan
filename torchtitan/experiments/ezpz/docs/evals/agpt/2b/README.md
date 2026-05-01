@@ -80,7 +80,7 @@ Tokens consumed at step *N* = `N × 3,072 × 8,192`. Random baseline is
 
 ```bash
 # Convert + evaluate a single checkpoint (compute node, ezpz_setup_env)
-bash torchtitan/experiments/ezpz/eval/convert_and_eval.sh \
+bash torchtitan/experiments/ezpz/scripts/eval/convert_and_eval.sh \
     --model 2b --step 18000
 
 # Aggregate all results into the table + figure above

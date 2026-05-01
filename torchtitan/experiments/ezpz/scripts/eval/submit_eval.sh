@@ -32,7 +32,7 @@ echo "NNODES:    $(wc -l < "${PBS_NODEFILE}")"
 echo "============================================"
 
 # Run the eval pipeline
-bash torchtitan/experiments/ezpz/eval/convert_and_eval.sh \
+bash torchtitan/experiments/ezpz/scripts/eval/convert_and_eval.sh \
     --model "${MODEL}" \
     --step "${STEP}" \
     --tasks "${TASKS}" \

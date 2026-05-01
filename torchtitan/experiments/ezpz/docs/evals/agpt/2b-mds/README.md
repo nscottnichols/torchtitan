@@ -128,7 +128,7 @@ python3 torchtitan/experiments/ezpz/eval/mds_to_hf.py \
     --output_dir outputs/evals/agpt-2b-mds/<stage>/step-{N}/hf
 
 # Full sweep (12h walltime; submit two in parallel for ~half wall-clock)
-qsub torchtitan/experiments/ezpz/eval/eval_mds_sweep.sh
+qsub torchtitan/experiments/ezpz/scripts/eval/eval_mds_sweep.sh
 
 # Aggregate
 python3 torchtitan/experiments/ezpz/eval/aggregate_evals.py --model 2b-mds
