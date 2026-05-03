@@ -85,10 +85,20 @@ choice. For reaching a target wall-clock, 512N gets there faster but
 spends more tokens. Either could be preferable depending on the goal
 (chasing minimum wall-clock vs minimum tokens).
 
-**Open question**: would √2-scaling LR (3.22e-5) at 512N close the
-per-token gap? Worth a one-off experiment — but the canonical 512N
-chain has too much accumulated training to perturb its LR mid-run, so
-that test would need a fresh fork.
+**Open question being tested**: does √2-scaling LR (3.22e-5) at 512N
+close the per-token gap?
+
+Submitted **2026-05-03**: fresh-from-scratch 2B 512N fork at
+LR=3.22e-5 (vs canonical LR=2.28e-5).
+- chain1: job 8467141 (12h walltime)
+- chain2: job 8467142 (12h, `-W depend=afterany:8467141`)
+- Total ~24h walltime → ~step 2,000 → ~200B tokens (matches the
+  canonical 512N's step-2000 / 200B-token point for direct comparison).
+- Separate ckpt dir:
+  `checkpoints/agpt-2b-sophiag-olmo-mix-1124-n512-gbs12288-lr3.22e-5`
+- Will be evaluated at step 1000/2000 with the same lm-eval pipeline,
+  then plotted on the same v1-vs-v2 figure as a third v2 line
+  (LR=3.22e-5).
 
 <details>
 <summary><strong>v1 detailed results (bf16-tainted, kept for record) — click to expand</strong></summary>
