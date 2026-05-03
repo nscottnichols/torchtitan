@@ -68,6 +68,21 @@ Running log of what's happening, session by session. Most recent first.
 | 2B 512N | 5,073 | 2.97 | 510B (10.9%) | 8463627 (Q) |
 | 20B 512N | 300 | 4.95 | 30B (0.6%) | 8463628 (R) |
 
+### Dataset CLI mistake-catcher
+
+When `--dataloader.dataset=user/repo` (HF hub path) and
+`--dataloader.dataset-path=...` are both passed, `_validate_dataset`
+silently overrides `dataset_path` to None so the registered hub path
+wins. Correct behavior, but it hid user mistakes (e.g. expecting
+`--dataset-path` to point at a local clone of the hub dataset).
+
+`9ef2908d` — emit a clear warning naming both args and telling the
+user to drop `--dataloader.dataset-path` or pick a local-file dataset
+name like `blendcorpus`. Override semantics unchanged; only logging
+added. Production scripts that hardcode
+`--dataset=blendcorpus --dataset-path=$DFL` are unaffected (they hit
+the registered-name branch which keeps the path).
+
 ---
 
 ## 2026-05-02 — 2B 512N continuation reaches 510B tokens
@@ -144,6 +159,93 @@ Plots + script: [`docs/scaling/yeet_env/`](scaling/yeet_env/README.md).
   shell scripts out of the repo root into `scripts/{eval,debug,lr-finder}/`
   subdirs; consolidated the existing 3 eval shell scripts there too.
 - Refreshed all production READMEs with the v2 run state (this entry).
+
+### Async checkpointing — verification + production switch
+
+Built smoke configs `smoke_2b_async_ckpt` (`async`) and
+`smoke_2b_async_ckpt_pinned` (`async_with_pinned_mem`) with
+`enable_first_step_checkpoint=True` and `interval=10` so we get 5
+saves across a 50-step run.
+
+| Job | Config | Result |
+|---|---|---|
+| `12465723` | `async` | ✅ PASS — 50 steps, 5 saves @ ~0.2s each, loss 7.05, exit 0 |
+| `12465724` | `async_with_pinned_mem` | ❌ FAIL — `KeyError: <class 'type'>` at step-20 save |
+
+Loss-baseline check on the `async` run vs v24 sync baseline:
+final Δ -0.055, tail10 Δ -0.053 (well within ±0.10). On-disk DCP
+format byte-identical to sync save (1809 keys, modern `qkv_linear` +
+`lm_head` naming). Sync ↔ async is bidirectionally wire-compatible —
+no migration needed for in-flight production.
+
+Flipped all 10 production train/submit/smoke scripts to default
+`--checkpoint.async-mode="${CHECKPOINT_ASYNC_MODE:-async}"`. The env
+var lets anyone roll back to sync without editing the script:
+
+```bash
+CHECKPOINT_ASYNC_MODE=disabled qsub ...
+```
+
+Per-step staging cost is ~0.2s with a one-step TPS dip (5.7K vs 7.4K
+steady) the next step, then full recovery. Compared to a sync save
+(which blocks the entire training step for the full disk-write
+duration — 4+ seconds per save at 2N), this is a clear win.
+
+### `async_with_pinned_mem` — upstream PyTorch bug filed
+
+Diagnosed and reproduced a real bug in `torch.distributed.checkpoint`:
+`StateDictStager.deepcopy_with_tensor_offload` line 320 indexes
+`self._deepcopy_dispatch[type]` directly, but `StateDictStager.close()`
+(called by `DefaultStager._stage` after every stage to break a closure
+cycle, `staging.py:251`) clears the entire dispatch dict. Result:
+**second** stage call on any state dict containing a class object
+crashes with `KeyError: <class 'type'>`.
+
+Reproduces in pure CPU Python (no distributed init, no GPU). Three
+files committed at `docs/upstream-issues/`:
+
+- `STATE_DICT_STAGER_ISSUE.md` — issue draft for pytorch/pytorch
+- `repro_state_dict_stager_bug.py` — minimal ~30-line repro
+- `repro_state_dict_stager_fix_verification.py` — proves the naive
+  one-line `.get(type, _deepcopy_atomic)` fix doesn't work because
+  *all* atomic-type entries are also missing post-`close()`. Real
+  fix is structural: either don't clear `_deepcopy_dispatch` in
+  `close()` (only the cached storages cause the leak), or rebuild
+  it at the start of each `stage()`.
+
+Plain `async` is unaffected — it uses the in-process default stager
+(regular `copy.deepcopy`), not the pinned-memory `StateDictStager`
+path.
+
+### 28th–30th upstream syncs (4 days, 5 sync entries, no replays)
+
+| Entry | Date | Commits | Why no replay |
+|---|---|---|---|
+| 27th | 2026-04-30 | HybridEP cleanup + autoparallel/dsv3 deletion | Resolved 2 modify/delete conflicts on autoparallel/dsv3/ by accepting upstream's deletion; ezpz doesn't depend |
+| 28th | 2026-05-01 | graph_trainer qwen3 + CI lint + ft.llama3 attn_backend | Scoped to graph_trainer / lint / ft.llama3 (we use our own model_registry) |
+| 29th | 2026-05-01 | RL vLLM compile-time + graph_trainer skill | Scoped to experiments/rl + graph_trainer |
+| 30th | 2026-05-03 | Bucketing pass + RMSNorm fusion (graph_trainer) | All 3 commits scoped to experiments/graph_trainer |
+
+The loss-baseline workflow has now been exercised in production once
+(v22 → v24 baseline refresh, both PASS). Workflow doc is at
+`docs/baselines/README.md`.
+
+### Eval pipeline v2 plumbing
+
+Eval scripts were originally hardcoded for the v1 256N run. To run on
+v2 ckpts (256N, 512N, 1024N, ...) needed several fixes early in the
+day:
+
+- `feat(ezpz/scripts/eval): support v2 ckpts via --ckpt-name + add
+  20B v2 eval` (`55154291`)
+- `fix(ezpz/scripts/eval): drop set -u from eval-20b-v2.sh` (`1835d8c2`)
+- `fix(ezpz/scripts/eval): cd into v2 clone for conversion` (`9af67b81`)
+- `fix(ezpz/scripts/eval): force PYTHONPATH=. + add subshell debug
+  echoes` (`db1380b6`)
+
+After those landed, ARC-Easy points started flowing:
+0.277 (step-200) → 0.366 (step-1200) → 0.429 (step-2000), validating
+the bf16 fix end-to-end. v1 was flat at ~0.27 across 450B tokens.
 
 ---
 
