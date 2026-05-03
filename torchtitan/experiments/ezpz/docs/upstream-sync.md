@@ -24,6 +24,25 @@ tests and checking against the saved baselines — see
 
 ---
 
+## 2026-05-03 (30th sync — graph_trainer only)
+
+**Upstream commits:**
+
+- `627126fe` — Enable bucketing pass in precompile path (#3107)
+- `d27d0c36` — [GraphTrainer] Fix FlexAttention precompile bitwise
+  deterministic tests (#3178)
+- `14f6a75e` — [GraphTrainer][AutoDev] Fuse RMSNorm kernels via regional
+  Inductor compilation (#3132). Adds `performance_passes.py` and a new
+  test file.
+
+**Impact on ezpz:** None. All 3 commits scoped to
+`experiments/graph_trainer/`. ezpz doesn't depend.
+
+**Replay status:** Clean fast-forward merge. ezpz imports verified.
+No baseline re-check needed.
+
+---
+
 ## 2026-05-01 (29th sync — RL vLLM compile-time + graph_trainer skill)
 
 **Upstream commits:**
