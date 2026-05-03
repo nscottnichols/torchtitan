@@ -42,12 +42,18 @@ python3 torchtitan/experiments/ezpz/utils/plot_production_wandb.py --overlay 20b
 
 ![20B v2 512N Diagnostics](figures/training_diagnostics_20b_v2_512n.png)
 
-### Progress
+### Progress (chain)
 
-| Job ID | Steps | Loss (start → end) | TPS/GPU | MFU | Status |
-|--------|-------|---------------------|---------|-----|--------|
-| 8460302 | 1–148+ | 12.94 → 6.13 | ~350 | ~17.6% | **Running** (3:42 elapsed at writing) |
-| 8463628 | (cont.) | — | — | — | Held (`afterany:8460302`, 12h continuation) |
+| Job ID | Walltime | Steps | Loss (start → end) | TPS/GPU | MFU | Status |
+|--------|---------:|------:|-------------------:|--------:|----:|--------|
+| 8460302 | 6h | 1–300 | 12.94 → 4.95 | ~355 | ~17.7% | Walltime hit (NODE_FAIL at end). 3 ckpts saved. |
+| 8463628 | 12h | 300+ | (resuming) | — | — | **Running** (auto-resumes from step-300) |
+
+**Latest checkpoint:** step-300 (244 GB on disk per ckpt)
+
+**Cumulative steps:** 300 (more incoming as 8463628 progresses)
+
+**Tokens consumed:** 300 × 12,288 × 8,192 = **30B tokens** (0.6% of 4.67T target)
 
 **Latest checkpoint:** step-100 (244 GB on disk per ckpt)
 

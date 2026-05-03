@@ -1,22 +1,49 @@
 # Production Training — Dense (agpt) Models
 
-> Last updated: 2026-05-01
+> Last updated: 2026-05-03
 >
 > **Restarted in v2 clones on 2026-04-30** after the bf16-master
 > RMSNorm-freeze regression. All current production training is on
 > `dtype=float32` master weights. Historical bf16-tainted runs are
 > retained inside each per-model README under "Historical".
 
-## Active runs (v2 — torch 2.13 venv, fp32 master)
+## Single canonical chain per model
 
-| Run | Report | Nodes | Walltime | Steps Done | Loss | Tokens | Status |
-|-----|--------|------:|---------:|-----------:|-----:|-------:|--------|
-| 2B-256N v2 | [details](2b/) | 256 | 6h | 2,070 | 3.33 | 104B | NODE_FAIL after step 2070 (resumable from step-2000 ckpt) |
-| 2B-512N v2 | [details](2b/) | 512 | 6h+12h+12h | 1,387 | 3.59 | 140B | NODE_FAIL; chained 12h continuation queued (8463626→8463627) |
-| 2B-1024N v2 | [details](2b/) | 1024 | 12h | — | — | — | **Queued** (8463182) |
-| 20B-512N v2 | [details](20b/) | 512 | 6h+12h | 148+ | 6.13 | 15B | **Running** (8460302); 12h continuation held (8463628) |
-| 20B-1024N v2 | [details](20b/) | 1024 | 12h | — | — | — | **Queued** (8463183) |
-| 80B-256N | [details](80b/) | 256 | — | — | — | — | Not yet restarted in v2 |
+Per-model production training is consolidated on **one** chain to
+avoid divergent trajectories. Other queued jobs at different node
+counts share the model but write to *different* checkpoint dirs (keyed
+on `gbs`), so they're independent trajectories — they're not joining
+the canonical chain. Treat them as scaling experiments, not as
+extensions.
+
+### 2B canonical chain (512N)
+
+| Job ID | Walltime | Steps | Loss | Status |
+|--------|---------:|------:|-----:|--------|
+| 8460301 | 6h | 1–1387 | 12.65 → 3.59 | Done (NODE_FAIL @ end) |
+| 8463626 | 12h | 1300–5073 | 3.59 → **2.97** | Done (NODE_FAIL @ end). 50 ckpts saved. |
+| 8463627 | 12h | 5000+ | (resuming) | **Queued** (auto-resumes from step-5000) |
+
+**Latest cumulative**: step **5,073** · loss **2.97** · **510B tokens** (10.9% of 4.67T target).
+
+### 20B canonical chain (512N)
+
+| Job ID | Walltime | Steps | Loss | Status |
+|--------|---------:|------:|-----:|--------|
+| 8460302 | 6h | 1–300 | 12.94 → 4.95 | Done (NODE_FAIL @ end). 3 ckpts saved. |
+| 8463628 | 12h | 300+ | (resuming) | **Running** (auto-resumes from step-300) |
+
+**Latest cumulative**: step **300** · loss **4.95** · **30B tokens** (0.6% of 4.67T target).
+
+## Other queued jobs (independent ckpt trajectories, NOT canonical chain)
+
+| Job ID | Model | Nodes | Walltime | Status | Notes |
+|--------|-------|------:|---------:|--------|-------|
+| 8463182 | 2B | 1024 | 12h | Queued | Fresh start, separate ckpt dir (`n1024-gbs24576`) |
+| 8463183 | 20B | 1024 | 12h | Queued | Fresh start, separate ckpt dir (`n1024-gbs24576`) |
+| 8463659 | 20B | 256 | 12h | Queued | Fresh start, separate ckpt dir (`n256-gbs6144`) |
+
+**80B**: not yet restarted in v2.
 
 ## v1 (bf16-master, broken) vs v2 (fp32-master, current)
 
