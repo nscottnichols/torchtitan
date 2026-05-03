@@ -4,6 +4,91 @@ Running log of what's happening, session by session. Most recent first.
 
 ---
 
+## 2026-05-03 — Production progress + canonical-chain consolidation + doc reorg
+
+### Production training
+
+- **2B 512N canonical chain (8460301 → 8463626 → 8463627)** — 8463626
+  finished its 12h walltime cleanly at step 5,073 (loss 2.97). 50
+  ckpts saved (every 100 steps, step-100 to step-5000). Continuation
+  8463627 queued (will auto-resume from step-5000). **Cumulative:
+  step 5,073, loss 2.97, 510B tokens (10.9% of 4.67T target).**
+- **20B 512N canonical chain (8460302 → 8463628)** — 8460302 hit
+  walltime at step 300 (loss 4.95). 8463628 (12h continuation) is
+  currently running, resumed from step-200 (step-300 ckpt was
+  incomplete from the NODE_FAIL on 8460302 so DCP picked the prior
+  good ckpt). At write time: step 287, loss 5.00, MFU 17.5%.
+- **Other queued jobs at different node counts** (2B 1024N 8463182,
+  20B 1024N 8463183, 20B 256N 8463659) are *independent* trajectories
+  — they write to separate ckpt dirs (keyed on `gbs`) and would start
+  fresh from step 0. Treated as scaling experiments, not chain
+  extensions.
+
+### v1-vs-v2 evals (smoking gun)
+
+- Ran `eval-2b-v2.sh` on 10 v2 256N ckpts (steps 200-2000). ARC-Easy
+  climbed 0.277 → 0.429 over 100B tokens; v1's flat ~0.27 across 450B
+  tokens validates the bf16-master RMSNorm-freeze fix end-to-end.
+  HellaSwag also broke out at 80-100B tokens (v2 0.301 vs v1 0.251).
+- Ran `eval-20b-v2.sh` on step-100 + step-200 (10B and 20B tokens).
+  ARC-Easy v2 +1.5pp above v1 at the same token count, others still
+  in noise. Will revisit at higher v2 token counts.
+- Submitted fresh evals (8466827 for 2B 512N steps 1000-5000;
+  8466828 for 20B 512N step-300).
+- Added per-trajectory plotter at
+  `docs/evals/agpt/{2b,20b}/plot_v1_vs_v2.py` — 4-panel comparison
+  (HellaSwag/ARC-Easy/ARC-Challenge/Winogrande) with random baseline
+  marked.
+
+### Production-side doc reorganization
+
+- Surfaced 2B 512N + 20B 512N v2 dashboards at the agpt index level
+  (`docs/production/agpt/README.md`). Previously only embedded in
+  per-model READMEs.
+- Wrapped all v1 historical sections in `<details closed>` blocks
+  across both production and eval READMEs, so v2 stays prominent.
+- Renamed all production figure filenames to be explicit about
+  v1/v2 (e.g. `production_2b_v2_512n.png` vs the older
+  `production_2b_256n.png` ambiguity).
+- Generated v1-vs-v2 overlay plots
+  (`overlay_2b_v1_vs_v2.png`, `overlay_20b_v1_vs_v2.png`) via
+  `plot_production_wandb.py --overlay {2b,20b}`.
+- Moved the **MDS 2B SophiaG training curves** from
+  `docs/evals/agpt/2b-mds/` to `docs/production/agpt/2b-mds/` (the
+  eval scores stay under evals). Cross-linked both ways. Noted as
+  "pre-torchtitan reference baseline" in the agpt production index.
+- `plot_production_wandb.py` extended to support multiple v2
+  trajectories per model — `PRODUCTION_RUNS` keyed on
+  `<model>_v2_<nodes>`, output filenames keyed on the same.
+
+### Canonical chain dashboards (current state)
+
+| Model | Cumulative | Loss | Tokens | Latest |
+|-------|-----------:|-----:|-------:|--------|
+| 2B 512N | 5,073 | 2.97 | 510B (10.9%) | 8463627 (Q) |
+| 20B 512N | 300 | 4.95 | 30B (0.6%) | 8463628 (R) |
+
+---
+
+## 2026-05-02 — 2B 512N continuation reaches 510B tokens
+
+Light day. The 2B 512N continuation chain (8463626) ran cleanly
+through 12h of walltime — went from step 1,300 (resume) to step
+5,073, with loss dropping from 3.59 to 2.97. NODE_FAIL at the very
+end again, but all 50 ckpts saved. This was the first chain run where
+NODE_FAIL didn't cost meaningful progress — the ckpt-100 cadence +
+keep_latest_k=0 (keep all) policy means we always have a recent
+recovery point.
+
+20B 512N (8460302) finished its 6h walltime at step 300, loss 4.95.
+3 ckpts saved (step 100/200/300, though step-300 was incomplete and
+DCP fell back to step-200 on resume).
+
+Eval pipeline kept producing rolling 2B v2 results — first ARC-Easy
+points landed in the 0.28-0.34 range across early ckpts.
+
+---
+
 ## 2026-05-01 — 1024N production runs, yeet-env scaling sweep
 
 ### Production training
