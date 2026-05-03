@@ -89,7 +89,10 @@ DFL="${DFL_PARENT}/${DFL_NAME}.txt"
 
 CKPT_KEEP_LATEST_K="${CKPT_KEEP_LATEST_K:-0}"
 CKPT_INTERVAL=100
-CKPT_DIR="checkpoints/agpt-${MODEL}-${OPTIMIZER}-${DFL_NAME}-n${NNODES}-gbs${GBS}"
+# CKPT_DIR is overridable via env var so experimental forks (e.g.
+# different LR) can write to a separate trajectory without colliding
+# with the canonical chain.
+CKPT_DIR="${CKPT_DIR:-checkpoints/agpt-${MODEL}-${OPTIMIZER}-${DFL_NAME}-n${NNODES}-gbs${GBS}}"
 
 DATA_CACHE_PATH="${CKPT_DIR}/.cache/${DFL_NAME}/index-cache"
 
