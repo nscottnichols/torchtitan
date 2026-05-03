@@ -41,11 +41,14 @@ python3 torchtitan/experiments/ezpz/docs/evals/agpt/20b/plot_v1_vs_v2.py
 
 ![v1 vs v2 — 20B benchmark accuracy](figures/v1_vs_v2.png)
 
-## Benchmark Accuracy vs Training Step (v1)
+<details>
+<summary><strong>v1 detailed results (bf16-tainted, kept for record) — click to expand</strong></summary>
+
+### Benchmark Accuracy vs Training Step (v1)
 
 ![20B v1 Eval Results](figures/eval_20b_v2.png)
 
-## Results
+### Results (v1)
 
 | Step | Tokens | Loss | HellaSwag | ARC-Easy | ARC-Chall | Winogrande |
 |------|--------|------|-----------|----------|-----------|------------|
@@ -63,3 +66,5 @@ python3 torchtitan/experiments/ezpz/docs/evals/agpt/20b/plot_v1_vs_v2.py
 - 20B model trains at ~2 steps/min on 256N — fewer checkpoints but each
   represents more effective compute than the 2B equivalents
 - Tokens = step × GBS(3072) × seq_len(8192)
+
+</details>

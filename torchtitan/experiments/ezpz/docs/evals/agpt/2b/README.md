@@ -35,11 +35,14 @@ python3 torchtitan/experiments/ezpz/docs/evals/agpt/2b/plot_v1_vs_v2.py
 
 ![v1 vs v2 — 2B benchmark accuracy](figures/v1_vs_v2.png)
 
-## Benchmark Accuracy vs Training Step (v1)
+<details>
+<summary><strong>v1 detailed results (bf16-tainted, kept for record) — click to expand</strong></summary>
+
+### Benchmark Accuracy vs Training Step (v1)
 
 ![2B Eval Results](figures/eval_2b_v2.png)
 
-## Results (v1)
+### Results (v1)
 
 | Step | Tokens | HellaSwag | ARC-Easy | ARC-Chall | Winogrande |
 |-----:|------:|------:|------:|------:|------:|
@@ -64,7 +67,7 @@ python3 torchtitan/experiments/ezpz/docs/evals/agpt/2b/plot_v1_vs_v2.py
 
 **Mean (steps 1K–18K):** hellaswag 25.20 · arc_easy 27.23 · arc_challenge 24.18 · winogrande 49.34
 
-## Observations
+### Observations
 
 - **All four tasks hover near random baseline through step 18,000** (~453B tokens, ~10% of the 4.67T target). This is expected — small models typically need 500B+ tokens before benchmarks rise above noise.
 - **arc_challenge** shows the clearest upward drift, climbing from 23.38 → 25.60 between steps 1K and 17K. The last two checkpoints are the first to land at-or-above the 25% random baseline.
@@ -72,7 +75,7 @@ python3 torchtitan/experiments/ezpz/docs/evals/agpt/2b/plot_v1_vs_v2.py
 - **hellaswag** is noise-bound at 25.0–25.4 — no meaningful trend yet.
 - **winogrande** fluctuates 47.7–51.1, with three clear above-baseline peaks (steps 3K, 8K, 15K). Variance is high enough that the trend isn't yet distinguishable from noise.
 
-## Caveats
+### Caveats
 
 - **All RMSNorm weights are frozen at 1.0** because the production
   runs used `training.dtype = bfloat16` (master weights in bf16,
@@ -91,6 +94,8 @@ python3 torchtitan/experiments/ezpz/docs/evals/agpt/2b/plot_v1_vs_v2.py
   learns, but loses information through poorly-scaled norms.
   Compare with the MDS-trained 2B (no norm freeze) which reaches
   ~0.59 hellaswag at the same approximate token count.
+
+</details>
 
 ## Reproducing
 

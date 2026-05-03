@@ -108,13 +108,14 @@ python3 torchtitan/experiments/ezpz/utils/plot_production_wandb.py --overlay 2b
 
 ---
 
-## v1 — Historical (bf16-tainted, superseded by v2)
+<details>
+<summary><strong>v1 — Historical (bf16-tainted, superseded by v2) — click to expand</strong></summary>
 
 The runs below are kept for the record. They use `--training.dtype=bfloat16`
 and have **frozen RMSNorm weights** — see the warning at the top of this
 file. Don't draw conclusions from these loss curves.
 
-## v1 — 2B @ 256N — SophiaG LR=2.28e-5 (bf16 master, BROKEN)
+### v1 — 2B @ 256N — SophiaG LR=2.28e-5 (bf16 master, BROKEN)
 
 | Field | Value |
 |-------|-------|
@@ -130,22 +131,22 @@ file. Don't draw conclusions from these loss curves.
 | Checkpoint dir | `outputs/checkpoints/agpt-2b-sophiag-olmo-mix-1124-n256-gbs3072` |
 | Checkpoint interval | 100 steps |
 
-### Loss / Throughput / MFU
+#### Loss / Throughput / MFU
 
 ![2B v1 256N Training](figures/production_2b_v1_256n.png)
 
-### Diagnostics (grad_norm / lr / max_loss)
+#### Diagnostics (grad_norm / lr / max_loss)
 
 ![2B v1 256N Diagnostics](figures/training_diagnostics_2b_v1_256n.png)
 
-### Tokens vs Wall Clock
+#### Tokens vs Wall Clock
 
 ![2B v1 256N Tokens vs Time](figures/tokens_vs_time_2b_v1_256n.png)
 
 > Diagnostic and tokens-vs-time figures are pulled from W&B by
 > `torchtitan/experiments/ezpz/utils/plot_production_wandb.py`.
 
-### Progress
+#### Progress
 
 | Job ID | Steps | Loss (start → end) | TPS/GPU | MFU | Memory | Status |
 |--------|-------|---------------------|---------|-----|--------|--------|
@@ -166,7 +167,7 @@ killed; throughput is recovering.
 
 ---
 
-## 2B @ 512N — SophiaG LR=2.28e-5 (no compile)
+### v1 — 2B @ 512N — SophiaG LR=2.28e-5 (bf16 master, BROKEN)
 
 | Field | Value |
 |-------|-------|
@@ -180,7 +181,7 @@ killed; throughput is recovering.
 | Total tokens | 4.67T |
 | Checkpoint dir | `outputs/checkpoints/agpt-2b-sophiag-olmo-mix-1124-n512-gbs6144` |
 
-### Progress
+#### Progress
 
 | Job ID | Steps | Loss | TPS/GPU | MFU | Memory | Status |
 |--------|-------|------|---------|-----|--------|--------|
@@ -188,10 +189,12 @@ killed; throughput is recovering.
 | 8446349 | 0 | — | — | — | — | Segfault (signal 11) |
 | 8446350 | — | — | — | — | — | Queued |
 
-### Job Chains
+#### Job Chains
 
 ```
 2B-256N (torch 2.10, LBS=1): 8446337 → 8446338 → 8446339 → 8451750 → 8451752
 2B-512N (torch 2.10, LBS=1): 8446349 → 8446350
 2B-512N (torch 2.13, LBS=2): 8451723 → 8451724 (killed — yeet-env saturated flare)
 ```
+
+</details>
