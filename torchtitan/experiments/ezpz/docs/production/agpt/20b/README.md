@@ -42,12 +42,18 @@ python3 torchtitan/experiments/ezpz/utils/plot_production_wandb.py --overlay 20b
 
 ![20B v2 512N Diagnostics](figures/training_diagnostics_20b_v2_512n.png)
 
-### Progress
+### Progress (chain)
 
-| Job ID | Steps | Loss (start → end) | TPS/GPU | MFU | Status |
-|--------|-------|---------------------|---------|-----|--------|
-| 8460302 | 1–148+ | 12.94 → 6.13 | ~350 | ~17.6% | **Running** (3:42 elapsed at writing) |
-| 8463628 | (cont.) | — | — | — | Held (`afterany:8460302`, 12h continuation) |
+| Job ID | Walltime | Steps | Loss (start → end) | TPS/GPU | MFU | Status |
+|--------|---------:|------:|-------------------:|--------:|----:|--------|
+| 8460302 | 6h | 1–300 | 12.94 → 4.95 | ~355 | ~17.7% | Walltime hit (NODE_FAIL at end). 3 ckpts saved. |
+| 8463628 | 12h | 300+ | (resuming) | — | — | **Running** (auto-resumes from step-300) |
+
+**Latest checkpoint:** step-300 (244 GB on disk per ckpt)
+
+**Cumulative steps:** 300 (more incoming as 8463628 progresses)
+
+**Tokens consumed:** 300 × 12,288 × 8,192 = **30B tokens** (0.6% of 4.67T target)
 
 **Latest checkpoint:** step-100 (244 GB on disk per ckpt)
 
@@ -55,13 +61,14 @@ python3 torchtitan/experiments/ezpz/utils/plot_production_wandb.py --overlay 20b
 
 ---
 
-## v1 — Historical (bf16-tainted, superseded by v2)
+<details>
+<summary><strong>v1 — Historical (bf16-tainted, superseded by v2) — click to expand</strong></summary>
 
 The runs below are kept for the record. They use `--training.dtype=bfloat16`
 and have **frozen RMSNorm weights** — see the warning at the top of this
 file. Don't draw conclusions from these loss curves.
 
-## v1 — 20B @ 256N — SophiaG LR=2.28e-5 (bf16 master, BROKEN)
+### v1 — 20B @ 256N — SophiaG LR=2.28e-5 (bf16 master, BROKEN)
 
 | Field | Value |
 |-------|-------|
@@ -75,22 +82,22 @@ file. Don't draw conclusions from these loss curves.
 | Total tokens | 4.67T |
 | Checkpoint dir | `outputs/checkpoints/agpt-20b-sophiag-olmo-mix-1124-n256-gbs3072` |
 
-### Loss / Throughput / MFU (256N)
+#### Loss / Throughput / MFU (256N)
 
 ![20B v1 256N Training](figures/production_20b_v1_256n.png)
 
-### Diagnostics (grad_norm / lr / max_loss)
+#### Diagnostics (grad_norm / lr / max_loss)
 
 ![20B v1 256N Diagnostics](figures/training_diagnostics_20b_v1_256n.png)
 
-### Tokens vs Wall Clock
+#### Tokens vs Wall Clock
 
 ![20B v1 256N Tokens vs Time](figures/tokens_vs_time_20b_v1_256n.png)
 
 > Diagnostic and tokens-vs-time figures are pulled from W&B by
 > `torchtitan/experiments/ezpz/utils/plot_production_wandb.py`.
 
-### Progress
+#### Progress
 
 | Job ID | Steps | Loss (start → end) | TPS/GPU | MFU | Memory | Status |
 |--------|-------|---------------------|---------|-----|--------|--------|
@@ -112,7 +119,7 @@ copies saturating the flare filesystem. Effective training time was ~8h of the 1
 
 ---
 
-## v1 — 20B @ 512N — SophiaG LR=2.28e-5 (bf16 master, BROKEN)
+### v1 — 20B @ 512N — SophiaG LR=2.28e-5 (bf16 master, BROKEN)
 
 | Field | Value |
 |-------|-------|
@@ -126,11 +133,11 @@ copies saturating the flare filesystem. Effective training time was ~8h of the 1
 | Total tokens | 4.67T |
 | Checkpoint dir | `outputs/checkpoints/agpt-20b-sophiag-olmo-mix-1124-n512-gbs6144` |
 
-### Loss / Throughput / MFU (512N)
+#### Loss / Throughput / MFU (512N)
 
 ![20B v1 512N Training](figures/production_20b_v1_512n.png)
 
-### Progress
+#### Progress
 
 | Job ID | Steps | Loss (start → end) | TPS/GPU | MFU | Memory | Status |
 |--------|-------|---------------------|---------|-----|--------|--------|
@@ -147,10 +154,12 @@ copies saturating the flare filesystem. Effective training time was ~8h of the 1
 **Note:** Very low TPS (41) — compile took most of the 12h walltime.
 512N continuation (8446343) segfaulted on a bad node. 8446344 will retry.
 
-### Job Chains
+#### Job Chains
 
 ```
 20B-256N (torch 2.10, LBS=1): 8446340 → 8446341 → 8446342 → 8451749 → 8451751
 20B-512N (torch 2.10, LBS=1): 8446343 → 8446344
 20B-512N (torch 2.13, LBS=2): 8451725 → 8451726 (killed — yeet-env saturated flare)
 ```
+
+</details>

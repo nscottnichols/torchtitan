@@ -2,7 +2,7 @@
 
 > **Living document** — updated as jobs complete and new runs are submitted.
 >
-> Last updated: 2026-05-01
+> Last updated: 2026-05-03
 
 ## Scaling Performance
 
@@ -27,15 +27,20 @@ for the diagnosis.
 
 ## Active Runs
 
-### Dense (agpt) — v2 (fp32 master)
+### Canonical chains (one per model)
 
-| Run | Model | Nodes | Optimizer | Compile | Steps | Loss | Tokens | Status |
-|-----|-------|------:|-----------|---------|------:|-----:|-------:|--------|
-| [2B-256N](agpt/2b/) | 2B | 256 | SophiaG | off | 2,070 | 3.33 | 104B | NODE_FAIL @ step 2070 (ckpt-2000 saved) |
-| [2B-512N](agpt/2b/) | 2B | 512 | SophiaG | off | 1,387 | 3.59 | 140B | NODE_FAIL; chained continuation queued |
-| [2B-1024N](agpt/2b/) | 2B | 1024 | SophiaG | off | — | — | — | **Queued** (8463182) |
-| [20B-512N](agpt/20b/) | 20B | 512 | SophiaG | off | 148+ | 6.13 | 15B | **Running** (8460302) |
-| [20B-1024N](agpt/20b/) | 20B | 1024 | SophiaG | off | — | — | — | **Queued** (8463183) |
+| Model | Nodes | Cumulative steps | Loss | Tokens | Latest job | Status |
+|-------|------:|-----------------:|-----:|-------:|------------|--------|
+| 2B  | 512 | **5,073** | **2.97** | **510B** (10.9%) | 8463627 | Queued — auto-resumes from step-5000 |
+| 20B | 512 | **300**   | **4.95** | **30B** (0.6%)   | 8463628 | **Running** — auto-resumes from step-300 |
+
+### Other queued jobs (independent ckpt trajectories)
+
+| Job ID | Model | Nodes | Walltime | Status |
+|--------|-------|------:|---------:|--------|
+| 8463182 | 2B | 1024 | 12h | Queued (separate ckpt dir, fresh start) |
+| 8463183 | 20B | 1024 | 12h | Queued (separate ckpt dir, fresh start) |
+| 8463659 | 20B | 256 | 12h | Queued (separate ckpt dir, fresh start) |
 
 ### Dense (agpt) — bf16-tainted (superseded, kept for record)
 
