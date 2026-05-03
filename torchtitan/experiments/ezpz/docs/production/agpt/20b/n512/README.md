@@ -1,6 +1,10 @@
 # Production Training — agpt 20B @ 512 nodes
 
 > **This is the canonical 20B production chain.**
+>
+> **Eval scores:** see [`docs/evals/agpt/20b/`](../../../../evals/agpt/20b/README.md)
+> for the v1-vs-v2 lm-eval comparison. v2 ARC-Easy starting to lift at
+> 30B tokens (0.295 vs v1 flat 0.27); will revisit at higher token counts.
 
 ## v2 — 20B @ 512N — SophiaG LR=2.28e-5 (fp32 master)
 

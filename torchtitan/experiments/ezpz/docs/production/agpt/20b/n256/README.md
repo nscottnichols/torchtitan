@@ -5,6 +5,9 @@
 > [n512 chain](../n512/README.md). Once 8463659 runs and saves
 > checkpoints, this page will gain a v2 section above the historical
 > v1 block.
+>
+> **Eval scores:** see [`docs/evals/agpt/20b/`](../../../../evals/agpt/20b/README.md)
+> for the v1-vs-v2 lm-eval comparison.
 
 <details open>
 <summary><strong>v1 — 20B @ 256N — SophiaG LR=2.28e-5 (bf16 master, BROKEN)</strong></summary>

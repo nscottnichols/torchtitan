@@ -3,6 +3,11 @@
 > **Living document** — updated as new eval results come in.
 >
 > Last updated: 2026-05-03
+>
+> **Training curves:** see [`docs/production/agpt/2b/`](../../../production/agpt/2b/README.md)
+> for loss / throughput / MFU dashboards across all 2B trajectories
+> (v1 256N, v2 256N, v2 512N, v2 1024N), each with its own per-node
+> sub-page.
 
 ## Setup
 

@@ -2,6 +2,10 @@
 
 > **This is the canonical 2B production chain.** The 256N v2 ran once
 > (no continuation chained); 1024N is queued but not yet started.
+>
+> **Eval scores:** see [`docs/evals/agpt/2b/`](../../../../evals/agpt/2b/README.md)
+> for the v1-vs-v2 lm-eval comparison. v2 512N at 503B tokens beats
+> v1 by **+19.8pp** on ARC-Easy and **+15.4pp** on HellaSwag.
 
 ## v2 — 2B @ 512N — SophiaG LR=2.28e-5 (fp32 master)
 

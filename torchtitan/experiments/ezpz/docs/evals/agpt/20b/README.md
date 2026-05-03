@@ -4,15 +4,17 @@
 >
 > Last updated: 2026-05-03
 >
-> **Note:** the eval results below are from the bf16-tainted 20B 256N
-> SophiaG run (steps 100-2,500), where RMSNorm.weight was frozen at 1.0
-> due to sub-ULP master-weight updates (see
+> **Training curves:** see [`docs/production/agpt/20b/`](../../../production/agpt/20b/README.md)
+> for loss / throughput / MFU dashboards (v1 256N + v2 512N).
+>
+> **Note:** the historical v1 results below are from the bf16-tainted
+> 20B 256N SophiaG run (steps 100-2,500), where RMSNorm.weight was
+> frozen at 1.0 due to sub-ULP master-weight updates (see
 > [`docs/guides/training-dtype-bf16-norm-freeze.md`](../../../guides/training-dtype-bf16-norm-freeze.md)).
 > All scores hover near random — this is consistent with the model
 > having no trainable normalization. The fp32-master v2 run
-> (`agpt-20b-v2`, 512N, step 148+ at writing) is the one that should
-> show real benchmark progression, but it's still too early in
-> training to meaningfully eval.
+> (`agpt-20b-v2`, 512N, currently ~step 500) is the one that will show
+> real benchmark progression once token count grows past ~100B.
 
 ## Setup
 

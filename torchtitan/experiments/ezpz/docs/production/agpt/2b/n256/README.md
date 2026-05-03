@@ -1,5 +1,9 @@
 # Production Training — agpt 2B @ 256 nodes
 
+> **Eval scores:** see [`docs/evals/agpt/2b/`](../../../../evals/agpt/2b/README.md)
+> for the v1-vs-v2 lm-eval comparison (covers all 2B trajectories on
+> shared axes).
+
 ## v2 — 2B @ 256N — SophiaG LR=2.28e-5 (fp32 master, **no continuation**)
 
 > Status: ran one job (8459818, 6h, NODE_FAIL after step 2070, 20 ckpts
