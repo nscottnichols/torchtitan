@@ -2,7 +2,7 @@
 
 > **Living document** — updated as new eval results come in.
 >
-> Last updated: 2026-05-01
+> Last updated: 2026-05-03
 >
 > **Note:** the eval results below are from the bf16-tainted 20B 256N
 > SophiaG run (steps 100-2,500), where RMSNorm.weight was frozen at 1.0

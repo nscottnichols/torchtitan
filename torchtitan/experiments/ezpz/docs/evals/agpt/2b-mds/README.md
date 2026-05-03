@@ -7,7 +7,7 @@
 > single trajectory but all resolve via symlinks to the same physical
 > checkpoint dir.
 >
-> Last updated: 2026-04-29
+> Last updated: 2026-05-03
 
 ## Setup
 

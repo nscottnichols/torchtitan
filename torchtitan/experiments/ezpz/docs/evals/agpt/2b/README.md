@@ -2,7 +2,7 @@
 
 > **Living document** — updated as new eval results come in.
 >
-> Last updated: 2026-04-28
+> Last updated: 2026-05-03
 
 ## Setup
 
