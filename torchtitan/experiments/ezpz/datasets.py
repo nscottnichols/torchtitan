@@ -196,10 +196,24 @@ def _validate_dataset_with_fallback(
     # Auto-register: treat the dataset name as a HF hub path.
     # Force dataset_path=None so the registered hub path is used
     # instead of any stale local path from the config (e.g. books.txt).
-    log.info(
-        f"Dataset {dataset_name!r} not in registry — "
-        f"auto-registering as streaming HF dataset"
-    )
+    if dataset_path is not None:
+        # The user explicitly passed both --dataloader.dataset=user/repo
+        # AND --dataloader.dataset-path=/some/local/file. The local path
+        # is silently ignored when streaming from the hub — surface that
+        # so the user can either drop the path arg or pick a different
+        # dataset name.
+        log.warning(
+            f"Dataset {dataset_name!r} is being auto-registered as a "
+            f"streaming HF hub dataset, but --dataloader.dataset-path="
+            f"{dataset_path!r} was also passed. The local path will be "
+            f"IGNORED — drop --dataloader.dataset-path or use a "
+            f"local-file dataset name (e.g. 'blendcorpus') instead."
+        )
+    else:
+        log.info(
+            f"Dataset {dataset_name!r} not in registry — "
+            f"auto-registering as streaming HF dataset"
+        )
     register_hf_dataset(
         name=dataset_name,
         path=dataset_name,
