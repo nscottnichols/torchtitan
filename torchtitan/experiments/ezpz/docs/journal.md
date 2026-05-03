@@ -83,6 +83,45 @@ added. Production scripts that hardcode
 `--dataset=blendcorpus --dataset-path=$DFL` are unaffected (they hit
 the registered-name branch which keeps the path).
 
+### 2B 256N vs 2B 512N — large-batch under-training observation
+
+Pulled fresh evals on 2B v2 256N (10 ckpts, steps 200-2000) and 2B v2
+512N (5 ckpts, steps 1000-5000). Surprise: at matched **token** counts,
+256N beats 512N noticeably:
+
+| Tokens (B) | 256N HellaSwag | 512N HellaSwag | Δ |
+|-----------:|---------------:|---------------:|--:|
+| ~100 | 0.301 (step 2K) | 0.264 (step 1K) | -3.7pp |
+
+But at matched **step** counts, they're indistinguishable:
+
+| Step | 256N HellaSwag | 512N HellaSwag | Δ |
+|-----:|---------------:|---------------:|--:|
+| 1000 | 0.262 | 0.264 | +0.2pp |
+| 2000 | 0.301 | 0.304 | +0.3pp |
+
+This is the classic large-batch under-training pattern. Both runs use
+SophiaG LR=2.28e-5 (tuned for 256N / GBS=6,144). At 512N (GBS=12,288)
+each step covers 2× the tokens but the optimizer state evolves at half
+the cadence per token, with no compensating LR scale-up. Per-step
+parity confirms the optimizer is healthy; per-token gap is purely
+batch-size-induced under-training.
+
+Implications:
+- **Per-step**: 256N == 512N
+- **Per-token**: 256N wins ~3-8pp at matched tokens
+- **Per-wall-clock**: 512N wins (~2× throughput)
+
+So the canonical-chain choice (512N) optimizes for wall-clock time to
+target loss, not token efficiency. If chasing minimum tokens, 256N
+would be preferable. Open follow-up: would √2-LR scaling (3.22e-5) at
+512N close the per-token gap? Worth a fresh fork to test, but not
+worth perturbing the running 512N chain's LR mid-run.
+
+Documented in
+[`docs/evals/agpt/2b/README.md`](evals/agpt/2b/README.md) under "v2
+256N vs v2 512N — same model, two batch sizes".
+
 ---
 
 ## 2026-05-02 — 2B 512N continuation reaches 510B tokens

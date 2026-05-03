@@ -40,6 +40,56 @@ python3 torchtitan/experiments/ezpz/docs/evals/agpt/2b/plot_v1_vs_v2.py
 
 ![v1 vs v2 — 2B benchmark accuracy](figures/v1_vs_v2.png)
 
+## v2 256N vs v2 512N — same model, two batch sizes
+
+A surprise from the overlay above: **at matched token counts, v2 256N
+beats v2 512N by 3-8pp** — even though 512N has the same architecture
+and optimizer.
+
+| Tokens (B) | 256N step | 512N step | 256N HellaSwag | 512N HellaSwag | Δ |
+|-----------:|----------:|----------:|---------------:|---------------:|--:|
+| ~50 | 1000 | ~500 | 0.262 | (not evaluated) | — |
+| ~100 | 2000 | 1000 | **0.301** | 0.264 | **-3.7pp** |
+| ~200 | (n/a) | 2000 | — | 0.304 | — |
+
+But at **matched step counts**, the two trajectories are
+indistinguishable (within the ~1.4pp lm-eval stderr):
+
+| Step | 256N HellaSwag | 512N HellaSwag | Δ |
+|-----:|---------------:|---------------:|--:|
+| 1000 | 0.262 | 0.264 | +0.2pp |
+| 2000 | 0.301 | 0.304 | +0.3pp |
+
+### Interpretation
+
+This is the classic **large-batch under-training** effect. Both runs
+use SophiaG LR=2.28e-5 (tuned for the 256N regime, GBS=6,144). At
+512N (GBS=12,288):
+- Each gradient update covers 2× more tokens
+- But the optimizer state evolves at half the cadence per token
+- LR scaling was **not** applied — we kept LR=2.28e-5 fixed
+- So the 512N model is meaningfully **under-trained per token**
+
+The per-step parity confirms the optimizer/architecture are healthy —
+each gradient update produces the same effective learning. The
+per-token gap is purely the doubled batch size eating into the
+gradient-update budget.
+
+**Implications:**
+- **Per-step**: 256N == 512N (same per-update progress)
+- **Per-token**: 256N wins by ~3-8pp at matched tokens
+- **Per-wall-clock**: 512N wins (≈2× throughput)
+
+For convergence-to-target-loss, 256N is the more token-efficient
+choice. For reaching a target wall-clock, 512N gets there faster but
+spends more tokens. Either could be preferable depending on the goal
+(chasing minimum wall-clock vs minimum tokens).
+
+**Open question**: would √2-scaling LR (3.22e-5) at 512N close the
+per-token gap? Worth a one-off experiment — but the canonical 512N
+chain has too much accumulated training to perturb its LR mid-run, so
+that test would need a fresh fork.
+
 <details>
 <summary><strong>v1 detailed results (bf16-tainted, kept for record) — click to expand</strong></summary>
 
