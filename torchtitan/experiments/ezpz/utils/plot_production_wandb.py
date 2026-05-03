@@ -51,8 +51,8 @@ PROJECT = "aurora_gpt/torchtitan.ezpz.train"
 
 # Production runs identified by step ranges (cross-checked with PBS logs).
 # Listed oldest first so concatenation matches resume order.
-# Each key here drives the figure filename: figures land at
-#   docs/production/agpt/<model>/figures/<scope>_<key>n.png
+# Each key here drives the figure filename + output dir:
+#   docs/production/agpt/<model>/n<num_nodes>/figures/<scope>_<key>n.png
 # So the key MUST encode model + version + node count, e.g. "2b_v1_256",
 # "20b_v2_512". Don't include the trailing "n" — the template adds it.
 #
@@ -480,7 +480,7 @@ def main() -> None:
         "--output-dir",
         type=Path,
         default=None,
-        help="Override output directory (default: docs/production/agpt/<model>/figures/)",
+        help="Override output directory (default: docs/production/agpt/<model>/n<num_nodes>/figures/ for per-trajectory dashboards; docs/production/agpt/<model>/figures/ for overlays)",
     )
     args = parser.parse_args()
 
@@ -522,10 +522,17 @@ def main() -> None:
         cfg = PRODUCTION_RUNS[key]
         # `model` (for color + figure title) defaults to the dict key.
         model_name = cfg.get("model", key)
-        # Output dir comes from the dict key so v2 runs land in the
-        # parent model folder, not a separate "2b_v2" tree.
+        # Output dir is keyed on (model, node count) — per-trajectory
+        # figures land at production/agpt/<model>/n<nodes>/figures/.
+        # The model-level overlay (handled in the --overlay branch
+        # above) stays in production/agpt/<model>/figures/.
         out_dir = args.output_dir or (
-            DOCS_BASE / "production" / "agpt" / model_name / "figures"
+            DOCS_BASE
+            / "production"
+            / "agpt"
+            / model_name
+            / f"n{cfg['num_nodes']}"
+            / "figures"
         )
 
         print(f"\n=== Pulling {key} ({len(cfg['run_ids'])} runs) ===")

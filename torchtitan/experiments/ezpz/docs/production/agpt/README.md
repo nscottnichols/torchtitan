@@ -78,27 +78,27 @@ python3 torchtitan/experiments/ezpz/utils/plot_production_wandb.py --overlay 20b
 
 ### 2B 512N — Loss / Throughput / MFU
 
-![2B v2 512N Training](2b/figures/production_2b_v2_512n.png)
+![2B v2 512N Training](2b/n512/figures/production_2b_v2_512n.png)
 
 ### 2B 512N — Diagnostics
 
-![2B v2 512N Diagnostics](2b/figures/training_diagnostics_2b_v2_512n.png)
+![2B v2 512N Diagnostics](2b/n512/figures/training_diagnostics_2b_v2_512n.png)
 
 ### 2B 512N — Tokens vs Wall Clock
 
-![2B v2 512N Tokens vs Time](2b/figures/tokens_vs_time_2b_v2_512n.png)
+![2B v2 512N Tokens vs Time](2b/n512/figures/tokens_vs_time_2b_v2_512n.png)
 
 ### 20B 512N — Loss / Throughput / MFU
 
-![20B v2 512N Training](20b/figures/production_20b_v2_512n.png)
+![20B v2 512N Training](20b/n512/figures/production_20b_v2_512n.png)
 
 ### 20B 512N — Diagnostics
 
-![20B v2 512N Diagnostics](20b/figures/training_diagnostics_20b_v2_512n.png)
+![20B v2 512N Diagnostics](20b/n512/figures/training_diagnostics_20b_v2_512n.png)
 
 ### 20B 512N — Tokens vs Wall Clock
 
-![20B v2 512N Tokens vs Time](20b/figures/tokens_vs_time_20b_v2_512n.png)
+![20B v2 512N Tokens vs Time](20b/n512/figures/tokens_vs_time_20b_v2_512n.png)
 
 <details>
 <summary><strong>2B 256N v2 (one-shot, no continuation) — click to expand</strong></summary>
@@ -107,6 +107,6 @@ This is a separate ckpt trajectory at 256 nodes that ran once
 (8459818, 6h, NODE_FAIL after step 2070). It is *not* part of the
 canonical 512N chain. Last checkpoint: step-2000.
 
-![2B v2 256N Diagnostics](2b/figures/training_diagnostics_2b_v2_256n.png)
+![2B v2 256N Diagnostics](2b/n256/figures/training_diagnostics_2b_v2_256n.png)
 
 </details>
