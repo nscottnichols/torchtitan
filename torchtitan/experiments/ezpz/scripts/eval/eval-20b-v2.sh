@@ -47,7 +47,7 @@ cd "${PBS_O_WORKDIR:-/lus/flare/projects/AuroraGPT/foremans/projects/saforem2/to
 V2_REPO="/flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz"
 V2_CKPT_NAME="agpt-20b-sophiag-olmo-mix-1124-n512-gbs12288"
 
-STEPS="${STEPS:-100 200}"
+STEPS="${STEPS:-100 200 300}"
 TASKS="${TASKS:-hellaswag,arc_easy,arc_challenge,winogrande}"
 
 for step in $STEPS; do
