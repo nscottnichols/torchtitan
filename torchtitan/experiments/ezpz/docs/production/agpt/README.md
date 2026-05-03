@@ -45,6 +45,16 @@ extensions.
 
 **80B**: not yet restarted in v2.
 
+## Reference: pre-torchtitan MDS run (2B SophiaG, ~7.77T tokens)
+
+The Megatron-DeepSpeed AuroraGPT-2B SophiaG continuation predates the
+torchtitan migration but is the natural "what does a healthy 2B
+SophiaG trajectory look like?" baseline. Training curves (loss /
+grad_norm / TFLOPS / TPS) and eval scores live at:
+
+- [`production/agpt/2b-mds/`](2b-mds/README.md) — training curves
+- [`evals/agpt/2b-mds/`](../../evals/agpt/2b-mds/README.md) — lm-eval scores
+
 ## v1 (bf16-master, broken) vs v2 (fp32-master, current)
 
 The original 2026-04-{14..29} runs were trained with

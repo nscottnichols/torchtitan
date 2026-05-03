@@ -7,6 +7,9 @@
 > single trajectory but all resolve via symlinks to the same physical
 > checkpoint dir.
 >
+> Training-side plots (loss / grad_norm / TFLOPS / TPS) live at
+> [`docs/production/agpt/2b-mds/`](../../../production/agpt/2b-mds/README.md).
+>
 > Last updated: 2026-05-03
 
 ## Setup
@@ -37,42 +40,6 @@ the lm-eval sweep ran each of the 28 steps three times — **84 result
 files = 28 unique steps × 3 measurement replicates**. The replicates
 differ at the ~1pp level because XPU lm-eval is not bitwise
 deterministic; we average them.
-
-## Training Curves
-
-Pulled from W&B (`aurora_gpt/AuroraGPT`, 113 SophiaG continuation runs
-matching the production config: nl=12, hs=2048, seq=8192, gbs=6144) and
-stitched by iteration. The first 1,000 iterations are dropped from every
-plot to skip the warm-up transient. Reproduce with
-`loss_data/pull_wandb_loss.py` then `loss_data/plot_loss.py`.
-
-### Loss
-
-| | |
-|---|---|
-| ![Train](figures/train_loss.png) | ![Validation](figures/val_loss.png) |
-
-![Train + Validation](figures/train_val_loss.png)
-
-- Two distinct downward steps in val loss line up with the data-mix
-  transitions:
-  - **iter ≈ 95K**: ntok4673B → ntok7064B (val ~2.65 → ~2.45)
-  - **iter ≈ 134K**: ntok7064B → ntok7770B (val ~2.40 → ~2.05)
-
-### Optimization & Throughput
-
-| | |
-|---|---|
-| ![Gradient Norm](figures/grad_norm.png) | ![TFLOPS](figures/tflops.png) |
-
-![TPS / GPU](figures/tps.png)
-
-- **Gradient norm** plotted on a log y-axis; SophiaG's hessian-clipped
-  updates keep grad-norm in a tight band after warm-up, with brief
-  spikes around each data-mix transition.
-- **TFLOP/s** and **TPS / GPU** are per-replica throughput as logged by
-  Megatron-DeepSpeed; both are dominated by node-level variance (PBS
-  reschedules across slightly different node counts and topologies).
 
 ## Eval Results (mean across 3 replicates)
 
@@ -112,11 +79,12 @@ plot to skip the warm-up transient. Reproduce with
 ## Observations
 
 - **All four tasks show meaningful learning**, in contrast to our DCP
-  eval pipeline (steps 1K–18K of the torchtitan-trained agpt 2B)
-  which produced near-random scores at every checkpoint — strongly
-  suggesting an embedding-loading bug in the DCP→HF converter (see
-  `agpt/2b/README.md` caveats). The MDS path uses a separate
-  converter (`eval/mds_to_hf.py`) that loads embeddings correctly.
+  eval pipeline (steps 1K–18K of the torchtitan-trained agpt 2B v1)
+  which produced near-random scores at every checkpoint. The MDS
+  trajectory uses a separate converter
+  (`eval/mds_to_hf.py`) and was *not* affected by the bf16-master
+  RMSNorm-freeze bug — see
+  [`docs/guides/training-dtype-bf16-norm-freeze.md`](../../../guides/training-dtype-bf16-norm-freeze.md).
 
 - **HellaSwag** has the steepest early ramp: 0.36 → 0.59 by step 60K,
   then plateaus around 0.59. Strong signal for commonsense narrative
