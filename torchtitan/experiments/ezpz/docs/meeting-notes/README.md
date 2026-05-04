@@ -1,12 +1,13 @@
 # Meeting Notes
 
 Pre-meeting agenda items, discussion summaries, and action-item
-tracking for recurring AuroraGPT meetings. Each entry is a single
-file named `YYYY-MM-DD-<meeting>.md` so the date is unambiguous and
-the directory sorts chronologically.
+tracking. Layout follows the `journal.md` convention: **one file per
+recurring meeting**, with **`## YYYY-MM-DD` per entry inside the
+file**, most recent first. Searching across the history of one
+meeting type is then `Ctrl-F` rather than walking a directory.
 
 ## Index
 
-| Date | Meeting | Notes |
-|---|---|---|
-| 2026-05-04 | Internal AuroraGPT Sync | [notes](2026-05-04-internal-aurorgpt-sync.md) |
+| Meeting | File |
+|---|---|
+| Internal AuroraGPT Sync | [`internal-aurorgpt-sync.md`](internal-aurorgpt-sync.md) |
