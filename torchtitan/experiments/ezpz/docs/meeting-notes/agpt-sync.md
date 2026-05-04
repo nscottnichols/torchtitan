@@ -19,8 +19,7 @@
 - **Fix filed:**
   [pytorch/torchtitan#3204](https://github.com/pytorch/torchtitan/pull/3204)
   — mergeable, all 3 Meta CI checks passing, 8-GPU CI workflow
-  awaiting maintainer approval. Anyone with upstream-maintainer
-  contacts who can ping for review?
+  awaiting maintainer approval.
 - **Local workaround landed in ezpz:**
   [`a24ed2e1`](https://github.com/saforem2/torchtitan/commit/a24ed2e1)
   (trainer-side) and
@@ -85,9 +84,7 @@
 - Initial repro attempt (toy version that does NOT fire — needs the
   new sharding API):
   [`docs/upstream-issues/repro_devicemesh_in_saved_tensors.py`](../upstream-issues/repro_devicemesh_in_saved_tensors.py).
-- Anyone willing to take a stab at building the LocalMapConfig-based
-  minimal repro now that we've narrowed it? Otherwise we keep the
-  workaround (`compile=OFF` for 80B, eats throughput).
+- Workaround in the meantime: `compile=OFF` for 80B (eats throughput).
 
 ### Open work I'm holding
 
