@@ -10,7 +10,7 @@
 | Trajectory | Status | Cumulative steps | Loss | Tokens |
 |------------|--------|-----------------:|-----:|-------:|
 | [v1 256N](n256/README.md) (bf16-tainted) | Historical | 2,562 | 4.83 | 64.5B |
-| [**v2 512N**](n512/README.md) (canonical chain) | **Running** | ~500 | ~4.0 | ~50B |
+| [**v2 512N**](n512/README.md) (canonical chain) | **Running** | **862** | **3.47** | **87B** (1.9%) |
 | [v2 1024N](n1024/README.md) | Queued, no data yet | — | — | — |
 | 20B v2 256N | Queued (8463659), no data yet | — | — | — |
 
@@ -39,6 +39,7 @@ python3 torchtitan/experiments/ezpz/utils/plot_production_wandb.py --overlay 20b
 
 See [`docs/evals/agpt/20b/`](../../../evals/agpt/20b/README.md) for
 the v1-vs-v2 lm-eval comparison. Currently 3 v2 ckpts evaluated
-(steps 100/200/300, 10-30B tokens) — ARC-Easy starting to lift
+(steps 100/200/300, 10-30B tokens; eval for steps 400-800 in flight as
+8467370) — ARC-Easy starting to lift
 (0.271 → 0.289 → 0.295) above v1's flat ~0.27 baseline. Other tasks
 still in noise; will revisit at higher token counts.

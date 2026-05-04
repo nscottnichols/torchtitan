@@ -37,14 +37,14 @@
 | Job ID | Walltime | Steps | Loss (start → end) | TPS/GPU | MFU | Status |
 |--------|---------:|------:|-------------------:|--------:|----:|--------|
 | 8460302 | 6h | 1–300 | 12.94 → 4.95 | ~355 | ~17.7% | Walltime hit (NODE_FAIL at end). 3 ckpts saved. |
-| 8463628 | 12h | 200–500+ | 5.62 → ~4.0 | ~358 | ~17.9% | **Running** (resumed from step-200; step-300/400/500 ckpts saved) |
+| 8463628 | 12h | 200–862+ | 5.62 → **3.47** | ~355 | ~17.8% | **Running** (~12h elapsed, walltime imminent; step-100..800 ckpts saved) |
 | 8466848 | 12h | (cont.) | — | — | — | Held (`afterany:8463628`) |
 
-**Latest checkpoint:** step-400 (244 GB on disk per ckpt)
+**Latest checkpoint:** step-800 (244 GB on disk per ckpt)
 
-**Cumulative steps:** ~500 (more incoming as 8463628 progresses)
+**Cumulative steps:** ~862 (more incoming as 8463628 finishes its walltime; 8466848 then auto-releases)
 
-**Tokens consumed:** ~500 × 12,288 × 8,192 = **~50B tokens** (~1.1% of 4.67T target)
+**Tokens consumed:** ~862 × 12,288 × 8,192 = **~87B tokens** (~1.9% of 4.67T target)
 
 ---
 

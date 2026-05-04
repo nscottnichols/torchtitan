@@ -96,7 +96,9 @@ PRODUCTION_RUNS: dict[str, dict] = {
         "model": "2b",
     },
     "20b_v2_512": {
-        "run_ids": ["9tsyx5us"],
+        # 9tsyx5us = 8460302 (initial 6h, step 0->300)
+        # ej3zy5cq = 8463628 (12h chain1, resumed step 200, currently running)
+        "run_ids": ["9tsyx5us", "ej3zy5cq"],
         "num_nodes": 512,
         "model": "20b",
     },

@@ -31,9 +31,10 @@ extensions.
 | Job ID | Walltime | Steps | Loss | Status |
 |--------|---------:|------:|-----:|--------|
 | 8460302 | 6h | 1–300 | 12.94 → 4.95 | Done (NODE_FAIL @ end). 3 ckpts saved. |
-| 8463628 | 12h | 300+ | (resuming) | **Running** (auto-resumes from step-300) |
+| 8463628 | 12h | 200–862+ | 5.62 → **3.47** | **Running** (~12h elapsed, walltime imminent; step-100..800 ckpts saved) |
+| 8466848 | 12h | (cont.) | — | Held (`afterany:8463628`) |
 
-**Latest cumulative**: step **300** · loss **4.95** · **30B tokens** (0.6% of 4.67T target).
+**Latest cumulative**: step **862** · loss **3.47** · **87B tokens** (1.9% of 4.67T target).
 
 ## Other queued jobs (independent ckpt trajectories, NOT canonical chain)
 
