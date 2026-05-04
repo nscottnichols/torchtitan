@@ -6,12 +6,15 @@
 
 ## v2 — 20B @ 256N — SophiaG LR=2.28e-5 (fp32 master)
 
-> Status: 8463659 currently **running** at step 363 (loss 4.60).
-> Throughput has been bouncing between 21 and 410 TPS depending on
-> concurrent flare bandwidth — when the filesystem is uncontested the
-> run hits ~20% MFU; under contention (eval ckpt I/O, other yeet-env
-> jobs) it drops to ~1% MFU. Independent trajectory from the canonical
-> 512N chain ([n512/](../n512/README.md)) — different ckpt dir
+> Status: 8463659 ran for **9h walltime** then hit **NODE_FAIL** after
+> step 364 (`shepherd died from signal 9` on node `x4406c6s7b0n0`,
+> exit -20 — same recurring Aurora bad-node failure mode as 8459818
+> and 8460301). step-300 ckpt saved cleanly; resumable. Throughput
+> bounced between 21 and 410 TPS depending on concurrent flare
+> bandwidth — when uncontested the run hit ~20% MFU; under contention
+> (eval ckpt I/O, other yeet-env jobs) it dropped to ~1% MFU.
+> Independent trajectory from the canonical 512N chain
+> ([n512/](../n512/README.md)) — different ckpt dir
 > (`gbs6144` vs `gbs12288`), starts fresh from step 0. Useful as a
 > per-token comparator at the same optimizer state.
 
@@ -45,11 +48,11 @@
 
 | Job ID | Walltime | Steps | Loss (start → end) | TPS/GPU | MFU | Status |
 |--------|---------:|------:|-------------------:|--------:|----:|--------|
-| 8463659 | 12h | 1–363+ | 12.96 → **4.60** | 21-410 (variable) | 1-20% (variable) | **Running** (~9h elapsed of 12h walltime; step-100/200/300 ckpts saved) |
+| 8463659 | 12h | 1–364 | 12.96 → **4.61** | 21-410 (variable) | 1-20% (variable) | **NODE_FAIL** after step 364 (`shepherd died from signal 9` on `x4406c6s7b0n0`, exit -20). step-100/200/300 ckpts saved. |
 
 **Latest checkpoint:** step-300
 
-**Tokens consumed:** 363 × 6,144 × 8,192 = **18.3B tokens** (0.39% of 4.67T target)
+**Tokens consumed:** 364 × 6,144 × 8,192 = **18.3B tokens** (0.39% of 4.67T target)
 
 **Logs:**
 

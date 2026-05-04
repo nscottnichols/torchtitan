@@ -12,7 +12,7 @@
 | [v1 256N](n256/README.md) (bf16-tainted) | Historical | 2,562 | 4.83 | 64.5B |
 | [**v2 512N**](n512/README.md) (canonical chain) | Walltime hit @ step 863 (loss 3.46); 8466848 queued for resume | **863** | **3.46** | **87B** (1.9%) |
 | [v2 1024N](n1024/README.md) | Queued, no data yet | — | — | — |
-| [20B v2 256N](n256/README.md) (8463659) | **Running** at step 363+, fresh start (separate ckpt dir n256-gbs6144) | 363 | 4.60 | 18B |
+| [20B v2 256N](n256/README.md) (8463659) | **NODE_FAIL** after step 364 (no continuation chained) | 364 | 4.61 | 18B |
 
 ## v1 vs v2 — overlay
 

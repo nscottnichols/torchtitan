@@ -40,7 +40,7 @@ for the diagnosis.
 |--------|-------|------:|---------:|--------|
 | 8463182 | 2B | 1024 | 12h | **Crashed @ startup (211s, std::bad_alloc)** |
 | 8463183 | 20B | 1024 | 12h | **Crashed @ startup (211s, SIGSEGV)** |
-| 8463659 | 20B | 256 | 12h | **Running** (step 363, loss 4.60) |
+| 8463659 | 20B | 256 | 12h | **NODE_FAIL** after step 364 (loss 4.61); step-300 ckpt saved |
 
 ### Dense (agpt) — bf16-tainted (superseded, kept for record)
 
