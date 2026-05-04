@@ -499,6 +499,21 @@ agpt_configs = {
             8192, multiple_of=1024, ffn_dim_multiplier=1.3
         ),
     ),
+    # Same per-layer shape as 80B (dim=9216, 72 heads, 12 kv heads,
+    # hidden_dim=25600) but only 48 layers. ~50B params total.
+    # Distinct from "50B" (dim=8192) — this one keeps the 80B-family
+    # head pattern (n_kv_heads=12) so it shares the TP=2 sharding plan.
+    # Use as a smaller compile target that still exercises the
+    # compile+AC+TP=2 path that the dense 80B configs depend on.
+    "50B_wide": _build_agpt_config(
+        dim=9216,
+        n_layers=48,
+        n_heads=72,
+        n_kv_heads=12,
+        rope_theta=500000,
+        vocab_size=256128,
+        hidden_dim=25600,
+    ),
     # Aurora-native ~80B configs: n_kv_heads=12, n_heads divisible by 12
     # so TP can be any factor of 12 (2, 3, 4, 6, 12).
     #
@@ -565,6 +580,7 @@ agpt_configs["8b"] = agpt_configs["8B"]
 agpt_configs["20b"] = agpt_configs["20B"]
 agpt_configs["20b_flex_attn"] = agpt_configs["20B_flex_attn"]
 agpt_configs["50b"] = agpt_configs["50B"]
+agpt_configs["50b_wide"] = agpt_configs["50B_wide"]
 agpt_configs["80b"] = agpt_configs["80B"]
 agpt_configs["80b_wide"] = agpt_configs["80B_wide"]
 agpt_configs["80b_deep"] = agpt_configs["80B_deep"]

@@ -290,6 +290,14 @@ def agpt_50b() -> FaultTolerantTrainer.Config:
     return agpt("50b")
 
 
+def ezpz_agpt_50b_wide() -> FaultTolerantTrainer.Config:
+    return agpt("50B_wide", tensor_parallel_degree=2)
+
+
+def agpt_50b_wide() -> FaultTolerantTrainer.Config:
+    return agpt("50B_wide", tensor_parallel_degree=2)
+
+
 def ezpz_agpt_80b() -> FaultTolerantTrainer.Config:
     return agpt("80B", tensor_parallel_degree=2)
 
