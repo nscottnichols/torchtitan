@@ -6,6 +6,35 @@
 
 ## 2026-05-04
 
+### bf16-master RMSNorm-freeze fix is producing real downstream gains
+
+Quick recap for context. All v1 production runs (2B / 20B / 80B) had
+`training.dtype = bfloat16`, which kept the master parameter copy in
+bf16. RMSNorm.weight initializes to 1.0; the bf16 ULP at 1.0 is
+~7.8e-3 and per-step optimizer updates for those parameters are ~1.6e-5,
+so every update rounded to zero and **norm weights never moved from
+1.0 for the entire run**. Other parameters (linears, embeddings)
+initialize at much smaller scales and updated fine, so training loss
+curves looked plausible — the bug only became visible at eval time.
+
+Default flipped to `float32` on 2026-04-30 and **v2 production was
+restarted from scratch** rather than continuing from the bf16-tainted
+checkpoints. The v1-vs-v2 lm-eval comparison is the smoking gun:
+
+- 2B ARC-Easy climbed **0.277 → 0.429** over 100B tokens on v2,
+  vs v1's flat ~0.27 across **450B** tokens.
+- **+19.8pp ARC-Easy / +15.4pp HellaSwag at 503B tokens** vs v1's
+  flat baseline.
+- v1's flat trajectory across 450B+ tokens is the qualitative
+  signature of the bug — a model with frozen normalization cannot
+  improve on what lm-eval measures, no matter how much data it sees.
+- 2B eval comparison:
+  [`docs/evals/agpt/2b/`](../evals/agpt/2b/README.md);
+  20B eval comparison:
+  [`docs/evals/agpt/20b/`](../evals/agpt/20b/README.md);
+  full diagnosis + cross-linked evidence:
+  [`docs/guides/training-dtype-bf16-norm-freeze.md`](../guides/training-dtype-bf16-norm-freeze.md).
+
 ### Production status
 
 - **2B 512N canonical chain** (`8460301 → 8463626 → 8463627`):
@@ -27,20 +56,6 @@
   Are these recurring `signal 9` crashes being tracked anywhere?
   They've now killed three long-walltime jobs across three different
   nodes — worth raising with ALCF support if not.
-- **v1 vs v2 smoking gun (validates the bf16-master RMSNorm-freeze
-  fix):**
-  - 2B ARC-Easy climbed **0.277 → 0.429** over 100B tokens on v2,
-    vs v1's flat ~0.27 across 450B tokens.
-  - **+19.8pp ARC-Easy / +15.4pp HellaSwag at 503B tokens** vs v1's
-    flat baseline.
-  - 2B eval comparison:
-    [`docs/evals/agpt/2b/`](../evals/agpt/2b/README.md);
-    20B eval comparison:
-    [`docs/evals/agpt/20b/`](../evals/agpt/20b/README.md).
-  - Restart-from-scratch was the right call. See
-    [`docs/guides/training-dtype-bf16-norm-freeze.md`](../guides/training-dtype-bf16-norm-freeze.md)
-    for the cross-linked evidence (training-loss overlays + lm-eval
-    figures inline).
 
 ### 80B blocker
 
