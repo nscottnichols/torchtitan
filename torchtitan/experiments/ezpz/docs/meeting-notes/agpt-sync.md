@@ -6,32 +6,6 @@
 
 ## 2026-05-04
 
-### TP loss-reporting bug — every TP > 1 dashboard is wrong since 2026-04-27
-
-- Upstream `_dist_reduce` change ([`pytorch/torchtitan@1786292d`](https://github.com/pytorch/torchtitan/commit/1786292d))
-  silently drops the cross-batch `all_reduce` when `loss` is a DTensor
-  on a mesh orthogonal to `loss_mesh`.
-- **All TP > 1 W&B loss curves are under-reported by `dp_world_size`.**
-  For our 80B production at 256N TP=2 that means the logged loss is
-  **1536× smaller** than the truth.
-- Gradients and optimizer steps are unaffected — the actual model
-  training is fine, only the printed/logged number is wrong.
-- **Fix filed:**
-  [pytorch/torchtitan#3204](https://github.com/pytorch/torchtitan/pull/3204)
-  — mergeable, all 3 Meta CI checks passing, 8-GPU CI workflow
-  awaiting maintainer approval.
-- **Local workaround landed in ezpz:**
-  [`a24ed2e1`](https://github.com/saforem2/torchtitan/commit/a24ed2e1)
-  (trainer-side) and
-  [`a0b9b13d`](https://github.com/saforem2/torchtitan/commit/a0b9b13d)
-  (new `EzpzValidator` subclass + blendcorpus validation wiring).
-  Production runs continuing forward get correct numbers from the
-  next checkpoint.
-- Full diagnosis:
-  [`docs/guides/loss-reporting-tp-dist-reduce.md`](../guides/loss-reporting-tp-dist-reduce.md).
-  Upstream issue notes:
-  [`docs/upstream-issues/dist_reduce_dtensor_skip.md`](../upstream-issues/dist_reduce_dtensor_skip.md).
-
 ### Production status
 
 - **2B 512N canonical chain** (`8460301 → 8463626 → 8463627`):
@@ -90,13 +64,32 @@
 
 - **Validation loss wiring:** blendcorpus's existing val split (5%
   slice) is now plumbed through `EzpzValidator` (subclass that also
-  fixes the TP loss-reporting bug). Default `enable=False` so
-  production isn't disturbed. Smoke test not yet done. Do we want
-  held-out NLL on production runs, or are downstream lm-eval scores
-  at checkpoint cadence the right signal?
+  fixes the TP loss-reporting bug — see "Other notes" below). Default
+  `enable=False` so production isn't disturbed. Smoke test not yet
+  done. Do we want held-out NLL on production runs, or are downstream
+  lm-eval scores at checkpoint cadence the right signal?
 - **80B production** — still has open issues from prior sessions
   (LR=1e-6 stable but bad-node Gloo timeout crash at step 51).
   Worth flagging if 80B production is on the agenda.
+
+### Other notes
+
+- **TP loss-reporting bug found, fix filed upstream + locally
+  workaround.** Upstream `_dist_reduce` change
+  ([`pytorch/torchtitan@1786292d`](https://github.com/pytorch/torchtitan/commit/1786292d),
+  2026-04-27) skips the cross-batch `all_reduce` when `loss` is a
+  DTensor on a mesh orthogonal to `loss_mesh`, so reported loss on
+  any TP > 1 run is `true / dp_world_size`. **No current production
+  runs are TP > 1**, so no live dashboards are affected — but if/when
+  we restart 80B production at TP=2, the historical 80B v1 W&B traces
+  show `loss / 1536`. Gradients/optimizer steps were unaffected; only
+  the printed value was wrong. Fix filed at
+  [pytorch/torchtitan#3204](https://github.com/pytorch/torchtitan/pull/3204)
+  (mergeable, awaiting maintainer review). Local ezpz workaround in
+  [`a24ed2e1`](https://github.com/saforem2/torchtitan/commit/a24ed2e1)
+  + [`a0b9b13d`](https://github.com/saforem2/torchtitan/commit/a0b9b13d).
+  Full diagnosis:
+  [`docs/guides/loss-reporting-tp-dist-reduce.md`](../guides/loss-reporting-tp-dist-reduce.md).
 
 ### Action items
 
