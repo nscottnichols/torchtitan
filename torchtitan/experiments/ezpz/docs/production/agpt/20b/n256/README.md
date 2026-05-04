@@ -20,6 +20,7 @@ Don't draw conclusions from these loss curves.
 | Field | Value |
 |-------|-------|
 | Model | agpt_20b (20.7B params) |
+| Submit script | [`submit/aurora/submit_agpt_20b.sh`](../../../../../submit/aurora/submit_agpt_20b.sh) (v1 torch 2.10 layout) |
 | Nodes / GPUs | 256 / 3,072 |
 | Parallelism | TP=1, FSDP=3072 |
 | Compile | on |

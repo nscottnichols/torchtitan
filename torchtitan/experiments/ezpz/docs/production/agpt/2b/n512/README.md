@@ -12,6 +12,7 @@
 | Field | Value |
 |-------|-------|
 | Clone | `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/` |
+| Submit script | [`scripts/submit_agpt_2b_aurora_venv.sh`](../../../../../scripts/submit_agpt_2b_aurora_venv.sh) (one script handles all v2 node counts via env vars) |
 | Stack | torch 2.13 venv (yeet-env tarball mode) |
 | Compile | off |
 | GBS | 12,288 (LBS=2) |
@@ -60,6 +61,7 @@ Don't draw conclusions from these loss curves.
 | Field | Value |
 |-------|-------|
 | Model | agpt_2b (1.99B params) |
+| Submit script | [`submit/aurora/submit_agpt_2b_n512.sh`](../../../../../submit/aurora/submit_agpt_2b_n512.sh) (v1 torch 2.10 layout) |
 | Nodes / GPUs | 512 / 6,144 |
 | Parallelism | TP=1, FSDP=6144 |
 | Compile | **off** (OOM at 512N) |

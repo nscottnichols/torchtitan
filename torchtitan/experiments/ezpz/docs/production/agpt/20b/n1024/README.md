@@ -7,6 +7,7 @@
 | Field | Value |
 |-------|-------|
 | Clone | `/flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/` |
+| Submit script | [`scripts/submit_agpt_20b_aurora_venv.sh`](../../../../../scripts/submit_agpt_20b_aurora_venv.sh) (one script handles all v2 node counts via env vars) |
 | Stack | torch 2.13 venv (yeet-env tarball mode) |
 | Compile | off |
 | GBS | 24,576 (LBS=2 × 1024 nodes × 12 GPUs) |
