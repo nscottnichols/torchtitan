@@ -166,6 +166,39 @@ For more detail (full sweep, plots, methodology) see the
    # ezpz yeet              # slower at scale
    ```
 
+   <details closed><summary>Output</summary>
+
+   ```bash
+   #[05/04/26,09:08:42][x4302c2s3b0n0][~/a/f/p/s/torchtitan-ezpz][ezpz][?]
+   ; ezpz yeet .venv.tar.gz
+   [2026-05-04 09:08:53][I][utils/yeet_env:331:_maybe_apply_hsn_suffix] HSN interface available on 2/2 nodes (-hsn0 suffix)
+   [2026-05-04 09:08:53][I][utils/yeet_env:1013:run] Source: /lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz/.venv.tar.gz (2.7G)
+   [2026-05-04 09:08:53][I][utils/yeet_env:1014:run] Target: /tmp/.venv/ on 2 node(s)
+   [2026-05-04 09:08:53][I][utils/yeet_env:1016:run]   local:  x4302c2s3b0n0 (rsync to /tmp/.venv/)
+   [2026-05-04 09:08:53][I][utils/yeet_env:1019:run]   remote: x4302c2s4b0n0-hsn0
+   [2026-05-04 09:08:53][I][utils/yeet_env:1054:run] Syncing (2 nodes)...
+
+       ✓ x4302c2s3b0n0 (local, tar.gz (pre-built)) — 48.5s
+       ✓ x4302c2s4b0n0-hsn0 — 20.1s
+   [2026-05-04 09:10:02][I][utils/yeet_env:1334:run] Done in 68.9s
+
+   To use this environment:
+     deactivate 2>/dev/null
+     source /tmp/.venv/bin/activate
+
+   Then launch your training (from a shared filesystem path):
+     cd /path/to/your/project
+     ezpz launch python3 -m your_app.train
+
+   Note: /tmp is node-local. Make sure your working directory
+   is on a shared filesystem (e.g. Lustre) before launching,
+   so all ranks can access data and outputs.
+   [2026-05-04-091002] Command: ezpz yeet .venv.tar.gz
+   took: 1 min. 14 s.
+   ```
+
+   </details>
+
 1. Deactivate the _current_ `.venv` and activate the one we just created at
    `/tmp/.venv/`:
 
