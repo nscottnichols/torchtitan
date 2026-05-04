@@ -28,7 +28,7 @@
 1. Create venv:
 
    ```bash
-   uv venv --python=3.14
+   uv venv --relocatable --no-cache --link-mode=copy --python=3.14
    source .venv/bin/activate
    ```
 
@@ -64,13 +64,14 @@
 1. Run training:
 
    ```bash
-   FLAVOR=agpt
-   CONFIG=debugmodel
+   MODULE=ezpz.agpt
+   CONFIG=agpt_2b
    ezpz launch python3 -m torchtitan.experiments.ezpz.train \
-       --module="ezpz.${FLAVOR}" \
-       --config="${FLAVOR}_${CONFIG}" \
+       --module="${MODULE}" \
+       --config="${CONFIG}" \
+       --training.steps=10 \
        --checkpoint.no-enable \
-       --training.steps=10
+       --training.local-batch-size=2
    ```
 
 ## Running at Large Scale (> 512 nodes)
@@ -95,26 +96,28 @@ roughly `O(log N)` time instead of saturating one NIC.
 
 ### Measured scaling on Aurora (8 → 4096 nodes)
 
-
-| Nodes | yeet (s) | First-step (s) | Per-node (ms) |
-| ----: | -------: | -------------: | ------------: |
-|     8 |     69.7 |           29.3 |         8,712 |
-|    64 |     91.2 |           34.6 |         1,425 |
-|   512 |    174.5 |           44.5 |           341 |
-|  1024 |    255.4 |           60.8 |           249 |
-|  2048 |    421.4 |           94.8 |           206 |
-|  4096 |    750.6 |          194.0 |           183 |
-
+| Nodes | yeet (s) | Per-node (ms) |
+| ----: | -------: | ------------: |
+|     8 |     69.7 |         8,712 |
+|    16 |     89.7 |         5,606 |
+|    32 |     89.2 |         2,788 |
+|    64 |     91.2 |         1,425 |
+|   128 |    110.4 |           862 |
+|   256 |    132.9 |           519 |
+|   512 |    174.5 |           341 |
+|  1024 |    255.4 |           249 |
+|  2048 |    421.4 |           206 |
+|  4096 |    750.6 |           183 |
 
 Two regimes:
 
-- < 128 nodes the cost is dominated by the one-time local extract (~70-91 s
+- **< 128 nodes** the cost is dominated by the one-time local extract (~70-91 s
   flat)
-- ≥ 128 nodes the broadcast tree depth and per-leaf contention dominate, with
-  each 2× in nodes adding ~1.5-1.8× wall-clock.
+- **≥ 128 nodes** the broadcast tree depth and per-leaf contention dominate,
+  with each 2× in nodes adding ~1.5-1.8× wall-clock.
 
 Even at full-Aurora 4096-node scale the pre-launch overhead is under 13 minutes,
-versus the 1-2 hours the per-file rsync mode was projected to take.
+versus the 1--2 hours the per-file `rsync` mode was projected to take.
 
 For more detail (full sweep, plots, methodology) see the
 [yeet CLI docs](https://ezpz.cool/cli/yeet/) and the
@@ -126,6 +129,7 @@ For more detail (full sweep, plots, methodology) see the
 > If you already built a tarball with `ezpz tar-env`, pass it explicitly —
 > tarball broadcast is ~10× faster than per-file `rsync` at scale because the
 > Lustre side becomes one sequential read instead of millions of `stat()`s.
+>
 > Plain `ezpz yeet` will print a hint when it sees a same-named `.tar.gz`
 > sitting nearby.
 
@@ -148,8 +152,10 @@ For more detail (full sweep, plots, methodology) see the
    ```
 
    Note:
-   This will take a few minutes but only needs to be done _once_; after that, we
-   can simply reuse the `.venv.tar.gz` for subsequent runs[^tarball].
+   This will take a ~few minutes but only needs to be done _once_ (and can be
+   done on CPU).
+   After that, we can simply reuse the `.venv.tar.gz` for subsequent
+   runs[^tarball].
 
 1. Distribute the tarball to every node's `/tmp/`:
 
@@ -160,11 +166,16 @@ For more detail (full sweep, plots, methodology) see the
    # ezpz yeet              # slower at scale
    ```
 
-1. Switch to the local copy:
+1. Deactivate the _current_ `.venv` and activate the one we just created at
+   `/tmp/.venv/`:
 
    ```bash
-   deactivate
-   source /tmp/.venv/bin/activate
+   deactivate && source /tmp/.venv/bin/activate
+   ```
+
+   ```bash
+   $ which python3
+   /tmp/.venv/bin/python3
    ```
 
 1. Launch training as usual; `ezpz launch` respects `$VIRTUAL_ENV`, so it picks
@@ -172,10 +183,11 @@ For more detail (full sweep, plots, methodology) see the
 
    ```bash
    ezpz launch python3 -m torchtitan.experiments.ezpz.train \
-       --module="ezpz.${FLAVOR}" \
-       --config="${FLAVOR}_${CONFIG}" \
+       --module=ezpz.agpt \
+       --config=agpt_2b \
+       --training.steps=10 \
        --checkpoint.no-enable \
-       --training.steps=10
+       --training.local-batch-size=2
    ```
 
 > [!IMPORTANT]
