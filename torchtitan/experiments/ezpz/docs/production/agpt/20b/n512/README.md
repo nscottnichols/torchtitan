@@ -47,6 +47,12 @@
 
 **Tokens consumed:** ~862 × 12,288 × 8,192 = **~87B tokens** (~1.9% of 4.67T target)
 
+**Logs:**
+
+- `8460302`: `/flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/agpt-20b-n512.o8460302`
+- `8463628`: `/flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/agpt-20b-n512-v2-chain1.o8463628`
+- `8466848`: held (`afterany:8463628`) — log will land in `/flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/`
+
 ---
 
 <details>
@@ -90,6 +96,12 @@ Don't draw conclusions from these loss curves.
 
 **Note:** Very low TPS (41) — compile took most of the 12h walltime.
 512N continuation (8446343) segfaulted on a bad node. 8446344 will retry.
+
+**Logs:**
+
+- `8443819`: `/lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz/agpt-20b-sophiag-n512.o8443819`
+- `8446343`: `/lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz/agpt-20b-sophiag-n512.o8446343`
+- `8446344`: `/lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz/agpt-20b-sophiag-n512.o8446344`
 
 ### Job Chains (historical)
 

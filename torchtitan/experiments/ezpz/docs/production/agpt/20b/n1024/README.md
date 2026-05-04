@@ -20,6 +20,10 @@
 |--------|---------:|------:|--------|
 | 8463183 | 12h | — | **Queued** (waiting for 1024-node slot) |
 
+**Logs:**
+
+- `8463183`: queued — log will land in `/flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/` on start
+
 This is an *independent* trajectory from the canonical 512N chain
 ([n512/](../n512/README.md)) — it writes to a different ckpt dir
 (`gbs24576` vs `gbs12288`) and would start fresh from step 0. Useful

@@ -65,4 +65,13 @@ Don't draw conclusions from these loss curves.
 **Note:** TPS degraded to ~30-100 during final 2h due to concurrent 512N yeet-env
 copies saturating the flare filesystem. Effective training time was ~8h of the 12h walltime.
 
+**Logs:**
+
+- `8443212`: `/lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz/agpt-20b-sophiag-n256.o8443212`
+- `8444123`: `/lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz/agpt-20b-sophiag-n256.o8444123`
+- `8446340`: `/lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz/agpt-20b-sophiag-n256.o8446340`
+- `8446341`: `/lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz/agpt-20b-sophiag-n256.o8446341`
+- `8446342`: `/lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz/agpt-20b-sophiag-n256.o8446342`
+- `8451749`: `/lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz/agpt-20b-sophiag-olmo-mix-n256.o8451749`
+
 </details>

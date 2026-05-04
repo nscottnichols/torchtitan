@@ -47,6 +47,10 @@
 
 **Tokens consumed:** 2070 × 6144 × 8192 = **104B tokens** (2.2% of target)
 
+**Logs:**
+
+- `8459818`: `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n256.o8459818`
+
 ---
 
 <details>
@@ -105,5 +109,12 @@ Don't draw conclusions from these loss curves.
 **Note:** TPS degraded significantly (2,400 → 40-700) during 8446338/8446339 due to
 concurrent 512N yeet-env copies saturating the flare filesystem. 512N venv jobs were
 killed; throughput is recovering.
+
+**Logs:**
+
+- `8444122`: `/lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz/agpt-2b-sophiag-n256.o8444122`
+- `8446337`: `/lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz/agpt-2b-sophiag-n256.o8446337`
+- `8446338`: `/lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz/agpt-2b-sophiag-n256.o8446338`
+- `8446339`: `/lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz/agpt-2b-sophiag-n256.o8446339`
 
 </details>

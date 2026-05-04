@@ -48,6 +48,13 @@
 
 **Tokens consumed:** 5,073 × 12,288 × 8,192 = **510B tokens** (10.9% of 4.67T target)
 
+**Logs:**
+
+- `8460301`: `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n512.o8460301`
+- `8463626`: `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n512-v2-chain1.o8463626`
+- `8463627`: queued — log will land in `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/` on start
+- `8466847`: held (`afterany:8463627`) — log will land in `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/`
+
 ---
 
 <details>
@@ -81,6 +88,12 @@ Don't draw conclusions from these loss curves.
 
 (No v1 512N training-curve figures were ever generated — the run never
 got past the first step.)
+
+**Logs:**
+
+- `8443818`: `/lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz/agpt-2b-sophiag-n512.o8443818`
+- `8446349`: `/lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz/agpt-2b-sophiag-n512.o8446349`
+- `8446350`: `/lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz/agpt-2b-sophiag-n512.o8446350`
 
 ### Job Chains (historical)
 
