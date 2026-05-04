@@ -4,6 +4,92 @@ Running log of what's happening, session by session. Most recent first.
 
 ---
 
+## 2026-05-03 (evening) — TP > 1 loss-reporting bug + agpt_50b_wide
+
+### Loss reporting on TP > 1 is off by `dp_world_size`
+
+Hunting a different bug (the 80B `compile + AC + TP=2`
+DeviceMesh-in-saved-tensors crash) we added `agpt_60b` and then
+`agpt_50b_wide` as smaller bisect targets. The `50b_wide` smoke at
+2N TP=2 reported step-1 loss = **1.07**. That should be ≈ ln(256128) ≈
+**12.45 nats** for random init — 12× too small. The 12 matched
+`dp_world_size = 12` (24 ranks ÷ TP=2) exactly, which pointed at a
+missing cross-batch reduction.
+
+Root cause is upstream commit `1786292d` (2026-04-27) in
+`torchtitan/distributed/utils.py`. The new DTensor branch in
+`_dist_reduce` returns `float(x.full_tensor().item())` and skips the
+requested mesh `all_reduce`. That is correct only when the DTensor's
+mesh matches the requested mesh — but the trainer's loss reduction
+passes `loss_mesh` (= batch × cp), and the loss is a Replicated
+DTensor on the **TP** mesh (orthogonal). The cross-batch sum is
+silently dropped.
+
+Verified the diagnosis by re-running `agpt_2b` at TP=2 (no compile, 3
+steps) with a workaround in place: convert `loss` DTensor to a plain
+tensor before `dist_sum`/`dist_max`. Step-1 loss came back as **12.94**
+— matches the known-good TP=1 baseline of 12.95. Bug confirmed and fix
+verified in one shot.
+
+Workaround landed in `experiments/ezpz/`:
+
+- `trainer.py` — adds `loss = loss.full_tensor()` before the
+  `dist_sum`/`dist_max` reductions.
+- New `validator.py` — `EzpzValidator(Validator)` subclass with the
+  same fix in its `validate()` override.
+- `agpt/config_registry.py` `_base_config` — uses
+  `EzpzValidator.Config` instead of `Validator.Config`.
+
+Documented in `docs/guides/loss-reporting-tp-dist-reduce.md` and the
+upstream issue note at
+`docs/upstream-issues/dist_reduce_dtensor_skip.md`. Filed upstream as
+[pytorch/torchtitan#3204](https://github.com/pytorch/torchtitan/pull/3204).
+
+**Implications for live dashboards:**
+
+- 2B / 20B production W&B (TP=1): correct, no action needed.
+- **80B production W&B (TP=2): under-reported by `dp_world_size`.**
+  Multiply reported loss by `world_size / tp_degree` to recover the
+  true per-token NLL. A 256N TP=2 dashboard's loss is currently 1536×
+  smaller than the truth.
+
+### agpt_50b_wide added; agpt_60b removed
+
+To get a smaller compile target for the 80B-bug bisect we first
+added `agpt_60b` (dim=9216, 60 layers, ~58B params, same per-layer
+shape as 80B). That smoke crashed with an Intel GPU SegFault at step 2
+— OOM dressed up as a not-present-PDE fault, after step-1 measured at
+**97.41% memory** with no headroom for the step-2 activation peak.
+
+Replaced with `agpt_50b_wide` (dim=9216, **48 layers**, ~48B params).
+Smoke ran all 10 steps cleanly at 95.94% memory: MFU ≈ 15%, TPS ≈ 140
+on Sunspot. **This is a working `compile + AC + TP=2` dense config**
+— the 80B-family DeviceMesh-in-saved-tensors crash does NOT reproduce
+at 48 layers, only at 84. So the upstream bug we've been hunting is
+**depth-sensitive, not width/head-sensitive**, which narrows the
+minimal-repro shape considerably for the future filing.
+
+### Validation loss work — partial
+
+Started wiring blendcorpus's already-built validation split through the
+`Validator`. Stopped short to chase the loss-reporting bug above.
+Status:
+
+- `BlendCorpusDataLoader.Config` now has `serve_validation: bool`
+  and `eval_iters: int` (default 100). `eval_iters` is only requested
+  when `serve_validation=True` (otherwise we'd trigger a fresh
+  validation index build that hangs in dataset construction).
+- `_base_config` constructs a validator with
+  `BlendCorpusDataLoader.Config(serve_validation=True)` for the val
+  dataloader, but `validator.enable=False` by default.
+- `EzpzValidator` is wired in but not yet smoke-tested.
+
+Remaining: 250-step `agpt_2b` run with `--validator.enable` to confirm
+the validator fires at step 1 and step 200, and that the val loss is
+reasonable.
+
+---
+
 ## 2026-05-03 — Production progress + canonical-chain consolidation + doc reorg
 
 ### Production training
