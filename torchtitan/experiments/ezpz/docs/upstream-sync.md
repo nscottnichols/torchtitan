@@ -24,6 +24,42 @@ tests and checking against the saved baselines — see
 
 ---
 
+## 2026-05-04 (31st sync — precompile revert + PP refactor + CI baseline)
+
+**Upstream commits:**
+
+- `60650551` — Revert precompile PRs (#3107, #3178) to fix CI (#3212).
+  Backs out the bucketing-pass + FlexAttention precompile bitwise
+  deterministic-tests changes that were merged in the 2026-05-03 sync;
+  the upstream PyTorch fix (pytorch/pytorch#181529) those changes
+  depended on still hadn't landed on `viable/strict`.
+- `db5da4b6` — Refactor pipeline parallel helpers for graph PP reuse
+  (#2724). Extracts pipeline metadata + module splitting + PP
+  rank-to-stage mapping out of `pipeline_llm` so graph PP can reuse
+  it. Renames `build_pipeline_schedule`,
+  `generate_llm_fqn_per_model_part`, and `pipeline_module_split` to
+  private (underscore prefix) — they are no longer public API.
+- `95ae6a00` — `ci: regenerate qwen3_moe_rocm_mi350x.txt baseline with
+  actual MI350 losses (#3196)`. Loss-baseline file regen for ROCm
+  MI350 CI; no production impact.
+
+**Impact on ezpz:** None.
+
+- The PP refactor (#2724) only renamed helpers used internally by
+  `pipeline_llm`; ezpz doesn't import any of `build_pipeline_schedule`,
+  `generate_llm_fqn_per_model_part`, or `pipeline_module_split`
+  directly (verified via grep across `experiments/ezpz/`).
+- The revert (#3212) only touches
+  `experiments/graph_trainer/precompile_main.py`,
+  `experiments/graph_trainer/tests/test_bitwise_deterministic.py`,
+  and `experiments/transformers_modeling_backend/pipeline.py` — none
+  of which ezpz depends on.
+- The baseline regen is test data only.
+
+Merge commit: `fc10014d`.
+
+---
+
 ## 2026-05-03 (30th sync — graph_trainer only)
 
 **Upstream commits:**
