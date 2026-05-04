@@ -14,7 +14,7 @@
 | Submit script | [`scripts/submit_agpt_20b_aurora_venv.sh`](../../../../../scripts/submit_agpt_20b_aurora_venv.sh) (one script handles all v2 node counts via env vars) |
 | Stack | torch 2.13 venv (yeet-env tarball mode) |
 | Optimizer | SophiaG, LR=2.28e-5 |
-| Compile | off |
+| Compile | on |
 | GBS | 12,288 (LBS=2) |
 | Total steps | 46,429 |
 | Total tokens | 4.67T |
