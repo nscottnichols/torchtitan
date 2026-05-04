@@ -10,7 +10,7 @@ from torchtitan.components.loss import ChunkedCELoss, CrossEntropyLoss
 from torchtitan.components.lr_scheduler import LRSchedulersContainer
 from torchtitan.components.metrics import MetricsProcessor
 from torchtitan.components.optimizer import OptimizersContainer
-from torchtitan.components.validate import Validator
+from torchtitan.experiments.ezpz.validator import EzpzValidator
 from torchtitan.config import ActivationCheckpointConfig, CommConfig, TrainingConfig
 from torchtitan.config.configs import CompileConfig
 from torchtitan.experiments.ezpz.blendcorpus.blendcorpus_builder import (
@@ -92,6 +92,10 @@ def agpt(
     if dataset_path is None:
         dataset_path = f"torchtitan/experiments/ezpz/data-lists/{ezpz.distributed.get_machine().lower()}/books.txt"
     cfg.dataloader.dataset_path = dataset_path
+    # Validator reads from the same blendcorpus corpus, but it pulls from
+    # the validation split (see BlendCorpusDataLoader.Config.serve_validation).
+    if isinstance(cfg.validator.dataloader, BlendCorpusDataLoader.Config):
+        cfg.validator.dataloader.dataset_path = dataset_path
     cfg.metrics.log_freq = 1
     cfg.metrics.enable_wandb = True
     if compile:
@@ -132,7 +136,25 @@ def _base_config(flavor: str) -> FaultTolerantTrainer.Config:
         ),
         comm=CommConfig(train_timeout_seconds=100),
         fault_tolerance=FaultTolerance(enable=False),
-        validator=Validator.Config(enable=False),
+        # Validator runs on the blendcorpus validation split (5% of the
+        # corpus by default — see BlendCorpusDataLoader.Config.split). The
+        # validator builds its own dataloader from this Config every time
+        # validate() is called, so serve_validation=True ensures it gets
+        # held-out samples instead of the train split.
+        # Default enable=False keeps prior behavior; flip per config or via
+        # --validator.enable on the CLI.
+        # Uses EzpzValidator (subclass of Validator) which fixes loss
+        # reporting on TP > 1 — see torchtitan/experiments/ezpz/validator.py.
+        validator=EzpzValidator.Config(
+            enable=False,
+            freq=200,
+            steps=10,
+            dataloader=BlendCorpusDataLoader.Config(
+                dataset="blendcorpus",
+                serve_validation=True,
+                infinite=False,
+            ),
+        ),
     )
 
 

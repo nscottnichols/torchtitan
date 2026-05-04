@@ -63,6 +63,15 @@ class BlendCorpusDataLoader(BaseDataLoader):
         data_cache_path: str = ".cache/blendcorpus"
 
         train_iters: int | None = None
+        # When True, this dataloader serves the validation split of the
+        # blendcorpus corpus instead of the train split. Used by the
+        # Validator to compute held-out NLL on a slice of the same corpus
+        # the model is training on. eval_iters controls how many distinct
+        # validation samples blendcorpus pre-builds; larger is wasteful but
+        # safe — the actual number of validation steps is set on
+        # Validator.Config.steps.
+        serve_validation: bool = False
+        eval_iters: int = 100
 
     def __init__(
         self,
@@ -138,7 +147,12 @@ class BlendCorpusDataLoader(BaseDataLoader):
             data_file_list=config.dataset_path,
             seq_length=seq_len,
             train_iters=train_iters,
-            eval_iters=0,
+            # eval_iters > 0 triggers validation index file construction
+            # in blendcorpus. Production runs have always used 0 here, so
+            # the valid index files do not exist on disk for our corpora.
+            # Only request eval_iters > 0 when this loader is actually
+            # being asked to serve the validation split.
+            eval_iters=int(config.eval_iters) if config.serve_validation else 0,
             seed=42,
             data_impl="mmap",
             micro_batch_size=int(local_batch_size),
@@ -164,11 +178,16 @@ class BlendCorpusDataLoader(BaseDataLoader):
         )
         os.makedirs(bc_cfg.data_cache_path, exist_ok=True)
 
-        bc_mpu.initialize_model_parallel(
-            tensor_model_parallel_size=bc_cfg.tensor_model_parallel_size,
-            pipeline_model_parallel_size=bc_cfg.pipeline_model_parallel_size,
-            sequence_parallel_size=bc_cfg.sequence_parallel_size,
-        )
+        # blendcorpus's initialize_model_parallel asserts that no parallel
+        # groups already exist, so calling it twice (e.g. once for the
+        # train loader, again for a validation loader) fatal-errors. Skip
+        # re-init if the trainer already set it up.
+        if not bc_mpu.model_parallel_is_initialized():
+            bc_mpu.initialize_model_parallel(
+                tensor_model_parallel_size=bc_cfg.tensor_model_parallel_size,
+                pipeline_model_parallel_size=bc_cfg.pipeline_model_parallel_size,
+                sequence_parallel_size=bc_cfg.sequence_parallel_size,
+            )
 
         # On XCCL (XPU) with torch <2.13, barrier() hangs because the
         # C++ XCCL backend ignores opts.device and defaults all ranks
@@ -217,21 +236,38 @@ class BlendCorpusDataLoader(BaseDataLoader):
         # on disk before this point.
         rank = int(os.environ.get("RANK", 0))
         logger.info(
-            "Rank %d: building blendcorpus datasets (data=%s, cache=%s)...",
+            "Rank %d: building blendcorpus datasets (data=%s, cache=%s, "
+            "serve_validation=%s)...",
             rank,
             bc_cfg.data_file_list,
             bc_cfg.data_cache_path,
+            config.serve_validation,
         )
-        train_ds, _, _ = build_gpt_datasets(self._bc_cfg)
+        train_ds, valid_ds, _ = build_gpt_datasets(self._bc_cfg)
 
         # Keep gloo barrier active for the entire session — the XCCL
         # barrier bug affects all collectives, not just dataset building.
         # The gloo barrier is CPU-side and works reliably on all backends.
 
+        # Pick which split this loader serves. The validator constructs a
+        # second BlendCorpusDataLoader.Config(serve_validation=True) so
+        # both train and valid splits stay live in the same process.
+        if config.serve_validation:
+            if valid_ds is None:
+                raise RuntimeError(
+                    "BlendCorpusDataLoader.Config(serve_validation=True) but "
+                    f"blendcorpus returned valid_ds=None — check that split "
+                    f"({bc_cfg.split!r}) gives the validation slice non-zero "
+                    f"weight and eval_iters ({bc_cfg.eval_iters}) > 0."
+                )
+            served_ds = valid_ds
+        else:
+            served_ds = train_ds
+
         logger.info("Rank %d: blendcorpus datasets ready.", rank)
-        self._train_ds = train_ds
+        self._train_ds = served_ds
         self._build_pretraining_data_loader = build_pretraining_data_loader
-        self._loader = build_pretraining_data_loader(train_ds, 0, self._bc_cfg)
+        self._loader = build_pretraining_data_loader(served_ds, 0, self._bc_cfg)
         self._consumed_samples = 0
 
         try:
