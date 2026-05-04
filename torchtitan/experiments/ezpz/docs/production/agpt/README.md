@@ -31,10 +31,10 @@ extensions.
 | Job ID | Walltime | Steps | Loss | Status |
 |--------|---------:|------:|-----:|--------|
 | 8460302 | 6h | 1–300 | 12.94 → 4.95 | Done (NODE_FAIL @ end). 3 ckpts saved. |
-| 8463628 | 12h | 200–862+ | 5.62 → **3.47** | **Running** (~12h elapsed, walltime imminent; step-100..800 ckpts saved) |
-| 8466848 | 12h | (cont.) | — | Held (`afterany:8463628`) |
+| 8463628 | 12h | 200–863 | 5.62 → **3.46** | Done (walltime hit). step-100..800 ckpts saved. |
+| 8466848 | 12h | 800+ | — | **Queued** (auto-resume from step-800) |
 
-**Latest cumulative**: step **862** · loss **3.47** · **87B tokens** (1.9% of 4.67T target).
+**Latest cumulative**: step **863** · loss **3.46** · **87B tokens** (1.9% of 4.67T target).
 
 ## Other queued jobs (independent ckpt trajectories, NOT canonical chain)
 
@@ -42,7 +42,7 @@ extensions.
 |--------|-------|------:|---------:|--------|-------|
 | 8463182 | 2B | 1024 | 12h | Queued | Fresh start, separate ckpt dir (`n1024-gbs24576`) |
 | 8463183 | 20B | 1024 | 12h | Queued | Fresh start, separate ckpt dir (`n1024-gbs24576`) |
-| 8463659 | 20B | 256 | 12h | Queued | Fresh start, separate ckpt dir (`n256-gbs6144`) |
+| 8463659 | 20B | 256 | 12h | **Running** (step 124, loss 6.35) | Fresh start, separate ckpt dir (`n256-gbs6144`) |
 
 **80B**: not yet restarted in v2.
 
