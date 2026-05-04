@@ -6,9 +6,12 @@
 
 ## v2 — 20B @ 256N — SophiaG LR=2.28e-5 (fp32 master)
 
-> Status: 8463659 currently **running** at step 200 (loss 5.65, MFU
-> 14-20%). Independent trajectory from the canonical 512N chain
-> ([n512/](../n512/README.md)) — different ckpt dir
+> Status: 8463659 currently **running** at step 363 (loss 4.60).
+> Throughput has been bouncing between 21 and 410 TPS depending on
+> concurrent flare bandwidth — when the filesystem is uncontested the
+> run hits ~20% MFU; under contention (eval ckpt I/O, other yeet-env
+> jobs) it drops to ~1% MFU. Independent trajectory from the canonical
+> 512N chain ([n512/](../n512/README.md)) — different ckpt dir
 > (`gbs6144` vs `gbs12288`), starts fresh from step 0. Useful as a
 > per-token comparator at the same optimizer state.
 
@@ -42,11 +45,11 @@
 
 | Job ID | Walltime | Steps | Loss (start → end) | TPS/GPU | MFU | Status |
 |--------|---------:|------:|-------------------:|--------:|----:|--------|
-| 8463659 | 12h | 1–200+ | 12.96 → **5.65** | ~280-410 | ~14-20% | **Running** (~5h elapsed of 12h walltime; step-100 + step-200 ckpts saved) |
+| 8463659 | 12h | 1–363+ | 12.96 → **4.60** | 21-410 (variable) | 1-20% (variable) | **Running** (~9h elapsed of 12h walltime; step-100/200/300 ckpts saved) |
 
-**Latest checkpoint:** step-200
+**Latest checkpoint:** step-300
 
-**Tokens consumed:** 200 × 6,144 × 8,192 = **10.1B tokens** (0.22% of 4.67T target)
+**Tokens consumed:** 363 × 6,144 × 8,192 = **18.3B tokens** (0.39% of 4.67T target)
 
 **Logs:**
 

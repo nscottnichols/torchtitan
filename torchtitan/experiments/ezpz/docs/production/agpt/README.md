@@ -42,7 +42,7 @@ extensions.
 |--------|-------|------:|---------:|--------|-------|
 | 8463182 | 2B | 1024 | 12h | **Crashed @ startup (211s, std::bad_alloc)** | Fresh start, separate ckpt dir (`n1024-gbs24576`) |
 | 8463183 | 20B | 1024 | 12h | **Crashed @ startup (211s, SIGSEGV)** | Fresh start, separate ckpt dir (`n1024-gbs24576`) |
-| 8463659 | 20B | 256 | 12h | **Running** (step 200, loss 5.65) | Fresh start, separate ckpt dir (`n256-gbs6144`) |
+| 8463659 | 20B | 256 | 12h | **Running** (step 363, loss 4.60) | Fresh start, separate ckpt dir (`n256-gbs6144`) |
 
 **80B**: not yet restarted in v2.
 
