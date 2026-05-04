@@ -4,6 +4,98 @@ Running log of what's happening, session by session. Most recent first.
 
 ---
 
+## 2026-05-04 — 20B chain walltime, 1024N startup crashes, doc cleanup
+
+### Production training
+
+- **20B 512N canonical chain (8463628)** finished its 12h walltime
+  cleanly at step **863, loss 3.46**. Final TPS ~358, MFU ~17.8%.
+  step-100..step-800 ckpts all saved. Continuation **8466848** auto-released
+  from hold and is now Q for a 512N slot.
+- **20B 256N v2 (8463659) started running.** Fresh-start trajectory at
+  256N, separate ckpt dir (`n256-gbs6144`) — *not* a chain extension.
+  Currently at **step 200, loss 5.65, MFU 14-20%**, 2 ckpts saved
+  (step-100, step-200). Useful as a per-token-vs-512N comparator at
+  matched optimizer state. Loss curve looks healthy:
+  12.96 → 8.5 (step 45) → 6.35 (step 124) → 5.65 (step 200).
+- **2B 512N canonical chain** still at step 5,073 (loss 2.97).
+  Continuation 8463627 still Q ("Not enough free nodes available");
+  8466847 held behind it.
+
+### 1024N first-attempts both crashed at startup
+
+Both 1024N v2 jobs (queued since 2026-05-01) finally got slots and
+**crashed within 4 minutes**:
+
+- **2B 1024N (8463182)**: `MemoryError: std::bad_alloc` inside
+  `torch.distributed.broadcast` during `set_determinism` init. Died
+  after 211s, exit 143.
+- **20B 1024N (8463183)**: rank 4732 died from signal 11 (SIGSEGV)
+  during the same init phase, exit 143.
+
+12,288 ranks (1024 nodes × 12 GPUs) appears to be hitting an init-time
+memory/comm scaling issue we don't see at 256N or 512N. Worth a
+smaller-scale repro before resubmitting — maybe 768N or 896N to bracket
+where it starts failing. Not blocking the canonical 512N chains.
+
+### 20B v2 eval through step-600
+
+- **8467370** (capacity queue, 8h requested, ran to **12h15m walltime
+  kill**) delivered eval scores for steps 100/200/300/400/500/600
+  before being killed mid-step-700 lm-eval. Steps 700/800 will need
+  a resubmit.
+- **ARC-Easy `acc` lifts monotonically** from 0.266 → 0.290 → 0.295 →
+  0.318 → 0.346 → **0.393** across that range — the cleanest-yet
+  signal that fp32 master is producing real benchmark progression
+  vs. v1's flat ~0.27 baseline.
+- HellaSwag also creeping: 0.257 → 0.270. ARC-Challenge and
+  Winogrande still in noise (expected at <100B tokens).
+- v1-vs-v2 plot regenerated; results table added under
+  [`docs/evals/agpt/20b/README.md`](evals/agpt/20b/README.md).
+- Eval throughput tanked while concurrent 256N v2 (8463659) was
+  starting — both share flare bandwidth for ckpt I/O and dataset
+  reads. Steps 100-500 each took ~30 min; step-600 took ~3h. Will
+  hold off on resubmitting steps 700/800 until 256N finishes.
+
+### Doc cleanup
+
+- **Compile flag was wrong in 5 v2 setup tables.** `agpt_2b()` and
+  `agpt_20b()` both default to `compile=True`, and W&B configs +
+  startup logs ("Compiling each TransformerBlock with torch.compile")
+  confirm compile is on for all v2 runs. The "Compile | off" rows in
+  the v2 setup tables under `docs/production/agpt/{2b,20b}/n*/README.md`
+  were stale carryovers from drafts. Flipped to "on" across 2B
+  n256/n512/n1024 and 20B n512/n1024.
+- **Submit-script links added** to all 6 per-node-count READMEs. v2
+  entries point to `scripts/submit_agpt_{2b,20b}_aurora_venv.sh`
+  (one script handles all node counts via env vars); v1 entries point
+  to the per-node `submit/aurora/submit_agpt_*.sh`.
+- **Absolute log paths added** for every Job ID in every Progress
+  table — v1 logs at `/lus/flare/.../torchtitan-ezpz/agpt-*-sophiag-*.o<JOBID>`,
+  v2 logs at `/flare/.../runs/agpt-{2b,20b}-v2/torchtitan-ezpz/agpt-*.o<JOBID>`.
+  Queued/held jobs note where the log will land on start.
+- **`submit/README.md` added** marking the directory as legacy. The
+  torch-2.10 `submit/{aurora,sunspot}/*.sh` scripts produced every v1
+  trajectory and were the production driver through 2026-04-29. After
+  the v2 restart on 2026-04-30, all production training moved to
+  `scripts/submit_agpt_{2b,20b}_aurora_venv.sh` on the torch 2.13
+  venv stack — nothing live reaches into `submit/` anymore.
+
+### Plotter
+
+- `PRODUCTION_RUNS["20b_v2_256"]` added (wandb run `r1yyxbmt` =
+  8463659) so the 20B 256N v2 trajectory shows up in dashboard
+  refreshes.
+
+### Still queued
+
+- **8467141** (√2-LR fork chain1, 512N) and **8467142** (held
+  `afterany:8467141`) — Q for 4+ days now. 512N slots are scarce
+  while the canonical chain continuations also wait. Will keep the
+  monitor armed.
+
+---
+
 ## 2026-05-03 (evening) — TP > 1 loss-reporting bug + agpt_50b_wide
 
 ### Loss reporting on TP > 1 is off by `dp_world_size`

@@ -1,6 +1,11 @@
 # Production Training — agpt 2B @ 1024 nodes
 
-> **Status: queued, no data yet.**
+> **Status: crashed at startup (2026-05-04).** First-ever 1024N attempt
+> (8463182) ran for 221s then died with `MemoryError: std::bad_alloc`
+> inside `torch.distributed.broadcast` during the `set_determinism`
+> distributed-init phase. Likely an init-time OOM at 12,288 ranks
+> (matches the 20B 1024N crash from the same queue release). Needs a
+> smaller-scale repro (768N? 896N?) before resubmitting.
 
 ## v2 — 2B @ 1024N — SophiaG LR=2.28e-5 (fp32 master)
 
@@ -18,11 +23,11 @@
 
 | Job ID | Walltime | Steps | Status |
 |--------|---------:|------:|--------|
-| 8463182 | 12h | — | **Queued** (waiting for 1024-node slot) |
+| 8463182 | 12h | — | **Crashed at startup** (221s, exit 143). `MemoryError: std::bad_alloc` in `torch.distributed.broadcast` during `set_determinism`. |
 
 **Logs:**
 
-- `8463182`: queued — log will land in `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/` on start
+- `8463182`: `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n1024-v2.o8463182`
 
 This is an *independent* trajectory from the canonical 512N chain
 ([n512/](../n512/README.md)) — it writes to a different ckpt dir
