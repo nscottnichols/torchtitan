@@ -1,16 +1,61 @@
 # Production Training — agpt 20B @ 256 nodes
 
-> **No v2 data at 256N.** The v2 256N job (8463659) is queued at the
-> time of writing — production at 20B is consolidated on the
-> [n512 chain](../n512/README.md). Once 8463659 runs and saves
-> checkpoints, this page will gain a v2 section above the historical
-> v1 block.
->
 > **Eval scores:** see [`docs/evals/agpt/20b/`](../../../../evals/agpt/20b/README.md)
-> for the v1-vs-v2 lm-eval comparison.
+> for the v1-vs-v2 lm-eval comparison (covers all 20B trajectories on
+> shared axes).
 
-<details open>
-<summary><strong>v1 — 20B @ 256N — SophiaG LR=2.28e-5 (bf16 master, BROKEN)</strong></summary>
+## v2 — 20B @ 256N — SophiaG LR=2.28e-5 (fp32 master)
+
+> Status: 8463659 currently **running** at step 200 (loss 5.65, MFU
+> 14-20%). Independent trajectory from the canonical 512N chain
+> ([n512/](../n512/README.md)) — different ckpt dir
+> (`gbs6144` vs `gbs12288`), starts fresh from step 0. Useful as a
+> per-token comparator at the same optimizer state.
+
+| Field | Value |
+|-------|-------|
+| Clone | `/flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/` |
+| Submit script | [`scripts/submit_agpt_20b_aurora_venv.sh`](../../../../../scripts/submit_agpt_20b_aurora_venv.sh) (one script handles all v2 node counts via env vars) |
+| Stack | torch 2.13 venv (yeet-env tarball mode) |
+| Optimizer | SophiaG, LR=2.28e-5 |
+| Compile | on |
+| GBS | 6,144 (LBS=2) |
+| Total steps | 92,859 |
+| Total tokens | 4.67T |
+| Checkpoint dir | `outputs/checkpoints/agpt-20b-sophiag-olmo-mix-1124-n256-gbs6144` |
+| Checkpoint interval | 100 steps, keep_latest_k=0 (keep all) |
+| W&B | [r1yyxbmt](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/r1yyxbmt) |
+
+### Loss / Throughput / MFU
+
+![20B v2 256N Training](figures/production_20b_v2_256n.png)
+
+### Diagnostics
+
+![20B v2 256N Diagnostics](figures/training_diagnostics_20b_v2_256n.png)
+
+### Tokens vs Wall Clock
+
+![20B v2 256N Tokens vs Time](figures/tokens_vs_time_20b_v2_256n.png)
+
+### Progress
+
+| Job ID | Walltime | Steps | Loss (start → end) | TPS/GPU | MFU | Status |
+|--------|---------:|------:|-------------------:|--------:|----:|--------|
+| 8463659 | 12h | 1–200+ | 12.96 → **5.65** | ~280-410 | ~14-20% | **Running** (~5h elapsed of 12h walltime; step-100 + step-200 ckpts saved) |
+
+**Latest checkpoint:** step-200
+
+**Tokens consumed:** 200 × 6,144 × 8,192 = **10.1B tokens** (0.22% of 4.67T target)
+
+**Logs:**
+
+- `8463659`: `/flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/agpt-20b-n256-v2.o8463659`
+
+---
+
+<details>
+<summary><strong>v1 — 20B @ 256N — SophiaG LR=2.28e-5 (bf16 master, BROKEN) — click to expand</strong></summary>
 
 This run is kept for the record. It uses `--training.dtype=bfloat16`
 and has **frozen RMSNorm weights** — see

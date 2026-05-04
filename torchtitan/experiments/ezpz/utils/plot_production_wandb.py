@@ -97,9 +97,15 @@ PRODUCTION_RUNS: dict[str, dict] = {
     },
     "20b_v2_512": {
         # 9tsyx5us = 8460302 (initial 6h, step 0->300)
-        # ej3zy5cq = 8463628 (12h chain1, resumed step 200, currently running)
+        # ej3zy5cq = 8463628 (12h chain1, resumed step 200, ended step 863)
         "run_ids": ["9tsyx5us", "ej3zy5cq"],
         "num_nodes": 512,
+        "model": "20b",
+    },
+    "20b_v2_256": {
+        # r1yyxbmt = 8463659 (12h, fresh start at 256N — separate ckpt dir gbs6144)
+        "run_ids": ["r1yyxbmt"],
+        "num_nodes": 256,
         "model": "20b",
     },
 }
