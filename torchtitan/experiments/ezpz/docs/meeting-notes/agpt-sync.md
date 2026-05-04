@@ -1,4 +1,4 @@
-# Internal AuroraGPT Sync — Meeting Notes
+# AuroraGPT Sync — Meeting Notes
 
 > Sam Foreman. Most recent first.
 

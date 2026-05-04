@@ -10,4 +10,4 @@ meeting type is then `Ctrl-F` rather than walking a directory.
 
 | Meeting | File |
 |---|---|
-| Internal AuroraGPT Sync | [`internal-aurorgpt-sync.md`](internal-aurorgpt-sync.md) |
+| AuroraGPT Sync | [`agpt-sync.md`](agpt-sync.md) |
