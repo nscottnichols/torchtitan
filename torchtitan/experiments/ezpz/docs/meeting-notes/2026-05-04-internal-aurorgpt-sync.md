@@ -33,6 +33,17 @@
   Continuation 8463627 queued.
 - **20B 512N canonical chain (8460302 → 8463628):** step ~287, loss
   5.00, MFU 17.5%. Continuation 8463628 running.
+- **20B 256N (8463659):** ran 9h walltime then **NODE_FAIL after
+  step 364** (loss 4.61, 18.3B tokens). `shepherd died from signal 9`
+  on `x4406c6s7b0n0`, PBS exit -20 — same recurring Aurora bad-node
+  failure mode as 8459818 / 8460301. **step-300 ckpt saved cleanly,
+  resumable.** Throughput on this run was bouncing 21-410 TPS
+  depending on flare contention (1-20% MFU). Independent trajectory
+  from the canonical 512N chain (different ckpt dir,
+  `gbs6144` vs `gbs12288`).
+  - **Ask in the room:** are these recurring Aurora node-9-signal
+    crashes being tracked anywhere? They've now killed three
+    long-walltime jobs. Worth raising with ALCF support if not.
 - **v1 vs v2 smoking gun (validates the bf16-master RMSNorm-freeze
   fix):**
   - 2B ARC-Easy climbed **0.277 → 0.429** over 100B tokens on v2,
@@ -85,3 +96,7 @@
 - [ ] (?) Volunteer to build LocalMapConfig-based minimal repro for
       the 80B compile + AC + TP=2 crash.
 - [ ] (?) Decide cadence for held-out validation loss on production.
+- [ ] (?) Decide whether to file an ALCF support ticket for the
+      recurring `shepherd died from signal 9` NODE_FAIL pattern
+      (jobs 8459818, 8460301, 8463659 — three crashes, three
+      different nodes). Resume 8463659 from step-300 in the meantime?
