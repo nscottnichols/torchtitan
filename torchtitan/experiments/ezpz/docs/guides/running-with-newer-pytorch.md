@@ -17,6 +17,7 @@
 1. Load modules and export environment variables:
 
    ```bash
+   module load python
    module load oneapi/release/2025.3.1 hdf5 pti-gpu
    export ZE_FLAT_DEVICE_HIERARCHY=FLAT
    export CCL_PROCESS_LAUNCHER=pmix
@@ -28,7 +29,12 @@
 1. Create venv:
 
    ```bash
-   uv venv --relocatable --no-cache --link-mode=copy --python=3.14
+   uv venv \
+       --system-site-packages \
+       --relocatable \
+       --no-cache \
+       --link-mode=copy \
+       --python=$(which python3)
    source .venv/bin/activate
    ```
 
