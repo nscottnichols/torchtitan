@@ -228,6 +228,5 @@ For more detail (full sweep, plots, methodology) see the
 > Keep your project directory (data, checkpoints) on a shared filesystem so
 > all ranks can read inputs and write outputs.
 
-[^tarball]:
-If we install additional packages or make changes to the `.venv/`, we will need
+[^tarball]: If we install additional packages or make changes to the `.venv/`, we will need
 to repeat this step and create a new `.venv.tar.gz` to capture these.
