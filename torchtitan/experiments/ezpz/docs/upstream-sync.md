@@ -24,6 +24,60 @@ tests and checking against the saved baselines — see
 
 ---
 
+## 2026-05-05 (32nd sync — observability + MoE token-pad + CP fix + RL/graph_trainer churn)
+
+**Upstream commits (11 in batch):**
+
+- `b2cd149f` — Observability: structured logging + training instrumentation (#3176).
+  Adds `torchtitan/observability/` module + `init_structured_logger()` in
+  `Configurable.build()` + `@sl.log_trace_span(...)` decorators on hot
+  paths in `trainer.py` and `validate.py`. Optional jsonl/database
+  output for per-step timing spans.
+- `d3414079` — [MoE] Pad token count to a multiple of `sp_size` in
+  `AllToAllTokenDispatcher` (#3193). Internal correctness fix.
+- `179d9e10` — CP AllGather on the wrong dimension (#3206). FlexAttention
+  + Context Parallelism gather was on the wrong axis. Bug fix.
+- `d3c96e80` — [mxfp8] Fix `MXFP8GroupedExpertsConverter` to actually swap
+  `GroupedExperts` params (#3199). Quantization plumbing.
+- `af8d2430` — [GraphTrainer] Skip identity-slice rewrite when start/end/step
+  are dynamic Nodes (#3195).
+- `706ed8d8` — [GraphTrainer] Annotate generated FX code with user source
+  lines (#3194).
+- `080c1d4c` — [GraphTrainer] Annotate loss region with `module_fqn` (#3207).
+- `0b6a29e6` — [rl] Set `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`
+  for monarch RDMA (#3221).
+- `2ae13405` — [rl] add `import torch` to provisioner bootstrap (#3220).
+- `0b148a2e` — [CI] Run integration tests in parallel (#3144).
+- `f522db0e` — Fix commands in DSV3 readme (#3116).
+
+**Impact on ezpz:**
+
+- **Observability (#3176)** does NOT affect us at runtime — our
+  `FaultTolerantTrainer.__init__` inlines the upstream `Trainer.__init__`
+  body (FT-required) rather than calling `super().__init__()`, so the
+  new `init_structured_logger()` and `@sl.log_trace_span` decorators
+  on upstream `Trainer` methods don't propagate. Likewise, our
+  `EzpzValidator.validate()` overrides `Validator.validate()` entirely,
+  so the new `@sl.log_trace_span("eval")` decorator on the parent
+  doesn't apply to us. Imports verified to still work after merge.
+  If we want trace spans on the ezpz path we'd need to add the
+  decorators ourselves; not blocking.
+- **MoE token-pad (#3193)** — affects `AllToAllTokenDispatcher` only;
+  our `moe_10b_2b_sdpa_ep` uses `comm_backend="standard"` →
+  `All2AllTokenDispatcher` (different code path). Safe to take.
+- **CP AllGather fix (#3206)** — ezpz never enables CP
+  (`cp_degree` always 1 in our configs). Safe to take.
+- All other commits scoped to `experiments/{rl,graph_trainer}/`,
+  quantization, CI, or docs. ezpz doesn't depend.
+
+**Replay into ezpz `agpt/` or `moe/`:** None needed. No
+`models/llama3/`, `models/deepseek_v3/`, or `models/common/` changes
+in this batch beyond the internal token_dispatcher fix.
+
+Merge commit: `0690e67e`.
+
+---
+
 ## 2026-05-04 (31st sync — precompile revert + PP refactor + CI baseline)
 
 **Upstream commits:**
