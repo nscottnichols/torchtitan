@@ -87,12 +87,85 @@ where it starts failing. Not blocking the canonical 512N chains.
   8463659) so the 20B 256N v2 trajectory shows up in dashboard
   refreshes.
 
+### 8463659 NODE_FAIL after step 364 (afternoon)
+
+Same recurring Aurora bad-node failure mode that killed 8459818 /
+8460301 / 8460302. Last training step was 364 at 11:09:12, then
+immediately:
+
+```
+x4406c6s7b0n0.hsn.cm.aurora.alcf.anl.gov: shepherd died from signal 9
+x4218c2s2b0n0.hsn.cm.aurora.alcf.anl.gov: rank 606 died from signal 15
+```
+
+PALS shepherd on `x4406c6s7b0n0` got SIGKILL (kernel OOM-killed,
+hardware fault, or system-level take-out), all ranks on that node
+lost their parent → cascading SIGTERM. PBS reports `Exit_status -20`
+= NODE_FAIL after 9h walltime. step-300 ckpt saved cleanly (loss 4.61
+final). Trajectory pages updated to reflect the crash; no continuation
+chained since the canonical chain is at 512N and this 256N run was a
+per-token comparator scaling experiment rather than a chain.
+
+### 20B v2 eval — full step-100..800 sweep complete
+
+After waiting for 8463659 to finish (and free flare bandwidth),
+resubmitted the missing step-700 + step-800 evals as 8469257 (capacity,
+3h walltime). Finished cleanly in 3h flat. ARC-Easy `acc` continues
+its monotonic ascent: 0.359 (step 500) → 0.393 (600) → 0.391 (700) →
+**0.444** (800) — clean signal vs v1 256N's flat ~0.27 across all of
+0-63B tokens. HellaSwag `acc_norm` 0.270 → 0.281 → 0.284 (+3pp above
+v1 by step 800). v1-vs-v2 plot regenerated; `docs/evals/agpt/20b/`
+table updated with all 8 v2 ckpts.
+
+### Direct verification of the bf16 fix in checkpoint weights
+
+User asked for RMSNorm.weight variance across the new 2B production
+ckpts. Pulled stats from 6 HF-converted ckpts:
+
+| ckpt | mean(var) | mean(std) | min weight | max weight |
+|---|---:|---:|---:|---:|
+| v1 step-10000 | **0** | **0** | **1.000** | **1.000** |
+| v1 step-15000 | **0** | **0** | **1.000** | **1.000** |
+| v2 256N step-2000 | 2.2e-5 | 0.0045 | 0.973 | 1.039 |
+| v2 512N step-1000 | 5.4e-6 | 0.0016 | 0.988 | 1.016 |
+| v2 512N step-3000 | 5.4e-5 | 0.0071 | 0.957 | 1.063 |
+| v2 512N step-5000 | **1.2e-4** | **0.011** | **0.926** | **1.102** |
+
+Every single v1 RMSNorm channel is exactly 1.0 — bf16-master
+sub-ULP-update bug really did freeze every norm. v2 weights are
+training: variance grows monotonically with token count, range fans
+out from [0.988, 1.016] at step 1000 to [0.926, 1.102] at step 5000.
+Per-layer at step 5000: `model.norm.weight` is biggest (mean 1.098,
+std 0.006 — every channel uniformly scaling up); mid-depth layers
+(5-7) have the highest per-element std (0.014-0.017, learning the
+most differentiated channel scales). Final smoking gun for the v2
+restart, complementary to the lm-eval evidence.
+
+### Doc maintenance + plotter
+
+- Refreshed 20B v2 256N plots (added wandb `r1yyxbmt` to
+  `PRODUCTION_RUNS`); re-ran on the dead trajectory after NODE_FAIL.
+- Updated parent snapshots (`production/README.md`,
+  `production/agpt/README.md`, `production/agpt/20b/README.md`) to
+  reflect 8463659 NODE_FAIL + 1024N startup crashes.
+- `submit/README.md` added marking torch-2.10 `submit/` as legacy.
+- Submit-script links + absolute log paths added to all 6 per-node
+  READMEs.
+- Compile-flag rows in 5 v2 setup tables corrected from "off" to "on"
+  (defaults to `True` in `agpt(...)` and confirmed in W&B + startup
+  logs).
+- `running-with-newer-pytorch.md` expanded with the at-scale yeet
+  section (8N→4096N table, tarball workflow, `/tmp/.venv` switch).
+- Saved `memory/project_1024n_init_crash.md` so future sessions know
+  to bracket 1024N attempts at 768N/896N first.
+
 ### Still queued
 
-- **8467141** (√2-LR fork chain1, 512N) and **8467142** (held
-  `afterany:8467141`) — Q for 4+ days now. 512N slots are scarce
-  while the canonical chain continuations also wait. Will keep the
-  monitor armed.
+- **8463627** (2B 512N chain1 continuation), **8466847** (held
+  `afterany:8463627`), **8466848** (20B 512N chain1 continuation),
+  **8467141** (√2-LR fork chain1), **8467142** (held
+  `afterany:8467141`) — all Q for 512N slots, none running.
+  No production training is currently active.
 
 ---
 
