@@ -396,13 +396,27 @@ chain. Both jobs Q/H for 4+ days now.
 
 ### v2 — 80B
 
-Not yet restarted post-bf16-fix. Open work; needs LR=1e-6, and on
-torch 2.13 needs `compile=OFF` to avoid the AOT autograd
-DeviceMesh-in-saved-tensors crash (which we now know fires on the
-entire 80B family — not just 84-layer; the smaller `50b_wide` is not
-a workaround on torch 2.13). torch 2.10 stack is the only `compile=ON`
-path that works for the agpt 80B family until upstream fixes the
-assertion.
+**Working path identified 2026-05-05** (job 12466025, 4N smoke, 20
+steps, see `logs/agpt-80b-no-compile-t213-12466025/run.log`):
+
+- `agpt_80b @ TP=2, AC=full, compile=OFF, AdamW LR=1e-6, fp32-master`
+  on torch 2.13.
+- Loss descended cleanly **12.98 → 10.46** (-2.52 nats) over 20 steps.
+- MFU steady at **~17.8%** (matches what compile-on used to give v1
+  on torch 2.10).
+- Memory **88.94%** at peak (4N gives ~7 GiB per-tile headroom).
+- Grad-norm bumped to ~34 around steps 15-16 then recovered to ~14
+  by step 20 — production should add the 200-step linear warmup the
+  2B/20B v2 configs use.
+
+`compile=ON` is currently broken for the 80B family on **both** torch
+versions (torch 2.10: step-1 hang regression since Apr 16-23 upstream
+changes; torch 2.13: DeviceMesh-in-saved-tensors AOT autograd
+assertion). `compile=OFF` is the only viable v2 path until either
+upstream bug is fixed.
+
+Not yet restarted as production — needs warmup added + a long-running
+script. Job 12466025 was a smoke validation only.
 
 ### v1 (bf16-tainted, historical)
 

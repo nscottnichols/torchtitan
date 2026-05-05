@@ -98,6 +98,39 @@ parallelism leftovers. Found 7 inconsistencies:
   (true gray time, fish-style abbreviated path with cyan-bold +
   underlined-blue repo root, bold-purple branch).
 
+### 80B v2 has a working path on torch 2.13 + `compile=OFF`
+
+After the bisect closed out the DeviceMesh question, ran job 12466025
+(4N, 20-step smoke) to test whether `compile=OFF` actually unlocks
+80B v2 production on the torch 2.13 venv:
+
+- Config: `agpt_80b` at TP=2, AC=full, **compile=OFF**, AdamW LR=1e-6,
+  fp32-master, 4 nodes (24 ranks, dp_shard=12).
+- Result: clean run, all 20 steps. Loss descended **12.98 → 10.46**
+  (-2.52 nats), MFU steady at **~17.8%**, memory peaked at **88.94%**
+  (~7 GiB headroom per tile), exit code 0.
+- Grad-norm bumped to ~34 around steps 15-16 then recovered to ~14
+  by step 20 — early-training oscillation, not a stall. Production
+  80B should add the 200-step linear warmup the 2B/20B v2 configs
+  already use.
+
+This confirms an actually-working v2 80B path. Notable that
+`compile=OFF` MFU (~17.8%) *matches* what compile-on used to give v1
+on torch 2.10, so we're not paying any throughput penalty for not
+compiling — though that'll change once `compile=ON` works again
+upstream and the inductor optimizations actually kick in.
+
+Submit script:
+[`scripts/submit_80b_no_compile_t213.sh`](../scripts/submit_80b_no_compile_t213.sh).
+Per-step log:
+`logs/agpt-80b-no-compile-t213-12466025/run.log`.
+
+`compile=ON` for the 80B family is currently broken on **both** torch
+versions: torch 2.10 hits the step-1 hang regression from Apr 16-23
+upstream changes; torch 2.13 hits the DeviceMesh-in-saved-tensors
+AOT autograd assertion. `compile=OFF` is the only viable v2 80B path
+until either upstream bug is fixed.
+
 ---
 
 ## 2026-05-04 — 20B chain walltime, 1024N startup crashes, doc cleanup

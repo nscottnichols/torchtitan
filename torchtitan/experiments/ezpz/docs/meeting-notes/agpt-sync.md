@@ -82,6 +82,13 @@ checkpoints. The v1-vs-v2 lm-eval comparison is the smoking gun:
   bracket: torch 2.10 (any depth) ✓ → torch 2.13 (every depth tested) ✗.
 - Workaround in the meantime: `compile=OFF` for any 80B-family config
   on torch 2.13, OR pin to torch 2.10 for those configs.
+- **Working v2 80B path validated 2026-05-05** (job 12466025, 4N
+  smoke): `agpt_80b @ TP=2, AC=full, compile=OFF, AdamW LR=1e-6,
+  fp32-master` on torch 2.13. Loss descended **12.98 → 10.46** over
+  20 steps, MFU steady at **~17.8%** (matches v1 compile-on baseline),
+  memory peak **88.94%** with ~7 GiB headroom. Production setup just
+  needs to add the 200-step linear warmup the 2B/20B v2 configs use,
+  then it's ready to launch.
 - Initial toy repro (legacy `parallelize_module` — does NOT fire,
   needs the new sharding API):
   [`docs/upstream-issues/repro_devicemesh_in_saved_tensors.py`](../upstream-issues/repro_devicemesh_in_saved_tensors.py).
