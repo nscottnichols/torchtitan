@@ -72,22 +72,50 @@
 
 ### Job Submission
 
-- **Production training (torch 2.10):** Use `submit/aurora/submit_agpt_{2b,20b}.sh`
-  These use `ezpz_setup_env` (conda). LBS=1, 256 nodes.
-- **Production training (torch 2.13):** Use `scripts/train_agpt_{2b,20b,80b}_venv.sh`
-  These use `.venv/` + `ezpz yeet-env`. LBS=2.
-- **Never submit multiple 512N venv jobs simultaneously.** The `yeet-env` rsync
-  of 8.6GB to 512+ nodes saturates the flare filesystem for hours, killing
-  TPS on all co-running jobs. Stagger or use DAOS instead.
+- **All current (v2) production training:** Use
+  `scripts/submit_agpt_{2b,20b}_aurora_venv.sh`. These use the torch
+  2.13 `.venv/` (broadcast via `ezpz yeet-env` tarball mode), LBS=2,
+  fp32 master, and one script handles all node counts via env vars
+  (`NNODES`, `LBS`, `CKPT_DIR`, `CHECKPOINT_ASYNC_MODE`, …).
+- **Legacy torch-2.10 v1 scripts** live under `submit/{aurora,sunspot}/*.sh`
+  with their own README. They produced every v1 (bf16-tainted)
+  trajectory and are kept only for reproducing v1 numbers — nothing
+  live calls into that directory anymore.
+- **`scripts/train_agpt_{2b,20b,80b}_venv.sh`** are interactive
+  launchers (run from a compute node with an existing allocation),
+  not PBS submitters.
+- **yeet-env tarball mode (`.venv.tar.gz` + `ezpz yeet --src ...`) is
+  the default at scale.** Per-file rsync mode is the fallback. Tarball
+  broadcast is sub-linear: 8N=70s → 256N=133s → 512N=175s → 1024N=255s
+  → 4096N=750s. The old 1-2h "saturate flare for hours" warning was
+  from per-file rsync mode and no longer applies — but still don't
+  start multiple 512N+ jobs in the same minute.
 - Always chain continuations: `qsub -W depend=afterany:<jobid> <script>`
 
 ### yeet-env Scaling
 
 Copies `.venv/` (8.6GB) from flare to `/tmp` on every compute node.
-- 2–16 nodes: ~5–10 min
-- 64 nodes: ~15–30 min
-- 256 nodes: ~30–60 min (solo), hours if concurrent
-- 512+ nodes: 1–2+ hours (solo), DO NOT run concurrently
+**Tarball mode (`.venv.tar.gz` broadcast) is the default at scale**
+and is sub-linear:
+
+| Nodes | yeet (s) | Per-node (ms) |
+| ----: | -------: | ------------: |
+|     8 |     70   |         8,700 |
+|    64 |     91   |         1,425 |
+|   256 |    133   |           519 |
+|   512 |    175   |           341 |
+|  1024 |    255   |           249 |
+|  4096 |    751   |           183 |
+
+Two regimes: < 128 nodes is dominated by the one-time local extract
+(~70-91s flat); ≥ 128 nodes the broadcast tree depth dominates, with
+each 2× in nodes adding 1.5-1.8× wall-clock. Even at 4096N the
+pre-launch overhead is under 13 minutes.
+
+The "1–2+ hours per-file rsync DO NOT run concurrently" pattern still
+applies if you fall back to rsync mode (no `.venv.tar.gz` present),
+so always build the tarball first via `ezpz tar-env`. See
+[`docs/guides/running-with-newer-pytorch.md`](../docs/guides/running-with-newer-pytorch.md).
 
 ### Optimizer Constraints at Scale
 
@@ -208,10 +236,17 @@ that touches one of these areas.
   is ~7.8e-3 and per-step optimizer updates are ~1.6e-5 — every update
   rounds to zero. **All v1 RMSNorm.weights stayed at 1.0 for the whole
   run.** Fixed by flipping the default to `float32`. v2 production was
-  restarted from scratch (path 2). Smoking gun: 2B v2 ARC-Easy hit 0.429
-  at 100B tokens; v1 hovered at 0.272 across 450B tokens (+19.8pp
-  ARC-Easy / +15.4pp HellaSwag). See
-  [`docs/guides/training-dtype-bf16-norm-freeze.md`](../docs/guides/training-dtype-bf16-norm-freeze.md).
+  restarted from scratch (path 2). End-to-end smoking gun:
+  - **2B**: v2 ARC-Easy hit 0.429 at 100B tokens; v1 hovered at 0.272
+    across 450B tokens (+19.8pp ARC-Easy / +15.4pp HellaSwag).
+  - **20B**: v2 ARC-Easy `acc` lifts cleanly 0.271 → **0.444** across
+    steps 100-800 (10-80B tokens); v1 256N flat at ~0.27 across all of
+    0-63B tokens. HellaSwag `acc_norm` 0.254 → 0.284 (+3pp above v1).
+  - **Direct weight verification**: v1 ckpts have RMSNorm.weight
+    variance ≡ 0 (every value exactly 1.0); v2 step-5000 has
+    mean(var)=1.2e-4, std=0.011, range [0.926, 1.102] across 25 norm
+    layers. Final-norm channels scaled up uniformly to ~10% above init.
+  See [`docs/guides/training-dtype-bf16-norm-freeze.md`](../docs/guides/training-dtype-bf16-norm-freeze.md).
 
 - **TP > 1 loss reporting is off by `dp_world_size`** (since upstream
   2026-04-27, commit `1786292d`). `_dist_reduce` short-circuits DTensor
@@ -250,12 +285,19 @@ that touches one of these areas.
   (`--data-parallel-shard-degree=<world_size>` and
   `--data-parallel-replicate-degree=1`).
 
-- **Recurring `signal 9` Aurora NODE_FAIL pattern.** Three production
-  jobs (8459818, 8460301, 8463659) killed mid-run with
-  `shepherd died from signal 9` on three different nodes. step-N
+- **Recurring `signal 9` Aurora NODE_FAIL pattern.** Four production
+  jobs (8459818, 8460301, 8460302, 8463659) killed mid-run with
+  `shepherd died from signal 9` on four different nodes. step-N
   ckpts saved cleanly so trajectories are resumable. Open question
   whether to file an ALCF support ticket — see
   [`docs/meeting-notes/agpt-sync.md`](../docs/meeting-notes/agpt-sync.md).
+
+- **1024N init OOM/SIGSEGV (2026-05-04).** First-ever 1024N attempts
+  on the v2 stack (8463182 2B, 8463183 20B) both crashed at startup
+  in `set_determinism` distributed-init at 12,288 ranks
+  (std::bad_alloc / SIGSEGV respectively). 256N/512N work fine. Bracket
+  with 768N / 896N before resubmitting. See
+  [`memory/project_1024n_init_crash.md`](.).
 
 - **`EzpzValidator` + blendcorpus validation split wired in but not
   smoke-tested yet.** `BlendCorpusDataLoader.Config` has
@@ -288,32 +330,64 @@ that touches one of these areas.
 ## Production Training Status (Aurora)
 
 Tracking in `docs/production/`. **All v2 (post-bf16-fix) runs use
-torch 2.10 + `submit/aurora/` scripts**. Default dtype is now `float32`
-(see Recent Findings).
+the torch 2.13 venv stack + `scripts/submit_agpt_*_aurora_venv.sh`**.
+Default dtype is now `float32` (see Recent Findings).
 
-### v2 — 2B 512N canonical chain (`8460301 → 8463626 → 8463627`)
+### v2 — 2B 512N canonical chain (`8460301 → 8463626 → 8463627 → 8466847`)
 
 - **Cumulative steps:** 5,073 (as of 2026-05-04)
 - **Loss:** 2.97
 - **Tokens consumed:** 510B (10.9% of 4.67T target)
 - **Throughput:** ~2,700 TPS/GPU, ~10% MFU
 - **Checkpoint dir:** `outputs/checkpoints/agpt-2b-sophiag-olmo-mix-1124-n512-gbs12288/`
+- **Status:** 8463626 walltime-finished cleanly (50 ckpts saved every
+  100 steps); 8463627 (continuation) and 8466847 (held behind it)
+  are both Q for a 512N slot.
 - **Trajectory page:** [`docs/production/agpt/2b/n512/`](../docs/production/agpt/2b/n512/README.md)
 
-### v2 — 20B 512N canonical chain (`8460302 → 8463628`)
+### v2 — 20B 512N canonical chain (`8460302 → 8463628 → 8466848`)
 
-- **Cumulative steps:** ~862 (as of 2026-05-04)
-- **Loss:** ~3.47
-- **Tokens consumed:** ~87B (~1.9% of 4.67T target)
-- **Throughput:** ~355 TPS/GPU, ~17.8% MFU
+- **Cumulative steps:** 863 (as of 2026-05-04)
+- **Loss:** 3.46
+- **Tokens consumed:** 87B (1.9% of 4.67T target)
+- **Throughput:** ~358 TPS/GPU, ~17.8% MFU
+- **Status:** 8463628 walltime-finished cleanly at step 863
+  (step-100..step-800 ckpts saved); 8466848 (continuation, auto-released
+  from hold) is Q for a 512N slot.
+- **Eval (8 ckpts, steps 100-800):** ARC-Easy `acc` lifts cleanly
+  **0.271 → 0.444** above v1's flat ~0.27 baseline; HellaSwag `acc_norm`
+  breaks out **0.254 → 0.284** (+3pp above v1). ARC-C / Winogrande
+  still in noise at this token count. The fp32-master fix is
+  smoking-gun-validated at 20B.
 - **Trajectory page:** [`docs/production/agpt/20b/n512/`](../docs/production/agpt/20b/n512/README.md)
 
 ### v2 — 20B 256N (`8463659`, NODE_FAIL after step 364)
 
 - step 364, loss 4.61, 18.3B tokens. Killed by recurring `signal 9`
   Aurora NODE_FAIL — same pattern as 8459818 / 8460301.
-- step-300 ckpt saved cleanly; resumable.
+- step-300 ckpt saved cleanly; resumable. No continuation chained
+  (production is consolidated on the 512N chain; this trajectory was
+  a per-token comparator scaling experiment).
 - **Trajectory page:** [`docs/production/agpt/20b/n256/`](../docs/production/agpt/20b/n256/README.md)
+
+### v2 — 1024N first attempts (`8463182` 2B, `8463183` 20B) — both crashed at startup
+
+- **2B 1024N (8463182)**: `MemoryError: std::bad_alloc` in
+  `torch.distributed.broadcast` during `set_determinism` init. Died
+  in 211s.
+- **20B 1024N (8463183)**: rank 4732 died from signal 11 (SIGSEGV)
+  during the same init phase. Died in 211s.
+- 12,288 ranks (1024N × 12 GPU/node) appears to hit an init-time
+  memory/comm scaling issue that 256N and 512N don't see. Bracket
+  with 768N / 896N before resubmitting.
+- See [`memory/project_1024n_init_crash.md`](.).
+
+### v2 — √2-LR fork (`8467141 → 8467142`, 2B 512N)
+
+Experimental: tests whether scaling LR by √2 (3.22e-5 vs 2.28e-5) at
+the doubled GBS=12,288 closes the per-token gap to 256N. Writes to
+its own ckpt dir (`gbs12288-lr3.22e-5`), independent of the canonical
+chain. Both jobs Q/H for 4+ days now.
 
 ### v2 — 80B
 
@@ -326,7 +400,10 @@ Not yet restarted post-bf16-fix. Open work; needs LR=1e-6 and either
 All v1 trajectories are kept under each per-trajectory page in
 `docs/production/agpt/{2b,20b,80b}/n*/` for v1-vs-v2 comparison
 purposes. Don't add tokens to v1 chains — they're frozen reference
-points.
+points. Confirmed bf16 freeze: every v1 RMSNorm.weight is exactly
+1.0 (variance ≡ 0); v2 step-5000 has mean(var)=1.2e-4, std=0.011,
+range [0.926, 1.102] across 25 norm layers — i.e. norms are actually
+training in v2. See `docs/guides/training-dtype-bf16-norm-freeze.md`.
 
 ## Scaling Study Results (Aurora)
 
@@ -396,10 +473,15 @@ empirical evidence, follow the doc link.
   built with a different parallelism config crashes silently. Fix:
   rename old checkpoint dir to `.bak-YYYYMMDD`.
 
-- **Recurring Aurora `signal 9` NODE_FAIL** on long-walltime jobs (3
-  jobs killed across 3 different nodes). Cause unclear; resume from
+- **Recurring Aurora `signal 9` NODE_FAIL** on long-walltime jobs (4
+  jobs killed across 4 different nodes). Cause unclear; resume from
   most recent ckpt is the operational workaround. Possibly worth an
   ALCF support ticket.
+
+- **1024N init OOM/SIGSEGV** at 12,288 ranks during `set_determinism`
+  broadcast. First-ever attempts on v2 stack (8463182 / 8463183) both
+  died in 211s. 256N/512N unaffected. See
+  [`memory/project_1024n_init_crash.md`](.).
 
 ## User Preferences (operational)
 
@@ -414,8 +496,10 @@ moved up to "Golden Rules".
   `scripts/interactive-launch.sh`.
 - **Append-only tables** — production training progress tables should
   append, not replace.
-- **Use `submit/aurora/` scripts** for continuing torch 2.10 production
-  runs, `scripts/*_venv.sh` for new torch 2.13 runs.
+- **Use `scripts/submit_agpt_*_aurora_venv.sh`** for all current
+  (torch 2.13 venv, fp32-master) production. The legacy
+  `submit/{aurora,sunspot}/*.sh` (torch 2.10 conda) are kept only for
+  reproducing v1 numbers — see `submit/README.md`.
 - **Date filenames as `YYYY-MM-DD`** for any per-day artifacts.
   Per-recurring-meeting docs use a stable filename with `## YYYY-MM-DD`
   sections inside (see `docs/meeting-notes/agpt-sync.md`).
