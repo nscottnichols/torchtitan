@@ -38,8 +38,8 @@ python3 torchtitan/experiments/ezpz/utils/plot_production_wandb.py --overlay 20b
 ## Eval scores
 
 See [`docs/evals/agpt/20b/`](../../../evals/agpt/20b/README.md) for
-the v1-vs-v2 lm-eval comparison. Currently 3 v2 ckpts evaluated
-(steps 100/200/300, 10-30B tokens; eval for steps 400-800 in flight as
-8467370) — ARC-Easy starting to lift
-(0.271 → 0.289 → 0.295) above v1's flat ~0.27 baseline. Other tasks
-still in noise; will revisit at higher token counts.
+the v1-vs-v2 lm-eval comparison. All 8 v2 ckpts evaluated
+(steps 100-800, 10-80B tokens). ARC-Easy `acc` lifts cleanly
+**0.271 → 0.444** above v1's flat ~0.27 baseline; HellaSwag `acc_norm`
+breaks out **0.254 → 0.284** (+3pp above v1). ARC-Challenge and
+Winogrande still in noise at this token count.

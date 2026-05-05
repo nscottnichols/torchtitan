@@ -13,11 +13,12 @@
 > [`docs/guides/training-dtype-bf16-norm-freeze.md`](../../../guides/training-dtype-bf16-norm-freeze.md)).
 > All scores hover near random — this is consistent with the model
 > having no trainable normalization. The fp32-master v2 run
-> (`agpt-20b-v2`, 512N, currently at step 863) is starting to show
-> real benchmark progression: ARC-Easy `acc` lifted from 0.266 (step
-> 100) to **0.393** (step 600, 60B tokens) — a clean monotonic ascent
-> well above v1's flat ~0.27 baseline. HellaSwag is also creeping up
-> (0.257 → 0.270); ARC-C and Winogrande are still in noise.
+> (`agpt-20b-v2`, 512N, currently at step 863) is now showing clear
+> benchmark progression: ARC-Easy `acc` lifted from 0.266 (step 100)
+> to **0.444** (step 800, 80B tokens) — a clean monotonic ascent
+> well above v1's flat ~0.27 baseline. HellaSwag is also breaking
+> out (`acc_norm` 0.254 → 0.284, +3pp above v1). ARC-Challenge and
+> Winogrande still in noise at this token count.
 
 ## Setup
 
@@ -62,8 +63,10 @@ python3 torchtitan/experiments/ezpz/docs/evals/agpt/20b/plot_v1_vs_v2.py
 | **v2 512N** | **400** | ** 40.3** | **0.2597** | **0.3178** | **0.2261** | **0.5067** |
 | **v2 512N** | **500** | ** 50.3** | **0.2661** | **0.3455** | **0.2227** | **0.4949** |
 | **v2 512N** | **600** | ** 60.4** | **0.2695** | **0.3598** | **0.2227** | **0.5012** |
+| **v2 512N** | **700** | ** 70.5** | **0.2814** | **0.3914** | **0.2133** | **0.5012** |
+| **v2 512N** | **800** | ** 80.5** | **0.2844** | **0.4061** | **0.2184** | **0.4988** |
 
-Steps 700/800 eval (8467370) hit the capacity-queue 8h walltime mid-step-700 lm-eval and was killed before writing results — will resubmit once the 256N v2 run (8463659) finishes and frees flare bandwidth.
+All 8 v2 ckpts (steps 100-800) now evaluated. Steps 700/800 ran on 8469257 (capacity, 3h walltime) after 8467370 hit walltime mid-step-700 yesterday.
 
 <details>
 <summary><strong>v1 detailed results (bf16-tainted, kept for record) — click to expand</strong></summary>
