@@ -4,12 +4,13 @@
 > for the v1-vs-v2 lm-eval comparison (covers all 2B trajectories on
 > shared axes).
 
-## v2 — 2B @ 256N — SophiaG LR=2.28e-5 (fp32 master, **no continuation**)
+## v2 — 2B @ 256N — SophiaG LR=2.28e-5 (fp32 master)
 
-> Status: ran one job (8459818, 6h, NODE_FAIL after step 2070, 20 ckpts
-> saved). No continuation chained — production at 2B is consolidated
-> on the **512N** chain ([n512/](../n512/README.md)). Resumable from
-> `outputs/checkpoints/.../n256-gbs6144/step-2000` if we want to revisit.
+> Status: 8459818 (6h, NODE_FAIL after step 2070, 20 ckpts saved)
+> ran end-of-April. Continuation chain (8470100 + 8470101) submitted
+> 2026-05-04 because the canonical 512N chain (8463627 + 8466847)
+> has been Q for 4+ days waiting for 512N slots — falling back to 256N
+> to keep training advancing. Will resume from step-2000.
 
 | Field | Value |
 |-------|-------|
@@ -42,6 +43,8 @@
 | Job ID | Steps | Loss (start → end) | TPS/GPU | MFU | Status |
 |--------|-------|---------------------|---------|-----|--------|
 | 8459818 | 1–2070 | 12.93 → 3.33 | ~3,500 | ~13% | NODE_FAIL after step 2070 (single bad node dragged TPS to ~30 then killed). 20 ckpts saved (every 100 steps). |
+| 8470100 | 2000+ | (resuming) | — | — | **Queued** (12h, will resume from step-2000 — submitted 2026-05-04 since 512N slots stuck) |
+| 8470101 | (cont.) | — | — | — | Held (`afterany:8470100`) |
 
 **Latest checkpoint:** step-2000
 
@@ -50,6 +53,8 @@
 **Logs:**
 
 - `8459818`: `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n256.o8459818`
+- `8470100`: queued — log will land in `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/` on start
+- `8470101`: held (`afterany:8470100`) — log will land in `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/`
 
 ---
 

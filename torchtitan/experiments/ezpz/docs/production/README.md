@@ -41,6 +41,8 @@ for the diagnosis.
 | 8463182 | 2B | 1024 | 12h | **Crashed @ startup (211s, std::bad_alloc)** |
 | 8463183 | 20B | 1024 | 12h | **Crashed @ startup (211s, SIGSEGV)** |
 | 8463659 | 20B | 256 | 12h | **NODE_FAIL** after step 364 (loss 4.61); step-300 ckpt saved |
+| 8470100/8470101 | 2B  | 256 | 12h | Queued — 256N continuation chain (resumes from step-2000); submitted because 512N stuck |
+| 8470102/8470103 | 20B | 256 | 12h | Queued — 256N continuation chain (resumes from step-300); submitted because 512N stuck |
 
 ### Dense (agpt) — bf16-tainted (superseded, kept for record)
 

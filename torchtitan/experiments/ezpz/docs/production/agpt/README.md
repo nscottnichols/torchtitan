@@ -43,6 +43,10 @@ extensions.
 | 8463182 | 2B | 1024 | 12h | **Crashed @ startup (211s, std::bad_alloc)** | Fresh start, separate ckpt dir (`n1024-gbs24576`) |
 | 8463183 | 20B | 1024 | 12h | **Crashed @ startup (211s, SIGSEGV)** | Fresh start, separate ckpt dir (`n1024-gbs24576`) |
 | 8463659 | 20B | 256 | 12h | **NODE_FAIL** after step 364 (loss 4.61) | Fresh start, separate ckpt dir (`n256-gbs6144`). step-300 ckpt saved. |
+| 8470100 | 2B  | 256 | 12h | Queued — resumes from step-2000 (`n256-gbs6144`) | Submitted 2026-05-04 since 512N stuck. 8470101 held behind. |
+| 8470101 | 2B  | 256 | 12h | Held (`afterany:8470100`) | 2nd 256N continuation in chain |
+| 8470102 | 20B | 256 | 12h | Queued — resumes from step-300 (`n256-gbs6144`) | Submitted 2026-05-04 since 512N stuck. 8470103 held behind. |
+| 8470103 | 20B | 256 | 12h | Held (`afterany:8470102`) | 2nd 256N continuation in chain |
 
 **80B**: not yet restarted in v2.
 
