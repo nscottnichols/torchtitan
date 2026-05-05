@@ -263,15 +263,20 @@ that touches one of these areas.
   historical 80B v1 W&B traces show `loss / 1536`. See
   [`docs/guides/loss-reporting-tp-dist-reduce.md`](../docs/guides/loss-reporting-tp-dist-reduce.md).
 
-- **80B compile + AC + TP=2 still crashes** with
-  `tensors_saved_for_backwards_with_vc_check_slice` AOT autograd
-  assertion (DeviceMesh leaks into saved-for-backward tensors). Toy
-  repro using legacy `parallelize_module` does NOT fire — needs the
-  new `Module.parallelize` + `LocalMapConfig` path. Added
-  `agpt_50b_wide` (dim=9216, **48 layers**, ~48B params) as a smaller
-  bisect target. **Bug does NOT reproduce at 48 layers, only at 84
-  (the 80B config) — so the bug is depth-sensitive, not
-  width/head-sensitive.** Workaround: `compile=OFF` for 80B. Toy repro:
+- **`compile + AC + TP=2` crashes on torch 2.13 for the entire
+  agpt 80B family** with the
+  `tensors_saved_with_vc_check`/`tensors_saved_for_backwards_with_vc_check_slice`
+  AOT autograd assertion (`DeviceMesh` leaks into saved-for-backward
+  tensors). Toy repro using legacy `parallelize_module` does NOT fire
+  — needs the new `Module.parallelize` + `LocalMapConfig` path.
+  **Bisect on 2026-05-05 with `agpt_{50b_wide, 70b_wide, 80b}` jobs
+  12465952 (4N) and 12465962 (2N) showed all three crash on torch 2.13;
+  the May 3 "depth-sensitive — works at 48 layers" claim was a
+  torch-2.10-only artifact and is wrong.** Bug is **torch-2.13-sensitive**,
+  fires on every config we've tried (smallest tested:
+  `agpt_50b_wide` ~48B params, 2N, ~30s to crash).
+  Workaround: `compile=OFF` for any 80B-family config on torch 2.13.
+  Toy repro:
   [`docs/upstream-issues/repro_devicemesh_in_saved_tensors.py`](../docs/upstream-issues/repro_devicemesh_in_saved_tensors.py).
 
 - **HSDP (`dp_replicate × dp_shard > 1`) hits an `aten.normal_.default`
@@ -391,9 +396,13 @@ chain. Both jobs Q/H for 4+ days now.
 
 ### v2 — 80B
 
-Not yet restarted post-bf16-fix. Open work; needs LR=1e-6 and either
-(a) `compile=OFF` to avoid the depth-sensitive AOT autograd crash or
-(b) a smaller variant like `agpt_50b_wide` (works compile + AC + TP=2).
+Not yet restarted post-bf16-fix. Open work; needs LR=1e-6, and on
+torch 2.13 needs `compile=OFF` to avoid the AOT autograd
+DeviceMesh-in-saved-tensors crash (which we now know fires on the
+entire 80B family — not just 84-layer; the smaller `50b_wide` is not
+a workaround on torch 2.13). torch 2.10 stack is the only `compile=ON`
+path that works for the agpt 80B family until upstream fixes the
+assertion.
 
 ### v1 (bf16-tainted, historical)
 
@@ -439,11 +448,16 @@ empirical evidence, follow the doc link.
   that require placement changes are not supported`. Workaround: pure
   FSDP only.
 
-- **80B compile + AC + TP=2 crashes** with
-  `tensors_saved_for_backwards_with_vc_check_slice` AOT autograd
-  assertion. Depth-sensitive — does NOT reproduce at 48 layers
-  (`agpt_50b_wide`), only at 84 (the 80B config). Workaround:
-  `compile=OFF` for 80B. Toy repro at
+- **`compile + AC + TP=2` AOT autograd crash on the agpt 80B family
+  (torch 2.13).** `tensors_saved_with_vc_check` AssertionError —
+  `DeviceMesh` leaks into saved-for-backward tensors. Bisect on
+  2026-05-05 (jobs 12465952 + 12465962) showed the bug fires on every
+  config in the family (smallest tested: `agpt_50b_wide` ~48B params,
+  2N, ~30s to crash). The May 3 "depth-sensitive — works at 48 layers"
+  claim was a torch-2.10-only artifact. **Bug is torch-version-sensitive:
+  fires on torch 2.13, did not fire on torch 2.10.** Workaround:
+  `compile=OFF` for 80B-family on torch 2.13, OR stay on torch 2.10
+  for these configs. Toy repro:
   [`docs/upstream-issues/repro_devicemesh_in_saved_tensors.py`](../docs/upstream-issues/repro_devicemesh_in_saved_tensors.py).
 
 - **80B TP=2 regression on torch 2.10:** Hangs at step 1 since upstream

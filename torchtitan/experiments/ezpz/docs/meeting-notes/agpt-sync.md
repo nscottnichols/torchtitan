@@ -60,20 +60,31 @@ checkpoints. The v1-vs-v2 lm-eval comparison is the smoking gun:
 ### 80B blocker
 
 - 80B `compile + AC + TP=2` still hits the
-  `tensors_saved_for_backwards_with_vc_check_slice` AOT autograd
-  assertion. Toy minimal repro doesn't fire — bug needs the real
-  `Module.parallelize` + `LocalMapConfig` path that torchtitan uses.
-- **New finding from today:** added `agpt_50b_wide` (dim=9216,
-  **48 layers**, ~48B params) as a smaller bisect target — commit
-  [`98a02d04`](https://github.com/saforem2/torchtitan/commit/98a02d04).
-  Smoke ran cleanly compile + AC + TP=2 at 95.94% memory, MFU 15%.
-  **Bug does NOT reproduce at 48 layers — only at 84 (the 80B
-  config).** So the upstream bug is **depth-sensitive**, not
-  width/head-sensitive. Narrows the minimal-repro scope significantly.
-- Initial repro attempt (toy version that does NOT fire — needs the
-  new sharding API):
+  `tensors_saved_with_vc_check` AOT autograd assertion (`DeviceMesh`
+  leaks into saved-for-backward tensors). Toy minimal repro doesn't
+  fire — bug needs the real `Module.parallelize` + `LocalMapConfig`
+  path that torchtitan uses.
+- **2026-05-03:** added `agpt_50b_wide` (dim=9216, 48 layers, ~48B
+  params,
+  [`98a02d04`](https://github.com/saforem2/torchtitan/commit/98a02d04))
+  as a smaller bisect target. 2N + torch 2.10 smoke ran 10/10 steps
+  cleanly. Concluded "bug is depth-sensitive — does NOT reproduce at
+  48 layers." That conclusion turned out to be wrong (see below).
+- **2026-05-05 correction:** ran a proper three-config bisect on torch
+  2.13 (job 12465952 4N + job 12465962 2N). All three configs
+  (`agpt_50b_wide` 48L, `agpt_70b_wide` 72L, `agpt_80b` 84L) **crash
+  identically** with the same assertion. Smallest tested:
+  `agpt_50b_wide` on 2N takes ~30s to crash. **Bug is
+  torch-version-sensitive, not depth-sensitive.** The May 3 result was
+  a torch-2.10 artifact (the failing assertion in
+  `_AutogradSavedState.save_from_forward` likely doesn't exist or
+  isn't reached on the older AOT-autograd code path). Working repro
+  bracket: torch 2.10 (any depth) ✓ → torch 2.13 (every depth tested) ✗.
+- Workaround in the meantime: `compile=OFF` for any 80B-family config
+  on torch 2.13, OR pin to torch 2.10 for those configs.
+- Initial toy repro (legacy `parallelize_module` — does NOT fire,
+  needs the new sharding API):
   [`docs/upstream-issues/repro_devicemesh_in_saved_tensors.py`](../upstream-issues/repro_devicemesh_in_saved_tensors.py).
-- Workaround in the meantime: `compile=OFF` for 80B (eats throughput).
 
 ### Open work I'm holding
 

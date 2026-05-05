@@ -12,10 +12,18 @@ asserted (runtime_wrappers.py:2827-2831) to contain only Tensors:
 All three of {TP, AC use_reentrant=False, torch.compile} are required.
 Drop any one and the bug goes away.
 
-Tested: torch 2.13.0.dev20260429+xpu (also reproduced on torch
-2.12.0.dev20260415+xpu). torchtitan trips this on every dense agpt
-config that needs TP > 1 (50B+); only workaround today is
---compile.no-enable.
+Tested: torch 2.13.0.dev20260429+xpu and torch 2.13.0.dev20260503+xpu
+(also reproduced on torch 2.12.0.dev20260415+xpu). torchtitan trips
+this on **every dense agpt config we have tested at TP > 1**, with the
+bisect on 2026-05-05 (jobs 12465952 + 12465962) confirming the
+assertion fires for `agpt_50b_wide` (48 layers, ~48B params),
+`agpt_70b_wide` (72 layers, ~70B), and `agpt_80b` (84 layers, ~80B)
+alike on both 2N and 4N. Smallest reliable repro is
+`agpt_50b_wide @ 2N + torch 2.13`, which crashes ~30-60s into compile.
+**The previously documented "depth-sensitive — works at 48 layers"
+finding was a torch-2.10-only artifact; on torch 2.13 every depth
+crashes.** Only workaround today is `--compile.no-enable` (or stay on
+torch 2.10 for these configs).
 
 Run on a single CPU host with 2 ranks (gloo):
 

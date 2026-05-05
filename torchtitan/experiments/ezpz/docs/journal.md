@@ -4,6 +4,102 @@ Running log of what's happening, session by session. Most recent first.
 
 ---
 
+## 2026-05-05 — 80B DeviceMesh-bisect: torch-version, not depth
+
+### Bisect kills the May 3 "depth-sensitive" claim
+
+Submitted job 12465952 on Sunspot 4N to bisect the
+`tensors_saved_with_vc_check` AOT autograd assertion across the agpt
+80B family on the torch 2.13 venv. Three configs ran sequentially:
+
+- `agpt_50b_wide` (48 layers): crashed in **66 s**, every rank logs the
+  assertion (49 ranks × 1 = full crash on the first
+  forward+backward).
+- `agpt_70b_wide` (72 layers, new
+  [`b9cda4b2`](https://github.com/saforem2/torchtitan/commit/b9cda4b2)
+  config — 80B family with 12 fewer layers): same assertion, 28 s.
+- `agpt_80b` (84 layers): same assertion, 29 s.
+
+Per-config logs at `logs/agpt-80b-bisect-12465952/{config}.log`. The
+"depth-sensitive — works at 48 layers" conclusion in the May 3 entry
+was wrong. Two variables had changed between the May 3 50B_wide
+success and today's 50B_wide failure: node count (2N → 4N) AND torch
+version (`aurora_frameworks-2025.3.1` torch 2.10 → torch 2.13 venv).
+
+To pin the variable I submitted job 12465962 (2N + torch 2.13,
+[`submit_50b_wide_2n_t213.sh`](../scripts/submit_50b_wide_2n_t213.sh)).
+Result: same assertion, 57 s. **torch 2.13 alone is the trigger;
+node count is a non-factor.**
+
+This means:
+
+- The bug is **torch-version-sensitive, not depth-sensitive**.
+- `agpt_50b_wide` on 2N + torch 2.13 is now a **clean ~30-60 s
+  reproducer** for the upstream report (much smaller than 80B).
+- The May 3 50B_wide success was masked entirely by the older AOT
+  autograd code path on torch 2.10.
+
+### Updated docs
+
+- `experiments/ezpz/.claude/CLAUDE.md` — corrected the Recent Findings
+  bullet, the Production v2 80B note, and the Known Bugs entry.
+- `experiments/ezpz/docs/meeting-notes/agpt-sync.md` — added the
+  2026-05-05 correction beneath the original 2026-05-03 finding so
+  the meeting can show both.
+- The new `agpt_70b_wide` config and the
+  [`submit_80b_bisect.sh`](../scripts/submit_80b_bisect.sh) +
+  [`submit_50b_wide_2n_t213.sh`](../scripts/submit_50b_wide_2n_t213.sh)
+  scripts are now part of the bisect-tooling.
+
+### Validator small-batch + global-state bug
+
+While running the agpt_2b validator smoke separately, noticed the
+val build was using `Global batch size: 48` and warning about
+`train_iters defaulting to 1` on every validate() call. Three
+related issues, all in
+`torchtitan/components/validate.py:Validator.validate()` not passing
+the trainer's `training_steps` and `global_batch_size` through to
+`dl_config.build()`. Fixed in
+[`3edfb0ff`](https://github.com/saforem2/torchtitan/commit/3edfb0ff)
+by capturing `job_config` in `EzpzValidator.__init__` and forwarding
+the right values. Validator was using ~1/4-sized batches per call
+(noisier val loss); a worse latent issue was that `bc_set_config`
+overwrites the blendcorpus library's global `DATA_CONFIG` with the
+wrong `train_iters` and `global_batch_size`, which would silently
+corrupt any later resume-from-ckpt rebuild of the train dataloader.
+
+### blendcorpus ↔ Megatron parallelism aliasing
+
+Reviewed `BlendCorpusDataLoader` for further Megatron-style
+parallelism leftovers. Found 7 inconsistencies:
+
+- 2 active and fixed today
+  ([`140481d3`](https://github.com/saforem2/torchtitan/commit/140481d3)):
+  scope the `dist.barrier` → CPU/gloo monkey-patch to torch < 2.13
+  (it was being silently applied on 2.13 even though XCCL is fixed
+  there); rename `_train_ds` → `_served_ds` so the attribute matches
+  what it actually holds when `serve_validation=True`.
+- 5 latent items (PP semantics, CP→SP aliasing, dp_world_size
+  double-source, parallel-state duplication, hard-coded Megatron
+  knobs) tracked in
+  [`docs/TODO.md` §6](TODO.md) and documented in
+  [`docs/guides/known-bugs/blendcorpus-megatron-aliasing.md`](guides/known-bugs/blendcorpus-megatron-aliasing.md).
+
+### Other
+
+- Pulled 11 upstream commits (32nd sync,
+  [logged](upstream-sync.md#2026-05-05-32nd-sync--observability--moe-token-pad--cp-fix--rlgraph_trainer-churn)).
+  Notable: `b2cd149f` adds `torchtitan/observability/` structured
+  logging hooks. ezpz's `FaultTolerantTrainer` and `EzpzValidator`
+  override their respective base classes' methods entirely so the
+  new `@sl.log_trace_span` decorators don't propagate — non-blocking
+  but worth re-adding later if we want trace spans on the ezpz path.
+- Aligned `~/.claude/statusline-command.sh` to match starship.toml
+  (true gray time, fish-style abbreviated path with cyan-bold +
+  underlined-blue repo root, bold-purple branch).
+
+---
+
 ## 2026-05-04 — 20B chain walltime, 1024N startup crashes, doc cleanup
 
 ### Production training
@@ -228,11 +324,17 @@ shape as 80B). That smoke crashed with an Intel GPU SegFault at step 2
 
 Replaced with `agpt_50b_wide` (dim=9216, **48 layers**, ~48B params).
 Smoke ran all 10 steps cleanly at 95.94% memory: MFU ≈ 15%, TPS ≈ 140
-on Sunspot. **This is a working `compile + AC + TP=2` dense config**
-— the 80B-family DeviceMesh-in-saved-tensors crash does NOT reproduce
-at 48 layers, only at 84. So the upstream bug we've been hunting is
-**depth-sensitive, not width/head-sensitive**, which narrows the
-minimal-repro shape considerably for the future filing.
+on Sunspot. Concluded "this is a working `compile + AC + TP=2` dense
+config — the 80B-family DeviceMesh-in-saved-tensors crash does NOT
+reproduce at 48 layers, only at 84, so the bug is depth-sensitive."
+
+> **CORRECTION (2026-05-05):** that conclusion was wrong. The May 3
+> smoke happened to use torch 2.10 (`aurora_frameworks-2025.3.1`); a
+> proper bisect on torch 2.13 (jobs 12465952 + 12465962) showed the
+> bug fires on `agpt_50b_wide` / `agpt_70b_wide` / `agpt_80b` alike,
+> on both 2N and 4N. Bug is **torch-version-sensitive**, not
+> depth-sensitive. See the 2026-05-05 journal entry above for the
+> full bisect.
 
 ### Validation loss work — partial
 
