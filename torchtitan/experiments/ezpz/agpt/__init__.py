@@ -514,6 +514,20 @@ agpt_configs = {
         vocab_size=256128,
         hidden_dim=25600,
     ),
+    # Same per-layer shape as 80B with 72 layers (~70B params total).
+    # Bisect midpoint between the working 50B_wide (48L, no crash) and
+    # the broken 80B (84L, DeviceMesh-in-saved-tensors AOT autograd
+    # crash) — used to pin down whether the depth-sensitivity threshold
+    # is at 72L or somewhere else in [48, 84).
+    "70B_wide": _build_agpt_config(
+        dim=9216,
+        n_layers=72,
+        n_heads=72,
+        n_kv_heads=12,
+        rope_theta=500000,
+        vocab_size=256128,
+        hidden_dim=25600,
+    ),
     # Aurora-native ~80B configs: n_kv_heads=12, n_heads divisible by 12
     # so TP can be any factor of 12 (2, 3, 4, 6, 12).
     #
@@ -581,6 +595,7 @@ agpt_configs["20b"] = agpt_configs["20B"]
 agpt_configs["20b_flex_attn"] = agpt_configs["20B_flex_attn"]
 agpt_configs["50b"] = agpt_configs["50B"]
 agpt_configs["50b_wide"] = agpt_configs["50B_wide"]
+agpt_configs["70b_wide"] = agpt_configs["70B_wide"]
 agpt_configs["80b"] = agpt_configs["80B"]
 agpt_configs["80b_wide"] = agpt_configs["80B_wide"]
 agpt_configs["80b_deep"] = agpt_configs["80B_deep"]
