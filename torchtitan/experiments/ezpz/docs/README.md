@@ -14,92 +14,92 @@ date: 2026-03-15
 The canonical place for "what's training right now, and how is it
 going?" Tracking is per-model and per-node-count.
 
-| Page | Modified | Notes |
-|------|---------:|-------|
-| [Production Index](./production/README.md) | 2026-05-05 | Top-level snapshot of every active trajectory |
-| [Dense (agpt) Production](./production/agpt/README.md) | 2026-05-05 | 2B / 20B / 80B chains, v1-vs-v2 overlays |
-| [agpt 20B](./production/agpt/20b/README.md) | 2026-05-05 | All 20B trajectories + v1-vs-v2 overlay |
-| [20B 256N](./production/agpt/20b/n256/README.md) | 2026-05-05 | 8463659 NODE_FAIL → 8470102/8470103 256N continuation chain |
-| [2B 256N](./production/agpt/2b/n256/README.md) | 2026-05-05 | 8470100/8470101 256N continuation chain (resume from step-2000) |
-| [20B 1024N](./production/agpt/20b/n1024/README.md) | 2026-05-04 | First attempt (8463183) crashed at startup |
-| [2B 1024N](./production/agpt/2b/n1024/README.md) | 2026-05-04 | First attempt (8463182) crashed at startup |
-| [agpt 2B](./production/agpt/2b/README.md) | 2026-05-03 | All 2B trajectories + v1-vs-v2 overlay |
-| [20B 512N](./production/agpt/20b/n512/README.md) | 2026-05-03 | **Canonical 20B chain** (step 863, loss 3.46) |
-| [2B 512N](./production/agpt/2b/n512/README.md) | 2026-05-03 | **Canonical 2B chain** (step 5,073, loss 2.97) |
-| [agpt 2B-MDS](./production/agpt/2b-mds/README.md) | 2026-05-03 | Pre-torchtitan Megatron-DeepSpeed reference baseline |
-| [Production Scaling Report](./production/scaling-performance.md) | 2026-04-26 | Apr 18-21 experiments (historical) |
+| Page | Notes | Modified |
+|------|-------|---------:|
+| [Production Index](./production/README.md) | Top-level snapshot of every active trajectory | 2026-05-05 |
+| [Dense (agpt) Production](./production/agpt/README.md) | 2B / 20B / 80B chains, v1-vs-v2 overlays | 2026-05-05 |
+| [agpt 20B](./production/agpt/20b/README.md) | All 20B trajectories + v1-vs-v2 overlay | 2026-05-05 |
+| [20B 256N](./production/agpt/20b/n256/README.md) | 8463659 NODE_FAIL → 8470102/8470103 256N continuation chain | 2026-05-05 |
+| [2B 256N](./production/agpt/2b/n256/README.md) | 8470100/8470101 256N continuation chain (resume from step-2000) | 2026-05-05 |
+| [20B 1024N](./production/agpt/20b/n1024/README.md) | First attempt (8463183) crashed at startup | 2026-05-04 |
+| [2B 1024N](./production/agpt/2b/n1024/README.md) | First attempt (8463182) crashed at startup | 2026-05-04 |
+| [agpt 2B](./production/agpt/2b/README.md) | All 2B trajectories + v1-vs-v2 overlay | 2026-05-03 |
+| [20B 512N](./production/agpt/20b/n512/README.md) | **Canonical 20B chain** (step 863, loss 3.46) | 2026-05-03 |
+| [2B 512N](./production/agpt/2b/n512/README.md) | **Canonical 2B chain** (step 5,073, loss 2.97) | 2026-05-03 |
+| [agpt 2B-MDS](./production/agpt/2b-mds/README.md) | Pre-torchtitan Megatron-DeepSpeed reference baseline | 2026-05-03 |
+| [Production Scaling Report](./production/scaling-performance.md) | Apr 18-21 experiments (historical) | 2026-04-26 |
 
 ## Evaluation (lm-eval results)
 
 The smoking gun for the bf16-master fix: v2 ARC-Easy / HellaSwag /
 ARC-Challenge / Winogrande vs the (frozen-norm) v1 baseline.
 
-| Page | Modified | Notes |
-|------|---------:|-------|
-| [agpt 20B evals](./evals/agpt/20b/README.md) | 2026-05-05 | v1 vs v2, steps 100-800 (ARC-Easy 0.27 → 0.44) |
-| [agpt 2B evals](./evals/agpt/2b/README.md) | 2026-05-03 | v1 vs v2 + 256N-vs-512N per-batch comparison |
-| [agpt 2B-MDS evals](./evals/agpt/2b-mds/README.md) | 2026-05-03 | Pre-torchtitan reference scores |
-| [Eval Index](./evals/README.md) | 2026-04-30 | Top-level eval landing page |
+| Page | Notes | Modified |
+|------|-------|---------:|
+| [agpt 20B evals](./evals/agpt/20b/README.md) | v1 vs v2, steps 100-800 (ARC-Easy 0.27 → 0.44) | 2026-05-05 |
+| [agpt 2B evals](./evals/agpt/2b/README.md) | v1 vs v2 + 256N-vs-512N per-batch comparison | 2026-05-03 |
+| [agpt 2B-MDS evals](./evals/agpt/2b-mds/README.md) | Pre-torchtitan reference scores | 2026-05-03 |
+| [Eval Index](./evals/README.md) | Top-level eval landing page | 2026-04-30 |
 
 ## Big Findings (post-mortems and live workarounds)
 
 Landmark issues that shape current production. Always check the
 relevant guide before suggesting work that touches one of these.
 
-| Page | Modified | Notes |
-|------|---------:|-------|
-| [bf16-master RMSNorm freeze](./guides/training-dtype-bf16-norm-freeze.md) | 2026-05-03 | Root cause of v1 → v2 restart; `dtype=float32` is now default |
-| [TP > 1 loss reporting off by `dp_world_size`](./guides/loss-reporting-tp-dist-reduce.md) | 2026-05-03 | Upstream regression since 2026-04-27. Fix filed as pytorch/torchtitan#3204 |
-| [Known Issues / Operational Notes](./guides/known-issues.md) | 2026-04-29 | Catch-all for live workarounds |
-| [XPU Attention Issues](./guides/xpu-attention-issues.md) | 2026-04-26 | SDPA, FlexAttention, Triton on Intel Max 1550 |
+| Page | Notes | Modified |
+|------|-------|---------:|
+| [bf16-master RMSNorm freeze](./guides/training-dtype-bf16-norm-freeze.md) | Root cause of v1 → v2 restart; `dtype=float32` is now default | 2026-05-03 |
+| [TP > 1 loss reporting off by `dp_world_size`](./guides/loss-reporting-tp-dist-reduce.md) | Upstream regression since 2026-04-27. Fix filed as pytorch/torchtitan#3204 | 2026-05-03 |
+| [Known Issues / Operational Notes](./guides/known-issues.md) | Catch-all for live workarounds | 2026-04-29 |
+| [XPU Attention Issues](./guides/xpu-attention-issues.md) | SDPA, FlexAttention, Triton on Intel Max 1550 | 2026-04-26 |
 
 ## Day-by-day Work
 
-| Page | Modified | Notes |
-|------|---------:|-------|
-| [Development Journal](./journal.md) | 2026-05-05 | Session-by-session log of what happened, with findings and incidents |
-| [AuroraGPT Sync Notes](./meeting-notes/agpt-sync.md) | 2026-05-04 | Recurring agendas + action items |
-| [Meeting Notes Index](./meeting-notes/README.md) | 2026-05-04 | Top-level meeting index |
-| [Summary 2026-04-12 → 2026-04-27](./summaries/2026-04-12_to_2026-04-27.md) | 2026-05-04 | 2-week retrospective |
-| [Periodic Summaries Index](./summaries/README.md) | 2026-05-04 | Index of 2-week / monthly retros |
+| Page | Notes | Modified |
+|------|-------|---------:|
+| [Development Journal](./journal.md) | Session-by-session log of what happened, with findings and incidents | 2026-05-05 |
+| [AuroraGPT Sync Notes](./meeting-notes/agpt-sync.md) | Recurring agendas + action items | 2026-05-04 |
+| [Meeting Notes Index](./meeting-notes/README.md) | Top-level meeting index | 2026-05-04 |
+| [Summary 2026-04-12 → 2026-04-27](./summaries/2026-04-12_to_2026-04-27.md) | 2-week retrospective | 2026-05-04 |
+| [Periodic Summaries Index](./summaries/README.md) | Index of 2-week / monthly retros | 2026-05-04 |
 
 ## Setup & Reference
 
-| Page | Modified | Notes |
-|------|---------:|-------|
-| [Running with Newer PyTorch (≥ 2.10)](./guides/running-with-newer-pytorch.md) | 2026-05-04 | torch 2.13 venv setup + at-scale yeet (8N → 4096N) |
-| [Reference Baselines](./baselines/README.md) | 2026-04-29 | Training curves and benchmarks |
-| [Dense Model Configs](./configs/dense.md) | 2026-04-26 | 2B / 20B / 50B / 80B |
-| [MoE Variants](./configs/moe.md) | 2026-04-26 | 500M-10B |
+| Page | Notes | Modified |
+|------|-------|---------:|
+| [Running with Newer PyTorch (≥ 2.10)](./guides/running-with-newer-pytorch.md) | torch 2.13 venv setup + at-scale yeet (8N → 4096N) | 2026-05-04 |
+| [Reference Baselines](./baselines/README.md) | Training curves and benchmarks | 2026-04-29 |
+| [Dense Model Configs](./configs/dense.md) | 2B / 20B / 50B / 80B | 2026-04-26 |
+| [MoE Variants](./configs/moe.md) | 500M-10B | 2026-04-26 |
 
 ## Scaling Studies
 
-| Page | Modified | Notes |
-|------|---------:|-------|
-| [Scaling Index](./scaling/README.md) | 2026-04-26 | Top-level scaling landing page |
-| [agpt 2B scaling](./scaling/agpt-2b.md) | 2026-04-26 | Per-N TPS / MFU |
-| [agpt 20B scaling](./scaling/agpt-20b.md) | 2026-04-26 | Per-N TPS / MFU |
-| [agpt 80B scaling](./scaling/agpt-80b.md) | 2026-04-26 | Per-N TPS / MFU |
-| [MoE scaling](./scaling/moe.md) | 2026-04-26 | Per-N TPS / MFU |
-| [Per-run Experiment Reports](./experiments/README.md) | 2026-04-12 | Raw smoke tests, LR-finder sweeps, benchmark logs |
+| Page | Notes | Modified |
+|------|-------|---------:|
+| [Scaling Index](./scaling/README.md) | Top-level scaling landing page | 2026-04-26 |
+| [agpt 2B scaling](./scaling/agpt-2b.md) | Per-N TPS / MFU | 2026-04-26 |
+| [agpt 20B scaling](./scaling/agpt-20b.md) | Per-N TPS / MFU | 2026-04-26 |
+| [agpt 80B scaling](./scaling/agpt-80b.md) | Per-N TPS / MFU | 2026-04-26 |
+| [MoE scaling](./scaling/moe.md) | Per-N TPS / MFU | 2026-04-26 |
+| [Per-run Experiment Reports](./experiments/README.md) | Raw smoke tests, LR-finder sweeps, benchmark logs | 2026-04-12 |
 
 ## Sandboxes / Side-channels
 
-| Page | Modified | Notes |
-|------|---------:|-------|
-| [Optimizer Speedrun Competitions](./competitions/README.md) | 2026-04-28 | [W&B link](https://api.wandb.ai/links/aurora_gpt/hda3milo) |
-| [RL (GRPO) Experiment](./rl/README.md) | 2026-04-26 | TRL-based GRPO on XPU (experimental) |
+| Page | Notes | Modified |
+|------|-------|---------:|
+| [Optimizer Speedrun Competitions](./competitions/README.md) | [W&B link](https://api.wandb.ai/links/aurora_gpt/hda3milo) | 2026-04-28 |
+| [RL (GRPO) Experiment](./rl/README.md) | TRL-based GRPO on XPU (experimental) | 2026-04-26 |
 
 ## Outbound (upstream)
 
-| Page | Modified | Notes |
-|------|---------:|-------|
-| [Upstream Sync Log](./upstream-sync.md) | 2026-05-05 | What we pulled from `pytorch/torchtitan` and replayed onto agpt/moe |
-| [`_dist_reduce` skips DTensor reduction (PR #3204)](./upstream-issues/dist_reduce_dtensor_skip.md) | 2026-05-03 | TP loss-reporting bug repro + patch |
-| [`StateDictStager` bug](./upstream-issues/STATE_DICT_STAGER_ISSUE.md) | 2026-05-01 | Repro for upstream filing |
+| Page | Notes | Modified |
+|------|-------|---------:|
+| [Upstream Sync Log](./upstream-sync.md) | What we pulled from `pytorch/torchtitan` and replayed onto agpt/moe | 2026-05-05 |
+| [`_dist_reduce` skips DTensor reduction (PR #3204)](./upstream-issues/dist_reduce_dtensor_skip.md) | TP loss-reporting bug repro + patch | 2026-05-03 |
+| [`StateDictStager` bug](./upstream-issues/STATE_DICT_STAGER_ISSUE.md) | Repro for upstream filing | 2026-05-01 |
 
 ## Planning
 
-| Page | Modified | Notes |
-|------|---------:|-------|
-| [TODO](./TODO.md) | 2026-05-05 | Open work items |
+| Page | Notes | Modified |
+|------|-------|---------:|
+| [TODO](./TODO.md) | Open work items | 2026-05-05 |
