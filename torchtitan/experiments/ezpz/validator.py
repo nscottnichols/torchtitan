@@ -39,6 +39,19 @@ class EzpzValidator(Validator):
     class Config(Validator.Config):
         pass
 
+    def __init__(self, *args, **kwargs):
+        # Capture job_config before delegating so we can pass training_steps
+        # and global_batch_size through to the validator dataloader.
+        # Upstream Validator.__init__ swallows job_config via **kwargs and
+        # never stores it; without these the BlendCorpus build path falls
+        # back to train_iters=1 / global_batch_size=local*dp (warning
+        # logged on every validate() call) and the bc_set_config global
+        # state ends up with the wrong sample budget for the rest of the
+        # process — a footgun for any later resume-from-checkpoint
+        # rebuild of the train dataloader.
+        self._job_config = kwargs.get("job_config")
+        super().__init__(*args, **kwargs)
+
     def _get_validation_dataloader(self):
         """Cache the validation dataloader on the instance.
 
@@ -55,6 +68,22 @@ class EzpzValidator(Validator):
         is safe to cache the wrapper and re-iterate it per validation.
         """
         if getattr(self, "_cached_dataloader", None) is None:
+            # Pass training_steps + global_batch_size through so the
+            # blendcorpus loader gets the same sample budget the trainer
+            # used. Without these, the train_iters defaults to 1 and the
+            # global_batch_size collapses to local_batch_size * dp_world,
+            # producing a misleading "Global batch size: <small>" log line
+            # and (more dangerously) overwriting the bc_set_config global
+            # state with the wrong values.
+            extra: dict = {}
+            if self._job_config is not None:
+                training_cfg = getattr(self._job_config, "training", None)
+                if training_cfg is not None:
+                    if getattr(training_cfg, "steps", None):
+                        extra["training_steps"] = training_cfg.steps
+                    gbs = getattr(training_cfg, "global_batch_size", None)
+                    if gbs and gbs > 0:
+                        extra["global_batch_size"] = gbs
             self._cached_dataloader = self.dl_config.build(
                 dp_world_size=self.dp_world_size,
                 dp_rank=self.dp_rank,
@@ -62,6 +91,7 @@ class EzpzValidator(Validator):
                 seq_len=self.seq_len,
                 local_batch_size=self.local_batch_size,
                 parallel_dims=self.parallel_dims,
+                **extra,
             )
         return self._cached_dataloader
 
