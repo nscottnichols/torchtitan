@@ -193,11 +193,19 @@ class BlendCorpusDataLoader(BaseDataLoader):
         # C++ XCCL backend ignores opts.device and defaults all ranks
         # to device 0.  Work around by replacing barrier() with a
         # CPU-side gloo barrier for the duration of dataset building.
+        # On torch >=2.13 this is fixed upstream — skip the monkey-patch
+        # so we don't silently route every other dist.barrier() call
+        # (FSDP, DCP, validator, etc.) through CPU/gloo for the rest of
+        # the session.
         import torch
         import torch.distributed as dist
 
+        _torch_version_tuple = tuple(
+            int(p) for p in torch.__version__.split("+")[0].split(".")[:2]
+        )
         _xccl_needs_barrier_fix = (
-            hasattr(torch, "xpu")
+            _torch_version_tuple < (2, 13)
+            and hasattr(torch, "xpu")
             and torch.xpu.is_available()
             and getattr(
                 dist.distributed_c10d._get_default_group(),
@@ -265,7 +273,11 @@ class BlendCorpusDataLoader(BaseDataLoader):
             served_ds = train_ds
 
         logger.info("Rank %d: blendcorpus datasets ready.", rank)
-        self._train_ds = served_ds
+        # ``_served_ds`` is whichever split this loader serves (train OR
+        # valid, decided by ``config.serve_validation``). It feeds both
+        # ``self._loader`` below and the resampler invoked from
+        # ``set_consumed_by_global_step`` / ``load_state_dict``.
+        self._served_ds = served_ds
         self._build_pretraining_data_loader = build_pretraining_data_loader
         self._loader = build_pretraining_data_loader(served_ds, 0, self._bc_cfg)
         self._consumed_samples = 0
@@ -302,7 +314,7 @@ class BlendCorpusDataLoader(BaseDataLoader):
         consumed = int(global_step) * int(global_batch_size)
         self._consumed_samples = consumed
         self._loader = self._build_pretraining_data_loader(
-            self._train_ds, consumed, self._bc_cfg
+            self._served_ds, consumed, self._bc_cfg
         )
 
     def state_dict(self) -> dict[str, Any]:
@@ -319,5 +331,5 @@ class BlendCorpusDataLoader(BaseDataLoader):
         if consumed != self._consumed_samples:
             self._consumed_samples = consumed
             self._loader = self._build_pretraining_data_loader(
-                self._train_ds, consumed, self._bc_cfg
+                self._served_ds, consumed, self._bc_cfg
             )
