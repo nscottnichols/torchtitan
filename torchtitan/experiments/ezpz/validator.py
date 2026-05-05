@@ -39,6 +39,32 @@ class EzpzValidator(Validator):
     class Config(Validator.Config):
         pass
 
+    def _get_validation_dataloader(self):
+        """Cache the validation dataloader on the instance.
+
+        Upstream `Validator.validate()` rebuilds it on every call. For the
+        default `c4_validation` HF stream that's cheap, but for our
+        blendcorpus-backed loader it re-runs `build_gpt_datasets()` every
+        validation pass (cached index file load + dataset wrapper
+        construction + a no-op `bc_mpu` re-init guarded by our patch),
+        which adds visible noise to the log and ~few hundred ms of
+        wasted work per call.
+
+        `BlendCorpusDataLoader.__iter__` yields a fresh iterator each
+        call by re-instantiating the underlying torch DataLoader, so it
+        is safe to cache the wrapper and re-iterate it per validation.
+        """
+        if getattr(self, "_cached_dataloader", None) is None:
+            self._cached_dataloader = self.dl_config.build(
+                dp_world_size=self.dp_world_size,
+                dp_rank=self.dp_rank,
+                tokenizer=self.tokenizer,
+                seq_len=self.seq_len,
+                local_batch_size=self.local_batch_size,
+                parallel_dims=self.parallel_dims,
+            )
+        return self._cached_dataloader
+
     @torch.no_grad()
     def validate(
         self,
@@ -54,14 +80,7 @@ class EzpzValidator(Validator):
         device_type = utils.device_type
         num_steps = 0
 
-        validation_dataloader = self.dl_config.build(
-            dp_world_size=self.dp_world_size,
-            dp_rank=self.dp_rank,
-            tokenizer=self.tokenizer,
-            seq_len=self.seq_len,
-            local_batch_size=self.local_batch_size,
-            parallel_dims=parallel_dims,
-        )
+        validation_dataloader = self._get_validation_dataloader()
 
         for input_dict, labels in validation_dataloader:
             if self.config.steps != -1 and num_steps >= self.config.steps:
