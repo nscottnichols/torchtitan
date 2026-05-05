@@ -255,3 +255,62 @@ Level Zero driver, not a PyTorch OOM.
    - Node type, driver version, framework version
    - Exact command that fails
    - Memory allocation trace showing the 70 MiB gap
+
+## 6. blendcorpus ↔ torchtitan parallelism aliasing
+
+### Problem
+
+`BlendCorpusDataLoader.__init__` constructs a `bc_cfg` for the
+Megatron-style blendcorpus library by mapping torchtitan's
+`parallel_dims` axes onto Megatron's parallelism knobs. Several of
+these mappings are name-collisions, not semantic equivalents — and
+each one is a silent foot-bullet the moment we turn the corresponding
+parallelism on. Today they're all latent (we only run pure FSDP
+without PP, CP, or real Megatron-TP), but they need to be cleaned up
+before any of those features can be enabled with this dataloader.
+
+Companion writeup with the full taxonomy:
+[`docs/guides/known-bugs/blendcorpus-megatron-aliasing.md`](guides/known-bugs/blendcorpus-megatron-aliasing.md).
+
+### Items to fix (all in `blendcorpus/blendcorpus_builder.py`)
+
+1. **PP semantics mismatch.** Megatron's
+   `pipeline_model_parallel_size` controls how the data sampler
+   partitions samples across PP ranks (only the first PP stage gets
+   data). torchtitan's PP doesn't work that way — the trainer decides
+   which ranks read inputs. Passing `pp_degree=N` to the Megatron
+   sampler will silently underfeed it by 1/N. Decide whether to
+   collapse `pp_degree=1` always (since blendcorpus shouldn't drive
+   PP partitioning at all in our flow) or to handle PP correctly.
+
+2. **CP → SP aliasing.** torchtitan's CP shards the *sequence
+   dimension* across ranks for attention. Megatron's
+   `sequence_parallel_size` is a *TP variant* that shards activations
+   inside transformer layers. Aliasing CP → SP is a name collision.
+   With `cp > 1`, the global batch ends up divided by `cp_degree`
+   instead of replicated across the CP group as CP wants. Should set
+   `sequence_parallel_size=1` unconditionally and let the model handle
+   CP at the layer level.
+
+3. **`dp_world_size` double-source.** We pass `dp_world_size` from the
+   torchtitan `batch_mesh` (DP × CP) but Megatron's sampler computes
+   its own DP world from `world_size / (TP × PP × SP)`. With CP > 1
+   and the SP aliasing above, they disagree and `requested_global_batch_size`
+   becomes off-by-`cp_degree`. Fix follows from #2.
+
+4. **Two parallel-state systems.** `bc_mpu.initialize_model_parallel`
+   builds Megatron's *own* TP/PP/SP groups via
+   `torch.distributed.new_group`, independent of torchtitan's
+   `DeviceMesh`. Today inert because we use `comm_backend="standard"`
+   and don't actually exercise Megatron's TP collectives, but it's a
+   trap if anyone ever wires the Megatron-TP path up. Either
+   (a) skip `initialize_model_parallel` entirely when
+   `tp_degree == pp_degree == cp_degree == 1`, or (b) build Megatron's
+   groups from torchtitan's existing meshes rather than duplicating.
+
+5. **Cosmetic: hard-coded Megatron-only knobs.**
+   - `data_impl="mmap"` — hard-coded inside `bc_cfg` instead of being
+     a `Config` field. Promote to `Config` if anyone needs to override.
+   - `dataloader_type: str = "single"` — Megatron-only sampler
+     selector that doesn't map to anything torchtitan exposes. Either
+     drop entirely or document why we keep `"single"`.
