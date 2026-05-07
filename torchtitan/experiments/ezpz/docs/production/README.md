@@ -31,7 +31,7 @@ for the diagnosis.
 
 | Model | Nodes | Cumulative steps | Loss | Tokens | Latest job | Status |
 |-------|------:|-----------------:|-----:|-------:|------------|--------|
-| 2B  | 512 | **5,073** | **2.97** | **510B** (10.9%) | 8463627 | Queued — auto-resumes from step-5000 |
+| 2B  | 512 | **6,955** | **2.90** | **700B** (15.0%) | 8463627 | **Running** — resumed from step-5000 (~7h elapsed) |
 | 20B | 512 | **863**   | **3.46** | **87B** (1.9%)   | 8466848 | Queued — auto-resumes from step-800 |
 
 ### Other jobs (independent ckpt trajectories)

@@ -22,7 +22,8 @@ extensions.
 |--------|---------:|------:|-----:|--------|
 | 8460301 | 6h | 1–1387 | 12.65 → 3.59 | Done (NODE_FAIL @ end) |
 | 8463626 | 12h | 1300–5073 | 3.59 → **2.97** | Done (NODE_FAIL @ end). 50 ckpts saved. |
-| 8463627 | 12h | 5000+ | (resuming) | **Queued** (auto-resumes from step-5000) |
+| 8463627 | 12h | 5000–6955+ | 2.97 → **2.90** | **Running** (resumed from step-5000, ~7h elapsed) |
+| 8466847 | 12h | (cont.) | — | Held (`afterany:8463627`) |
 
 **Latest cumulative**: step **5,073** · loss **2.97** · **510B tokens** (10.9% of 4.67T target).
 

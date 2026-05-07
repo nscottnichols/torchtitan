@@ -108,6 +108,13 @@ PRODUCTION_RUNS: dict[str, dict] = {
         "num_nodes": 256,
         "model": "20b",
     },
+    "2b_v2_512_lr3.22e-5": {
+        # 8edrii5e = 8467141 (12h, sqrt(2)-LR fork — separate ckpt dir gbs12288-lr3.22e-5)
+        # Tests whether scaling LR by sqrt(2) closes per-token gap to 256N at GBS=12288
+        "run_ids": ["8edrii5e"],
+        "num_nodes": 512,
+        "model": "2b",
+    },
 }
 
 MODEL_COLORS = {
