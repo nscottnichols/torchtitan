@@ -10,7 +10,7 @@
 | Trajectory | Status | Cumulative steps | Loss | Tokens |
 |------------|--------|-----------------:|-----:|-------:|
 | [v1 256N](n256/README.md) (bf16-tainted) | Historical | 2,562 | 4.83 | 64.5B |
-| [**v2 512N**](n512/README.md) (canonical chain) | **Running** — 8479579 resumed from step-800 (~1h42m elapsed); canonical chain training again after 7-day stall (8466848 `std::bad_alloc` didn't reproduce on retry) | **803** | **3.53** | **81B** (1.7%) |
+| [**v2 512N**](n512/README.md) (canonical chain) | **8479579 killed by qdel** — silent hang at step 803 (W&B heartbeat continued for 5h with no training output, no exit). 8479580 auto-released, Q to resume from step-800. New failure mode — see [hang report](../../../experiments/agpt/aurora/20260511-20b-n512-hang-8479579.md). | **803** | **3.53** | **81B** (1.7%) |
 | [v2 1024N](n1024/README.md) | First attempt 8463183 crashed at startup (SIGSEGV at 12,288 ranks); not retried | — | — | — |
 | [v2 256N](n256/README.md) (8463659 → 8470102/3 → 8479581) | **Running** — 8479581 resumed from step-400 (~2h22m elapsed); gloo TCP timeout didn't reproduce | 441 | 4.30 | 22B |
 

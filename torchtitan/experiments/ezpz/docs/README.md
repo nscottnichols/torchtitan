@@ -21,7 +21,7 @@ going?" Tracking is per-model and per-node-count.
 | [agpt 20B](./production/agpt/20b/README.md) | All 20B trajectories + v1-vs-v2 overlay | 2026-05-11 |
 | [2B 512N](./production/agpt/2b/n512/README.md) | **Canonical 2B chain** (step **13,279**, loss **2.79**, **1.34T tokens / 28.7%** — past quarter mark; 8479988 Q for resume) | 2026-05-11 |
 | [2B 256N](./production/agpt/2b/n256/README.md) | 2B 256N continuation **running** (step **12,888**, loss **2.82**, 649B tokens) | 2026-05-11 |
-| [20B 512N](./production/agpt/20b/n512/README.md) | **Canonical 20B chain** — **training again** (8479579 at step 803, loss 3.53, MFU 17.6%) after 7-day stall; `std::bad_alloc` didn't reproduce | 2026-05-11 |
+| [20B 512N](./production/agpt/20b/n512/README.md) | **Canonical 20B chain** — 8479579 killed by qdel after silent hang at step 803 (5h no training output, W&B heartbeat continued); 8479580 Q to resume. See [hang report](./experiments/agpt/aurora/20260511-20b-n512-hang-8479579.md) | 2026-05-11 |
 | [20B 256N](./production/agpt/20b/n256/README.md) | 20B 256N **running** (8479581 at step 441, loss 4.30); gloo TCP timeout didn't reproduce | 2026-05-11 |
 | [20B 1024N](./production/agpt/20b/n1024/README.md) | First attempt (8463183) crashed at startup | 2026-05-04 |
 | [2B 1024N](./production/agpt/2b/n1024/README.md) | First attempt (8463182) crashed at startup | 2026-05-04 |

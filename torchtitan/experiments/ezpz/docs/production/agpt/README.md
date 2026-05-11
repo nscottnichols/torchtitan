@@ -36,8 +36,8 @@ extensions.
 | 8460302 | 6h | 1–300 | 12.94 → 4.95 | Done (NODE_FAIL @ end). 3 ckpts saved. |
 | 8463628 | 12h | 200–863 | 5.62 → 3.46 | Done (walltime hit). step-100..800 ckpts saved. |
 | 8466848 | — | — | — | **Crashed @ startup** (127s) — `set_determinism` `std::bad_alloc`. Intermittent: didn't reproduce on retry. |
-| 8479579 | 12h | 800–803+ | 3.46 → **3.53** | **Running** (~1h42m elapsed; resumed from step-800; canonical chain training again after 7 days stuck). |
-| 8479580 | 12h | (cont.) | — | Held (`afterany:8479579`) |
+| 8479579 | 12h | 800–803 | 3.46 → 3.53 | **Killed by qdel @ 5h56m** — silent hang after step 803 (W&B heartbeat continued, no training output for 5h). New failure mode. See [hang report](../../experiments/agpt/aurora/20260511-20b-n512-hang-8479579.md). |
+| 8479580 | 12h | 800+ | — | **Queued** — auto-released from hold, will resume from step-800 |
 
 **Latest cumulative**: step **803** · loss **3.53** · **81B tokens** (1.7% of 4.67T target).
 

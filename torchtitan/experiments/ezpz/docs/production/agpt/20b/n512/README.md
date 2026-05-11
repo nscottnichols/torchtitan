@@ -2,11 +2,13 @@
 
 > **This is the canonical 20B production chain.**
 >
-> **Status (2026-05-11 evening):** **Training again.** 8479579 (chain2
-> retry) resumed from step-800 and is now at step **803, loss 3.53,
-> MFU 17.6%**. The 7-day stall ended — 8466848's `set_determinism`
-> `std::bad_alloc` failure didn't reproduce on retry (intermittent
-> cluster-side issue).
+> **Status (2026-05-11 night):** Stalled again. 8479579 reached step
+> 803 then **silently hung** for 5h before being killed manually
+> (no exit, no crash — W&B heartbeat continued unchanged). New
+> failure mode not handled by the failover wrapper; see incident
+> report at
+> [`docs/experiments/agpt/aurora/20260511-20b-n512-hang-8479579.md`](../../../../experiments/agpt/aurora/20260511-20b-n512-hang-8479579.md).
+> 8479580 auto-released from hold and is Q to resume from step-800.
 >
 > **Eval scores:** see [`docs/evals/agpt/20b/`](../../../../evals/agpt/20b/README.md)
 > for the v1-vs-v2 lm-eval comparison. ARC-Easy lifted **0.271 → 0.444**
@@ -47,8 +49,8 @@
 | 8460302 | 6h | 1–300 | 12.94 → 4.95 | ~355 | ~17.7% | Walltime hit (NODE_FAIL at end). 3 ckpts saved. |
 | 8463628 | 12h | 200–863 | 5.62 → **3.46** | ~355 | ~17.8% | Done (walltime, step-100..800 ckpts saved). |
 | 8466848 | — | — | — | — | — | **Crashed @ startup** (127s) — `MemoryError: std::bad_alloc` in `torch.distributed.broadcast` during `set_determinism`. Intermittent: didn't reproduce on retry. |
-| 8479579 | 12h | 800–803+ | 3.46 → **3.53** | ~340 | ~17.6% | **Running** (~1h42m elapsed; canonical chain training again after 7 days stuck). |
-| 8479580 | 12h | (cont.) | — | — | — | Held (`afterany:8479579`) |
+| 8479579 | 12h | 800–803 | 3.46 → 3.53 | ~340 then 0 | ~17.6% then 0 | **Killed by qdel @ 5h56m** — silent hang after step 803 (logged 13:30, no further training output through 18:23). W&B heartbeat continued unchanged for 5h. New failure mode (no exit, no crash, no traceback). See [`docs/experiments/agpt/aurora/20260511-20b-n512-hang-8479579.md`](../../../../experiments/agpt/aurora/20260511-20b-n512-hang-8479579.md). |
+| 8479580 | 12h | 800+ | — | — | — | **Queued** — auto-released from hold by `afterany:8479579`, will resume from step-800 |
 
 **Latest checkpoint:** step-800 (244 GB on disk per ckpt)
 
