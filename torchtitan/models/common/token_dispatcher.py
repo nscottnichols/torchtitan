@@ -73,6 +73,14 @@ def _record_moe_fastpath(name: str, count: int = 1) -> None:
     _MOE_FASTPATH_COUNTERS[name] += count
 
 
+def _normal_equal_a2a_padding_enabled() -> bool:
+    return os.environ.get("TT_MOE_NORMAL_EQUAL_A2A_PADDING", "").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+
+
 def _shares_storage(a: torch.Tensor, b: torch.Tensor) -> bool:
     return a.untyped_storage().data_ptr() == b.untyped_storage().data_ptr()
 
@@ -116,6 +124,7 @@ class AllToAllDispatchMetadata(LocalDispatchMetadata):
     # Optional equal-split all-to-all metadata. When set, dispatch/combine pad
     # every peer segment to this size for the collective and compact afterward.
     equal_a2a_split_size: int | None = None
+    normal_equal_a2a_padding: bool = False
 
 
 class LocalTokenDispatcher(Configurable):
@@ -342,6 +351,31 @@ class AllToAllTokenDispatcher(LocalTokenDispatcher):
     def _can_use_equal_a2a_splits(splits: list[int]) -> bool:
         return len(splits) > 0 and min(splits) != max(splits)
 
+    def _global_equal_a2a_split_size(
+        self,
+        input_splits: list[int],
+        device: torch.device,
+        dtype: torch.dtype,
+    ) -> int:
+        assert self.ep_mesh is not None
+        local_max = max(input_splits) if input_splits else 0
+        local_max_per_peer = torch.full(
+            (self.ep_mesh.size(),),
+            local_max,
+            device=device,
+            dtype=dtype,
+        )
+        global_max_per_rank = all_to_all_single(
+            local_max_per_peer,
+            None,
+            None,
+            group=self.ep_mesh,
+        )
+        global_max_per_rank = torch.ops._c10d_functional.wait_tensor(
+            global_max_per_rank
+        )
+        return int(global_max_per_rank.max().item())
+
     @staticmethod
     def _pad_to_equal_splits(
         x: torch.Tensor,
@@ -563,6 +597,7 @@ class AllToAllTokenDispatcher(LocalTokenDispatcher):
 
         equal_a2a_split_size = None
         direct_equal_split_route = False
+        normal_equal_a2a_padding = False
         if (
             use_force_load_balance_fast_path
             and self._can_use_equal_a2a_splits(input_splits_list)
@@ -575,6 +610,25 @@ class AllToAllTokenDispatcher(LocalTokenDispatcher):
                 not self.score_before_experts
                 and equal_a2a_split_size % (self.num_experts // ep_size) == 0
             )
+        elif (
+            _normal_equal_a2a_padding_enabled()
+            and not torch.compiler.is_compiling()
+            and self.sp_size == 1
+            and len(input_splits_list) > 0
+        ):
+            equal_a2a_split_size = self._global_equal_a2a_split_size(
+                input_splits_list,
+                num_tokens_per_expert.device,
+                num_tokens_per_expert.dtype,
+            )
+            normal_equal_a2a_padding = True
+            _record_moe_fastpath("normal_equal_a2a_padding_dispatch")
+            _record_moe_fastpath(
+                "normal_equal_a2a_dispatch_padded_tokens",
+                sum(equal_a2a_split_size - split for split in input_splits_list),
+            )
+            dispatch_input_splits = None
+            dispatch_output_splits = None
         else:
             dispatch_input_splits = input_splits_list
             dispatch_output_splits = output_splits_list
@@ -669,6 +723,7 @@ class AllToAllTokenDispatcher(LocalTokenDispatcher):
             rank_major_shape=rank_major_shape,
             num_tokens_per_expert_list=num_tokens_per_expert_list,
             equal_a2a_split_size=equal_a2a_split_size,
+            normal_equal_a2a_padding=normal_equal_a2a_padding,
         )
         return routed_input, num_tokens_per_expert_group, metadata
 
@@ -811,7 +866,17 @@ class AllToAllTokenDispatcher(LocalTokenDispatcher):
         combine_output_splits = metadata.input_splits
         equal_a2a_split_size = metadata.equal_a2a_split_size
         if equal_a2a_split_size is not None:
-            _record_moe_fastpath("equal_a2a_padding_combine")
+            if metadata.normal_equal_a2a_padding:
+                _record_moe_fastpath("normal_equal_a2a_padding_combine")
+                _record_moe_fastpath(
+                    "normal_equal_a2a_combine_padded_tokens",
+                    sum(
+                        equal_a2a_split_size - split
+                        for split in metadata.output_splits
+                    ),
+                )
+            else:
+                _record_moe_fastpath("equal_a2a_padding_combine")
             routed_output = self._pad_to_equal_splits(
                 routed_output,
                 metadata.output_splits,
