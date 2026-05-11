@@ -2,11 +2,11 @@
 
 > **This is the canonical 20B production chain.**
 >
-> **Status (2026-05-11):** Stuck at step 863 / loss 3.46 / 87B tokens
-> since 8463628 walltime-finished cleanly on 2026-05-04. Two intermediate
-> resubmits failed: 8466848 hit `set_determinism` `std::bad_alloc` at
-> startup (intermittent cluster-side bug, same failure mode as the
-> 1024N first attempts), so 8479579 was just submitted to retry.
+> **Status (2026-05-11 evening):** **Training again.** 8479579 (chain2
+> retry) resumed from step-800 and is now at step **803, loss 3.53,
+> MFU 17.6%**. The 7-day stall ended — 8466848's `set_determinism`
+> `std::bad_alloc` failure didn't reproduce on retry (intermittent
+> cluster-side issue).
 >
 > **Eval scores:** see [`docs/evals/agpt/20b/`](../../../../evals/agpt/20b/README.md)
 > for the v1-vs-v2 lm-eval comparison. ARC-Easy lifted **0.271 → 0.444**
@@ -46,25 +46,25 @@
 |--------|---------:|------:|-------------------:|--------:|----:|--------|
 | 8460302 | 6h | 1–300 | 12.94 → 4.95 | ~355 | ~17.7% | Walltime hit (NODE_FAIL at end). 3 ckpts saved. |
 | 8463628 | 12h | 200–863 | 5.62 → **3.46** | ~355 | ~17.8% | Done (walltime, step-100..800 ckpts saved). |
-| 8466848 | — | — | — | — | — | **Crashed @ startup** (127s) — `MemoryError: std::bad_alloc` in `torch.distributed.broadcast` during `set_determinism`. Same failure mode as 1024N first attempts; now triggering at 6,144 ranks too. |
-| 8479579 | 12h | 800+ | — | — | — | **Queued** (resubmit, 2026-05-11) — auto-resumes from step-800 |
+| 8466848 | — | — | — | — | — | **Crashed @ startup** (127s) — `MemoryError: std::bad_alloc` in `torch.distributed.broadcast` during `set_determinism`. Intermittent: didn't reproduce on retry. |
+| 8479579 | 12h | 800–803+ | 3.46 → **3.53** | ~340 | ~17.6% | **Running** (~1h42m elapsed; canonical chain training again after 7 days stuck). |
 | 8479580 | 12h | (cont.) | — | — | — | Held (`afterany:8479579`) |
 
 **Latest checkpoint:** step-800 (244 GB on disk per ckpt)
 
-**Cumulative steps:** 863 (waiting on 8479579 to advance)
+**Cumulative steps:** 803 (8479579 advancing live)
 
-**Tokens consumed:** 863 × 12,288 × 8,192 = **87B tokens** (1.9% of 4.67T target)
+**Tokens consumed:** 803 × 12,288 × 8,192 = **81B tokens** (1.7% of 4.67T target)
 
 **Logs:**
 
 - `8460302`: `/flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/agpt-20b-n512.o8460302`
 - `8463628`: `/flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/agpt-20b-n512-v2-chain1.o8463628`
 - `8466848`: `/flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/agpt-20b-n512-v2-chain2.o8466848` (startup crash)
-- `8479579`: queued — log will land in `/flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/` on start
+- `8479579`: `/flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/agpt-20b-n512-v2-chain2.o8479579` (running)
 - `8479580`: held (`afterany:8479579`)
 
-> **Note on 8466848 crash:** `set_determinism` calls `torch.distributed.broadcast(seed_tensor, src=0)` and one rank hit `std::bad_alloc`. This is the same failure mode that killed both 1024N attempts (8463182, 8463183) on 2026-05-04 — but at 6,144 ranks (512N) instead of 12,288 (1024N). The previous 20B 512N run (8463628, 4 days earlier) succeeded at the same scale and same script, so it's intermittent. See [`memory/project_1024n_init_crash.md`](.) — that memory's "1024N only" claim is now stale; bracket should be 512N+ on bad luck.
+> **Note on 8466848 crash:** `set_determinism` calls `torch.distributed.broadcast(seed_tensor, src=0)` and one rank hit `std::bad_alloc`. This is the same failure mode that killed both 1024N attempts (8463182, 8463183) on 2026-05-04 — but at 6,144 ranks (512N) instead of 12,288 (1024N). The previous 20B 512N run (8463628, 4 days earlier) succeeded at the same scale and same script, and so does the resubmit (8479579), so it's intermittent. See [`memory/project_1024n_init_crash.md`](.) — that memory's "1024N only" claim is stale; the bug fires unpredictably at 512N+ but is not reliably triggered.
 
 ---
 

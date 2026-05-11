@@ -31,15 +31,15 @@ for the diagnosis.
 
 | Model | Nodes | Cumulative steps | Loss | Tokens | Latest job | Status |
 |-------|------:|-----------------:|-----:|-------:|------------|--------|
-| 2B  | 512 | **11,700** | **2.81** | **1.18T** (25.3%) | 8466847 | **Running** (chain3, ~8h35m elapsed) — quarter-mark reached |
-| 20B | 512 | **863**    | **3.46** | **87B** (1.9%)    | 8479579 | Queued (resubmit) — 8466848 crashed at `set_determinism` `std::bad_alloc` (same failure mode 1024N first hit, now seen at 6,144 ranks too) |
+| 2B  | 512 | **13,279** | **2.79** | **1.34T** (28.7%) | 8466847 → 8479988 | 8466847 walltime-finished; **8479988 Q** (resubmit, resumes from step-13200) |
+| 20B | 512 | **803**    | **3.53** | **81B** (1.7%)    | 8479579 | **Running** (~1h42m elapsed; canonical chain training again after 7 days stuck — `set_determinism` crash didn't reproduce on retry) |
 
 ### Active 256N trajectories
 
 | Model | Nodes | Cumulative steps | Loss | Tokens | Latest job | Status |
 |-------|------:|-----------------:|-----:|-------:|------------|--------|
-| 2B  | 256 | **10,723** | **2.84** | **1.08T** (23.1%) | 8470101 | **Running** (chain2, ~7h21m elapsed) |
-| 20B | 256 | 400 | ~5.5 | 40B (0.86%) | 8479581 | Queued (resubmit, resumes from step-400) — 8470102/3 both crashed with gloo TCP timeouts after ~3h |
+| 2B  | 256 | **12,888** | **2.82** | **649B** (13.9%) | 8470101 | **Running** (chain2, ~11h50m elapsed; near walltime) |
+| 20B | 256 | **441** | **4.30** | 22B (0.47%) | 8479581 | **Running** (~2h22m elapsed) — gloo TCP timeout didn't reproduce |
 
 ### Other jobs
 
@@ -48,7 +48,9 @@ for the diagnosis.
 | 8463182 | 2B | 1024 | 12h | **Crashed @ startup (211s, std::bad_alloc)** |
 | 8463183 | 20B | 1024 | 12h | **Crashed @ startup (211s, SIGSEGV)** |
 | 8463659 | 20B | 256 | 12h | **NODE_FAIL** after step 364 (loss 4.61); step-300 ckpt saved |
+| 8466848 | 20B | 512 | — | **Crashed @ startup** (`set_determinism` `std::bad_alloc`); didn't reproduce on 8479579 retry |
 | 8467141/8467142 | 2B | 512 | 12h | √2-LR fork — chain1 ran 4h, chain2 ran 1h53m; both done. Tests `LR=3.22e-5` at GBS=12,288 (separate ckpt dir `gbs12288-lr3.22e-5`) |
+| 8470102/8470103 | 20B | 256 | — | Both **crashed** with gloo TCP timeouts at ~3h elapsed; didn't reproduce on 8479581 retry |
 
 ### Dense (agpt) — bf16-tainted (superseded, kept for record)
 

@@ -19,10 +19,10 @@ going?" Tracking is per-model and per-node-count.
 | [Production Index](./production/README.md) | Top-level snapshot of every active trajectory | 2026-05-11 |
 | [Dense (agpt) Production](./production/agpt/README.md) | 2B / 20B / 80B chains, v1-vs-v2 overlays | 2026-05-11 |
 | [agpt 20B](./production/agpt/20b/README.md) | All 20B trajectories + v1-vs-v2 overlay | 2026-05-11 |
-| [2B 512N](./production/agpt/2b/n512/README.md) | **Canonical 2B chain** (step **11,700**, loss **2.81**, **1.18T tokens / 25.3%**) | 2026-05-11 |
-| [2B 256N](./production/agpt/2b/n256/README.md) | 2B 256N continuation (step **10,723**, loss **2.84**, 540B tokens) | 2026-05-11 |
-| [20B 512N](./production/agpt/20b/n512/README.md) | **Canonical 20B chain** (stuck at step 863 since 2026-05-04 — 8466848 hit `set_determinism` `std::bad_alloc`; 8479579 resubmit Q) | 2026-05-11 |
-| [20B 256N](./production/agpt/20b/n256/README.md) | 20B 256N at step 400 (3 crashes: NODE_FAIL + 2× gloo TCP timeout); 8479581 resubmit Q | 2026-05-11 |
+| [2B 512N](./production/agpt/2b/n512/README.md) | **Canonical 2B chain** (step **13,279**, loss **2.79**, **1.34T tokens / 28.7%** — past quarter mark; 8479988 Q for resume) | 2026-05-11 |
+| [2B 256N](./production/agpt/2b/n256/README.md) | 2B 256N continuation **running** (step **12,888**, loss **2.82**, 649B tokens) | 2026-05-11 |
+| [20B 512N](./production/agpt/20b/n512/README.md) | **Canonical 20B chain** — **training again** (8479579 at step 803, loss 3.53, MFU 17.6%) after 7-day stall; `std::bad_alloc` didn't reproduce | 2026-05-11 |
+| [20B 256N](./production/agpt/20b/n256/README.md) | 20B 256N **running** (8479581 at step 441, loss 4.30); gloo TCP timeout didn't reproduce | 2026-05-11 |
 | [20B 1024N](./production/agpt/20b/n1024/README.md) | First attempt (8463183) crashed at startup | 2026-05-04 |
 | [2B 1024N](./production/agpt/2b/n1024/README.md) | First attempt (8463182) crashed at startup | 2026-05-04 |
 | [agpt 2B](./production/agpt/2b/README.md) | All 2B trajectories + v1-vs-v2 overlay | 2026-05-03 |

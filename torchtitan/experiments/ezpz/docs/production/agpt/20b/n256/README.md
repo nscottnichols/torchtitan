@@ -6,13 +6,14 @@
 
 ## v2 — 20B @ 256N — SophiaG LR=2.28e-5 (fp32 master)
 
-> Status: at step 400, ~40B tokens. Three runs so far:
-> 8463659 NODE_FAIL @ 364 (signal 9 on bad node), then 8470102 + 8470103
-> chain both crashed with **gloo TCP timeouts at ~3h elapsed** (likely
-> bad-node communication issue). One additional ckpt (step-400) saved
-> from 8470102 before the crash. 8479581 just submitted to retry
-> (resumes from step-400). Independent trajectory from the canonical
-> 512N chain ([n512/](../n512/README.md)) — different ckpt dir
+> Status (2026-05-11 evening): **Training again.** 8479581 (chain3
+> retry) resumed from step-400 and is now at step **441, loss 4.30**
+> (~2h22m elapsed). MFU bouncing 1.6–9.6% with flare contention but
+> no crashes yet. Four runs so far: 8463659 NODE_FAIL @ 364
+> (signal 9 on bad node), 8470102 + 8470103 chain both **gloo TCP
+> timeouts at ~3h** (didn't reproduce on retry), then 8479581
+> running cleanly. Independent trajectory from the canonical 512N
+> chain ([n512/](../n512/README.md)) — different ckpt dir
 > (`gbs6144` vs `gbs12288`), so it can't extend the chain — but
 > useful as a per-token comparator at the same optimizer state.
 
@@ -49,19 +50,21 @@
 | 8463659 | 12h | 1–364 | 12.96 → 4.61 | 21-410 (variable) | 1-20% (variable) | **NODE_FAIL** after step 364 (`shepherd died from signal 9` on `x4406c6s7b0n0`, exit -20). step-100/200/300 ckpts saved. |
 | 8470102 | 12h | 300–~500 | 4.61 → ~5.5 | varies | varies | **Crashed** @ 3h15m (gloo TCP timeout `Connection closed by peer`, multiple ranks). step-400 ckpt saved. |
 | 8470103 | 12h | 300–~500 | (resumed but) | — | — | **Crashed** @ 2h59m (also gloo TCP timeout). |
-| 8479581 | 12h | 400+ | — | — | — | **Queued** (resubmit, 2026-05-11) — auto-resumes from step-400 |
+| 8479581 | 12h | 400–441+ | (resumed) → **4.30** | 31-192 (variable) | 1.6-9.6% (variable) | **Running** (~2h22m elapsed; gloo timeout didn't reproduce). |
 | 8479582 | 12h | (cont.) | — | — | — | Held (`afterany:8479581`) |
 
-**Latest checkpoint:** step-400
+**Latest checkpoint:** step-400 (8479581 will save step-500 on next 100-step boundary)
 
-**Tokens consumed:** 400 × 6,144 × 8,192 = **20.1B tokens** (0.43% of 4.67T target)
+**Cumulative steps:** 441
+
+**Tokens consumed:** 441 × 6,144 × 8,192 = **22B tokens** (0.47% of 4.67T target)
 
 **Logs:**
 
 - `8463659`: `/flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/agpt-20b-n256-v2.o8463659`
 - `8470102`: `/flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/agpt-20b-n256-v2-chain1.o8470102`
 - `8470103`: `/flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/agpt-20b-n256-v2-chain2.o8470103`
-- `8479581`: queued — log will land in `/flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/` on start
+- `8479581`: `/flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/agpt-20b-n256-v2-chain3.o8479581` (running)
 - `8479582`: held (`afterany:8479581`)
 
 ---

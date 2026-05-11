@@ -104,7 +104,8 @@ PRODUCTION_RUNS: dict[str, dict] = {
         # 9tsyx5us = 8460302 (initial 6h, step 0->300)
         # ej3zy5cq = 8463628 (12h chain1, resumed step 200, ended step 863)
         # 8466848 (chain2 resubmit) crashed at startup with std::bad_alloc, no wandb run
-        "run_ids": ["9tsyx5us", "ej3zy5cq"],
+        # s6b159xk = 8479579 (12h chain2 retry, currently running, resumed step 800)
+        "run_ids": ["9tsyx5us", "ej3zy5cq", "s6b159xk"],
         "num_nodes": 512,
         "model": "20b",
     },
@@ -112,7 +113,8 @@ PRODUCTION_RUNS: dict[str, dict] = {
         # r1yyxbmt = 8463659 (12h initial, step 0->363, NODE_FAIL)
         # 72airpph = 8470102 (3h, resumed step 300, gloo TCP timeout @ ~3h)
         # m9c5wx2e = 8470103 (3h, chain2, also gloo TCP timeout @ ~3h)
-        "run_ids": ["r1yyxbmt", "72airpph", "m9c5wx2e"],
+        # 6eocrnxs = 8479581 (12h chain3 retry, currently running, resumed step 400)
+        "run_ids": ["r1yyxbmt", "72airpph", "m9c5wx2e", "6eocrnxs"],
         "num_nodes": 256,
         "model": "20b",
     },

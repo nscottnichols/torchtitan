@@ -22,22 +22,24 @@ extensions.
 |--------|---------:|------:|-----:|--------|
 | 8460301 | 6h | 1–1387 | 12.65 → 3.59 | Done (NODE_FAIL @ end) |
 | 8463626 | 12h | 1300–5073 | 3.59 → 2.97 | Done (NODE_FAIL @ end). 50 ckpts saved. |
-| 8463627 | 12h | 5000–6955 | 2.97 → 2.90 | Done (walltime hit). |
-| 8466847 | 12h | 6900–11700+ | 2.90 → **2.81** | **Running** (~8h35m elapsed; ~25% of target tokens reached) |
+| 8463627 | 12h | 5000–6955 | 2.97 → 2.90 | Done (walltime). |
+| 8466847 | 12h | 6900–13279 | 2.90 → **2.79** | Done (walltime). step-13200 ckpt saved. |
+| 8479988 | 12h | 13200+ | — | **Queued** — resubmit (2026-05-11 evening), auto-resumes from step-13200 |
+| 8479989 | 12h | (cont.) | — | Held (`afterany:8479988`) |
 
-**Latest cumulative**: step **11,700** · loss **2.81** · **1.18T tokens** (25.3% of 4.67T target).
+**Latest cumulative**: step **13,279** · loss **2.79** · **1.34T tokens** (28.7% of 4.67T target — past the quarter mark).
 
 ### 20B canonical chain (512N)
 
 | Job ID | Walltime | Steps | Loss | Status |
 |--------|---------:|------:|-----:|--------|
 | 8460302 | 6h | 1–300 | 12.94 → 4.95 | Done (NODE_FAIL @ end). 3 ckpts saved. |
-| 8463628 | 12h | 200–863 | 5.62 → **3.46** | Done (walltime hit). step-100..800 ckpts saved. |
-| 8466848 | 12h | — | — | **Crashed @ startup** (`set_determinism` `std::bad_alloc`, same failure mode as 1024N attempts but at 6,144 ranks). |
-| 8479579 | 12h | 800+ | — | **Queued** — resubmit, auto-resumes from step-800 |
+| 8463628 | 12h | 200–863 | 5.62 → 3.46 | Done (walltime hit). step-100..800 ckpts saved. |
+| 8466848 | — | — | — | **Crashed @ startup** (127s) — `set_determinism` `std::bad_alloc`. Intermittent: didn't reproduce on retry. |
+| 8479579 | 12h | 800–803+ | 3.46 → **3.53** | **Running** (~1h42m elapsed; resumed from step-800; canonical chain training again after 7 days stuck). |
 | 8479580 | 12h | (cont.) | — | Held (`afterany:8479579`) |
 
-**Latest cumulative**: step **863** · loss **3.46** · **87B tokens** (1.9% of 4.67T target).
+**Latest cumulative**: step **803** · loss **3.53** · **81B tokens** (1.7% of 4.67T target).
 
 ## Other jobs (independent ckpt trajectories)
 
@@ -47,12 +49,12 @@ extensions.
 | 8463183 | 20B | 1024 | 12h | **Crashed @ startup (211s, SIGSEGV)** | Fresh start, separate ckpt dir (`n1024-gbs24576`) |
 | 8463659 | 20B | 256 | 12h | **NODE_FAIL** after step 364 (loss 4.61) | Fresh start, separate ckpt dir (`n256-gbs6144`). step-300 ckpt saved. |
 | 8470100 | 2B  | 256 | 12h | Done (walltime), step ~10000 | Resumed from step-2000 → step ~10000 in 12h. |
-| 8470101 | 2B  | 256 | 12h | **Running** (~7h21m elapsed) | step **10,723**, loss **2.84** |
+| 8470101 | 2B  | 256 | 12h | **Running** (~11h50m elapsed; near walltime) | step **12,888**, loss **2.82** — **caught up to and slightly passed canonical 512N per-step** |
 | 8470102 | 20B | 256 | 12h | **Crashed** (gloo TCP timeout @ 3h15m) | Resumed step-300 → step-400 saved before crash |
 | 8470103 | 20B | 256 | 12h | **Crashed** (gloo TCP timeout @ 2h59m) | Chained continuation, also bad-node |
 | 8467141 | 2B  | 512 | 12h | Done | √2-LR fork (LR=3.22e-5) chain1, separate ckpt dir |
 | 8467142 | 2B  | 512 | 12h | Done | √2-LR fork chain2 |
-| 8479581 | 20B | 256 | 12h | **Queued** — resumes from step-400 | Resubmit after 8470102/3 gloo failures |
+| 8479581 | 20B | 256 | 12h | **Running** (~2h22m elapsed) | step **441**, loss **4.30**, MFU 1.6-9.6% (variable) — gloo timeout didn't reproduce |
 | 8479582 | 20B | 256 | 12h | Held (`afterany:8479581`) | 2nd 256N continuation in chain |
 
 **80B**: working v2 path identified 2026-05-05 (4N smoke `compile=OFF`, loss 12.98→10.46, MFU ~17.8%). Not yet productionized — needs warmup added + long-running script. See [`80b/`](80b/README.md) (still has v1 history) and the `compile=OFF` Known-Bug entry in `.claude/CLAUDE.md`.

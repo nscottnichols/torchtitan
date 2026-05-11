@@ -10,9 +10,9 @@
 | Trajectory | Status | Cumulative steps | Loss | Tokens |
 |------------|--------|-----------------:|-----:|-------:|
 | [v1 256N](n256/README.md) (bf16-tainted) | Historical | 2,562 | 4.83 | 64.5B |
-| [**v2 512N**](n512/README.md) (canonical chain) | Stuck at step 863 since 2026-05-04; 8466848 (resubmit) crashed at startup w/ `std::bad_alloc`; **8479579 Q** (2nd resubmit, 2026-05-11) | **863** | **3.46** | **87B** (1.9%) |
+| [**v2 512N**](n512/README.md) (canonical chain) | **Running** — 8479579 resumed from step-800 (~1h42m elapsed); canonical chain training again after 7-day stall (8466848 `std::bad_alloc` didn't reproduce on retry) | **803** | **3.53** | **81B** (1.7%) |
 | [v2 1024N](n1024/README.md) | First attempt 8463183 crashed at startup (SIGSEGV at 12,288 ranks); not retried | — | — | — |
-| [v2 256N](n256/README.md) (8463659 → 8470102 → 8470103 → 8479581) | At step 400 across 3 runs (NODE_FAIL + 2× gloo TCP timeout); **8479581 Q** (3rd resubmit, 2026-05-11) | 400 | ~5.5 | 20B |
+| [v2 256N](n256/README.md) (8463659 → 8470102/3 → 8479581) | **Running** — 8479581 resumed from step-400 (~2h22m elapsed); gloo TCP timeout didn't reproduce | 441 | 4.30 | 22B |
 
 ## v1 vs v2 — overlay
 
@@ -31,7 +31,7 @@ python3 torchtitan/experiments/ezpz/utils/plot_production_wandb.py --overlay 20b
 
 ## Per-trajectory detail
 
-- [n256/](n256/README.md) — v2 256N at step 400 (3 crashes, 8479581 queued) + v1 256N (historical, collapsed)
+- [n256/](n256/README.md) — **v2 256N running** (8479581 at step 441) + v1 256N (historical, collapsed)
 - [n512/](n512/README.md) — **canonical v2 512N chain** + v1 512N (historical, collapsed)
 - [n1024/](n1024/README.md) — v2 1024N (8463183 crashed at startup, std::bad_alloc / SIGSEGV — needs investigation)
 
