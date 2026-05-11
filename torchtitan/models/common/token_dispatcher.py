@@ -628,6 +628,7 @@ class AllToAllTokenDispatcher(LocalTokenDispatcher):
         # _permute reshuffles to:
         #   (e0,r0), (e0,r1), ..., (e1,r0), (e1,r1), ...  (expert-major)
         num_local_experts = num_tokens_per_expert_group.shape[0] // ep_size
+        num_tokens_per_expert_list = None
         if uniform_local_count is None:
             (
                 input_shape,
