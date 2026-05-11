@@ -1,5 +1,23 @@
 # Production Training — agpt 80B
 
+## v2 — first production attempt submitted 2026-05-11
+
+| Trajectory | Status | Cumulative steps | Loss | Tokens |
+|------------|--------|-----------------:|-----:|-------:|
+| [**v2 512N**](n512/README.md) (canonical chain attempt) | **8480361 Q** (522 nodes via failover wrapper, 512 active + 10 spare) | — | — | — |
+
+Working config (proven in 4N smoke 12466025 on 2026-05-05): AdamW
+LR=1e-6, TP=2, AC=full, compile=OFF, fp32-master. Loss descended
+cleanly 12.98 → 10.46 over 20 steps in the smoke. Submit script:
+[`scripts/submit_agpt_80b_aurora_venv_failover.sh`](../../../../scripts/submit_agpt_80b_aurora_venv_failover.sh).
+
+Production clone: `/flare/AuroraGPT/foremans/runs/agpt-80b-v2/torchtitan-ezpz/`.
+
+---
+
+<details>
+<summary><strong>v1 — 80B history (NaN'd, kept for record) — click to expand</strong></summary>
+
 ## 80B @ 256N — AdamW LR=1.1e-5
 
 | Field | Value |
@@ -103,3 +121,5 @@ Job 8451226 crashed during dataloader init due to an unreachable node
 80B-512N (LR=1.1e-5): 8446347 → 8446348
 80B-512N (torch 2.13, LR=1e-6): 8451727 → 8451728
 ```
+
+</details>

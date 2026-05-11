@@ -19,6 +19,8 @@ going?" Tracking is per-model and per-node-count.
 | [Production Index](./production/README.md) | Top-level snapshot of every active trajectory | 2026-05-11 |
 | [Dense (agpt) Production](./production/agpt/README.md) | 2B / 20B / 80B chains, v1-vs-v2 overlays | 2026-05-11 |
 | [agpt 20B](./production/agpt/20b/README.md) | All 20B trajectories + v1-vs-v2 overlay | 2026-05-11 |
+| [agpt 80B](./production/agpt/80b/README.md) | **First v2 attempt submitted 2026-05-11** (8480361 Q, 522 nodes via failover) | 2026-05-11 |
+| [80B 512N](./production/agpt/80b/n512/README.md) | **First v2 production attempt** (AdamW LR=1e-6, TP=2, AC=full, compile=OFF, failover wrapper) | 2026-05-11 |
 | [2B 512N](./production/agpt/2b/n512/README.md) | **Canonical 2B chain** (step **13,279**, loss **2.79**, **1.34T tokens / 28.7%** — past quarter mark; 8479988 Q for resume) | 2026-05-11 |
 | [2B 256N](./production/agpt/2b/n256/README.md) | 2B 256N continuation **running** (step **12,888**, loss **2.82**, 649B tokens) | 2026-05-11 |
 | [20B 512N](./production/agpt/20b/n512/README.md) | **Canonical 20B chain** — 8479579 killed by qdel after silent hang at step 803 (5h no training output, W&B heartbeat continued); 8479580 Q to resume. See [hang report](./experiments/agpt/aurora/20260511-20b-n512-hang-8479579.md) | 2026-05-11 |

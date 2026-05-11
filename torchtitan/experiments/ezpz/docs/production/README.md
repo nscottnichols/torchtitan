@@ -33,6 +33,7 @@ for the diagnosis.
 |-------|------:|-----------------:|-----:|-------:|------------|--------|
 | 2B  | 512 | **13,279** | **2.79** | **1.34T** (28.7%) | 8466847 → 8479988 | 8466847 walltime-finished; **8479988 Q** (resubmit, resumes from step-13200) |
 | 20B | 512 | **803**    | **3.53** | **81B** (1.7%)    | 8479580 | **Killed by qdel** — 8479579 silently hung after step 803 (no exit, W&B heartbeat alive but training metrics dead for 5h). 8479580 (held) auto-released, Q to resume from step-800. See [hang report](../experiments/agpt/aurora/20260511-20b-n512-hang-8479579.md). |
+| 80B | 512 | — | — | — | 8480361 | **Q** — first v2 production attempt (failover wrapper, 522 nodes = 512 active + 10 spare; AdamW LR=1e-6, TP=2, AC=full, compile=OFF — proven config from 4N smoke 12466025) |
 
 ### Active 256N trajectories
 

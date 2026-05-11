@@ -57,7 +57,12 @@ extensions.
 | 8479581 | 20B | 256 | 12h | **Running** (~2h22m elapsed) | step **441**, loss **4.30**, MFU 1.6-9.6% (variable) — gloo timeout didn't reproduce |
 | 8479582 | 20B | 256 | 12h | Held (`afterany:8479581`) | 2nd 256N continuation in chain |
 
-**80B**: working v2 path identified 2026-05-05 (4N smoke `compile=OFF`, loss 12.98→10.46, MFU ~17.8%). Not yet productionized — needs warmup added + long-running script. See [`80b/`](80b/README.md) (still has v1 history) and the `compile=OFF` Known-Bug entry in `.claude/CLAUDE.md`.
+**80B**: **first v2 production attempt submitted 2026-05-11** (8480361
++ 8480362 chain). 522 nodes (512 active + 10 spare via failover
+wrapper), AdamW LR=1e-6, TP=2, AC=full, compile=OFF — the proven
+working path from the 4N smoke (12466025). See
+[`80b/n512/`](80b/n512/README.md) for trajectory tracking and
+[`80b/`](80b/README.md) for v1 history.
 
 ## Reference: pre-torchtitan MDS run (2B SophiaG, ~7.77T tokens)
 
