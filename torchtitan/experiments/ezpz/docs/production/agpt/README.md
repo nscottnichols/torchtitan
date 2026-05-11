@@ -1,6 +1,6 @@
 # Production Training — Dense (agpt) Models
 
-> Last updated: 2026-05-03
+> Last updated: 2026-05-11
 >
 > **Restarted in v2 clones on 2026-04-30** after the bf16-master
 > RMSNorm-freeze regression. All current production training is on
@@ -55,7 +55,7 @@ extensions.
 | 8479581 | 20B | 256 | 12h | **Queued** — resumes from step-400 | Resubmit after 8470102/3 gloo failures |
 | 8479582 | 20B | 256 | 12h | Held (`afterany:8479581`) | 2nd 256N continuation in chain |
 
-**80B**: working v2 path identified 2026-05-05 (4N smoke `compile=OFF`, loss 12.98→10.46, MFU ~17.8%). Not yet productionized — needs warmup added + long-running script. See [`80b/n256/`](20b/README.md) and `compile=OFF` Known-Bug entry in `.claude/CLAUDE.md`.
+**80B**: working v2 path identified 2026-05-05 (4N smoke `compile=OFF`, loss 12.98→10.46, MFU ~17.8%). Not yet productionized — needs warmup added + long-running script. See [`80b/`](80b/README.md) (still has v1 history) and the `compile=OFF` Known-Bug entry in `.claude/CLAUDE.md`.
 
 ## Reference: pre-torchtitan MDS run (2B SophiaG, ~7.77T tokens)
 
@@ -113,12 +113,41 @@ python3 torchtitan/experiments/ezpz/utils/plot_production_wandb.py --overlay 20b
 ![20B v2 512N Tokens vs Time](20b/n512/figures/tokens_vs_time_20b_v2_512n.png)
 
 <details>
-<summary><strong>2B 256N v2 (one-shot, no continuation) — click to expand</strong></summary>
+<summary><strong>2B 256N v2 (active continuation chain at step 10,723) — click to expand</strong></summary>
 
-This is a separate ckpt trajectory at 256 nodes that ran once
-(8459818, 6h, NODE_FAIL after step 2070). It is *not* part of the
-canonical 512N chain. Last checkpoint: step-2000.
+Separate ckpt trajectory at 256 nodes (`gbs6144`, independent from
+the canonical 512N `gbs12288` chain). Three runs so far: 8459818
+(NODE_FAIL after step 2070), 8470100 (chain1 walltime), 8470101
+(chain2, **currently running**). Step **10,723, loss 2.84, 540B
+tokens (11.5% of target)**. Useful as the per-token comparator for
+the 512N chain.
 
 ![2B v2 256N Diagnostics](2b/n256/figures/training_diagnostics_2b_v2_256n.png)
+
+</details>
+
+<details>
+<summary><strong>20B 256N v2 (struggling — 3 crashes, at step 400) — click to expand</strong></summary>
+
+Separate ckpt trajectory at 256 nodes (`gbs6144`, independent from
+the canonical 512N `gbs12288` chain). Three runs: 8463659 (NODE_FAIL
+after step 364), 8470102 + 8470103 (both crashed with gloo TCP
+timeouts at ~3h elapsed). step-400 ckpt saved before the chain
+crashes. **8479581 + 8479582 just submitted (2026-05-11)** to retry.
+
+![20B v2 256N Diagnostics](20b/n256/figures/training_diagnostics_20b_v2_256n.png)
+
+</details>
+
+<details>
+<summary><strong>2B 512N √2-LR fork (LR=3.22e-5, 200 steps) — click to expand</strong></summary>
+
+Experimental fork that scaled LR by √2 (3.22e-5 vs canonical
+2.28e-5) at the doubled GBS=12,288 — tests whether closing the
+per-token gap to 256N is achievable with LR scaling. Two short runs:
+8467141 (4h) and 8467142 (1h53m). Writes to its own ckpt dir
+`gbs12288-lr3.22e-5`.
+
+![2B v2 512N LR=3.22e-5 Training](2b/n512/figures/production_2b_v2_512_lr3.22e-5n.png)
 
 </details>
