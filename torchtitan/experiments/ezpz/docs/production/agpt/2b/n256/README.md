@@ -6,11 +6,15 @@
 
 ## v2 — 2B @ 256N — SophiaG LR=2.28e-5 (fp32 master)
 
-> Status: 8459818 (6h, NODE_FAIL after step 2070, 20 ckpts saved)
-> ran end-of-April. Continuation chain (8470100 + 8470101) submitted
-> 2026-05-04 because the canonical 512N chain (8463627 + 8466847)
-> has been Q for 4+ days waiting for 512N slots — falling back to 256N
-> to keep training advancing. Will resume from step-2000.
+> Status: at step **10,723, loss 2.84, 540B tokens (11.5% of 4.67T)**.
+> Three runs: 8459818 (initial, NODE_FAIL @ 2070), 8470100 (chain1,
+> walltime), 8470101 (chain2, **currently running**). Loss tracking
+> the canonical 512N chain closely (256N: 2.84 @ step 10,723; 512N:
+> 2.81 @ step 11,700) — at matched step counts the per-token
+> under-training pattern documented in
+> [`docs/evals/agpt/2b/`](../../../../evals/agpt/2b/README.md) is
+> visible (256N learns more per token, 512N learns more per wall
+> clock).
 
 | Field | Value |
 |-------|-------|
@@ -43,18 +47,20 @@
 | Job ID | Steps | Loss (start → end) | TPS/GPU | MFU | Status |
 |--------|-------|---------------------|---------|-----|--------|
 | 8459818 | 1–2070 | 12.93 → 3.33 | ~3,500 | ~13% | NODE_FAIL after step 2070 (single bad node dragged TPS to ~30 then killed). 20 ckpts saved (every 100 steps). |
-| 8470100 | 2000+ | (resuming) | — | — | **Queued** (12h, will resume from step-2000 — submitted 2026-05-04 since 512N slots stuck) |
-| 8470101 | (cont.) | — | — | — | Held (`afterany:8470100`) |
+| 8470100 | 2000–~10000 | 3.33 → ~2.85 | ~1,000 | ~3.8% | Done (walltime, 12h02m). Resumed from step-2000. |
+| 8470101 | 10000–10723+ | 2.85 → **2.84** | ~1,000 | ~3.8% | **Running** (~7h21m elapsed; chained continuation) |
 
-**Latest checkpoint:** step-2000
+**Latest checkpoint:** step-10700 (8470101 saving every 100 steps)
 
-**Tokens consumed:** 2070 × 6144 × 8192 = **104B tokens** (2.2% of target)
+**Cumulative steps:** ~10,723
+
+**Tokens consumed:** 10,723 × 6,144 × 8,192 = **540B tokens** (11.5% of 4.67T target)
 
 **Logs:**
 
 - `8459818`: `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n256.o8459818`
-- `8470100`: queued — log will land in `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/` on start
-- `8470101`: held (`afterany:8470100`) — log will land in `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/`
+- `8470100`: `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n256-v2-chain1.o8470100`
+- `8470101`: `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n256-v2-chain2.o8470101`
 
 ---
 

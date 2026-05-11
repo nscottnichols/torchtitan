@@ -10,9 +10,9 @@
 | Trajectory | Status | Cumulative steps | Loss | Tokens |
 |------------|--------|-----------------:|-----:|-------:|
 | [v1 256N](n256/README.md) (bf16-tainted) | Historical | 2,562 | 4.83 | 64.5B |
-| [**v2 512N**](n512/README.md) (canonical chain) | Walltime hit @ step 863 (loss 3.46); 8466848 queued for resume | **863** | **3.46** | **87B** (1.9%) |
-| [v2 1024N](n1024/README.md) | Queued, no data yet | — | — | — |
-| [20B v2 256N](n256/README.md) (8463659 → 8470102 → 8470103) | NODE_FAIL after step 364; **8470102 Q** (resume from step-300, 256N continuation chain submitted 2026-05-04) | 364 | 4.61 | 18B |
+| [**v2 512N**](n512/README.md) (canonical chain) | Stuck at step 863 since 2026-05-04; 8466848 (resubmit) crashed at startup w/ `std::bad_alloc`; **8479579 Q** (2nd resubmit, 2026-05-11) | **863** | **3.46** | **87B** (1.9%) |
+| [v2 1024N](n1024/README.md) | First attempt 8463183 crashed at startup (SIGSEGV at 12,288 ranks); not retried | — | — | — |
+| [v2 256N](n256/README.md) (8463659 → 8470102 → 8470103 → 8479581) | At step 400 across 3 runs (NODE_FAIL + 2× gloo TCP timeout); **8479581 Q** (3rd resubmit, 2026-05-11) | 400 | ~5.5 | 20B |
 
 ## v1 vs v2 — overlay
 
@@ -31,7 +31,7 @@ python3 torchtitan/experiments/ezpz/utils/plot_production_wandb.py --overlay 20b
 
 ## Per-trajectory detail
 
-- [n256/](n256/README.md) — **v2 256N (8463659, running)** + v1 256N (historical, collapsed)
+- [n256/](n256/README.md) — v2 256N at step 400 (3 crashes, 8479581 queued) + v1 256N (historical, collapsed)
 - [n512/](n512/README.md) — **canonical v2 512N chain** + v1 512N (historical, collapsed)
 - [n1024/](n1024/README.md) — v2 1024N (8463183 crashed at startup, std::bad_alloc / SIGSEGV — needs investigation)
 

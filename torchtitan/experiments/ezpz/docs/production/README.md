@@ -31,18 +31,24 @@ for the diagnosis.
 
 | Model | Nodes | Cumulative steps | Loss | Tokens | Latest job | Status |
 |-------|------:|-----------------:|-----:|-------:|------------|--------|
-| 2B  | 512 | **5,073** | **2.97** | **510B** (10.9%) | 8463627 | Queued — auto-resumes from step-5000 |
-| 20B | 512 | **863**   | **3.46** | **87B** (1.9%)   | 8466848 | Queued — auto-resumes from step-800 |
+| 2B  | 512 | **11,700** | **2.81** | **1.18T** (25.3%) | 8466847 | **Running** (chain3, ~8h35m elapsed) — quarter-mark reached |
+| 20B | 512 | **863**    | **3.46** | **87B** (1.9%)    | 8479579 | Queued (resubmit) — 8466848 crashed at `set_determinism` `std::bad_alloc` (same failure mode 1024N first hit, now seen at 6,144 ranks too) |
 
-### Other jobs (independent ckpt trajectories)
+### Active 256N trajectories
+
+| Model | Nodes | Cumulative steps | Loss | Tokens | Latest job | Status |
+|-------|------:|-----------------:|-----:|-------:|------------|--------|
+| 2B  | 256 | **10,723** | **2.84** | **1.08T** (23.1%) | 8470101 | **Running** (chain2, ~7h21m elapsed) |
+| 20B | 256 | 400 | ~5.5 | 40B (0.86%) | 8479581 | Queued (resubmit, resumes from step-400) — 8470102/3 both crashed with gloo TCP timeouts after ~3h |
+
+### Other jobs
 
 | Job ID | Model | Nodes | Walltime | Status |
 |--------|-------|------:|---------:|--------|
 | 8463182 | 2B | 1024 | 12h | **Crashed @ startup (211s, std::bad_alloc)** |
 | 8463183 | 20B | 1024 | 12h | **Crashed @ startup (211s, SIGSEGV)** |
 | 8463659 | 20B | 256 | 12h | **NODE_FAIL** after step 364 (loss 4.61); step-300 ckpt saved |
-| 8470100/8470101 | 2B  | 256 | 12h | Queued — 256N continuation chain (resumes from step-2000); submitted because 512N stuck |
-| 8470102/8470103 | 20B | 256 | 12h | Queued — 256N continuation chain (resumes from step-300); submitted because 512N stuck |
+| 8467141/8467142 | 2B | 512 | 12h | √2-LR fork — chain1 ran 4h, chain2 ran 1h53m; both done. Tests `LR=3.22e-5` at GBS=12,288 (separate ckpt dir `gbs12288-lr3.22e-5`) |
 
 ### Dense (agpt) — bf16-tainted (superseded, kept for record)
 

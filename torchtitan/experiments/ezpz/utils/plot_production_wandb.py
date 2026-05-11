@@ -84,29 +84,45 @@ PRODUCTION_RUNS: dict[str, dict] = {
         "model": "20b",
     },
     "2b_v2_256": {
-        "run_ids": ["lytjeegk"],
+        # lytjeegk = 8459818 (6h initial, step 0->2070)
+        # 0t4h0kuw = 8470100 (12h chain1, resumed step 2000)
+        # j7bz39tj = 8470101 (12h chain2, currently running)
+        "run_ids": ["lytjeegk", "0t4h0kuw", "j7bz39tj"],
         "num_nodes": 256,
         "model": "2b",
     },
     "2b_v2_512": {
         # i252kps9 = 8460301 (initial 6h, step 0->1387)
         # d4hlr8qe = 8463626 (12h chain1, resumed step 1300, ended step 5073)
-        "run_ids": ["i252kps9", "d4hlr8qe"],
+        # 1va7zfki = 8463627 (12h chain2, resumed step 5000, ended step 6955)
+        # 6op7ozfh = 8466847 (12h chain3, currently running)
+        "run_ids": ["i252kps9", "d4hlr8qe", "1va7zfki", "6op7ozfh"],
         "num_nodes": 512,
         "model": "2b",
     },
     "20b_v2_512": {
         # 9tsyx5us = 8460302 (initial 6h, step 0->300)
         # ej3zy5cq = 8463628 (12h chain1, resumed step 200, ended step 863)
+        # 8466848 (chain2 resubmit) crashed at startup with std::bad_alloc, no wandb run
         "run_ids": ["9tsyx5us", "ej3zy5cq"],
         "num_nodes": 512,
         "model": "20b",
     },
     "20b_v2_256": {
-        # r1yyxbmt = 8463659 (12h, fresh start at 256N — separate ckpt dir gbs6144)
-        "run_ids": ["r1yyxbmt"],
+        # r1yyxbmt = 8463659 (12h initial, step 0->363, NODE_FAIL)
+        # 72airpph = 8470102 (3h, resumed step 300, gloo TCP timeout @ ~3h)
+        # m9c5wx2e = 8470103 (3h, chain2, also gloo TCP timeout @ ~3h)
+        "run_ids": ["r1yyxbmt", "72airpph", "m9c5wx2e"],
         "num_nodes": 256,
         "model": "20b",
+    },
+    "2b_v2_512_lr3.22e-5": {
+        # 8edrii5e = 8467141 (4h, sqrt(2)-LR fork — separate ckpt dir gbs12288-lr3.22e-5)
+        # oujzdxri = 8467142 (1h53m, chain2)
+        # Tests whether scaling LR by sqrt(2) closes per-token gap to 256N at GBS=12288
+        "run_ids": ["8edrii5e", "oujzdxri"],
+        "num_nodes": 512,
+        "model": "2b",
     },
 }
 
