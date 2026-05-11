@@ -243,6 +243,9 @@ class moeModel(Decoder):  # noqa: N801
                     layer_cfg.moe.router._debug_force_load_balance = (
                         debug.moe_force_load_balance
                     )
+                    layer_cfg.moe.experts.token_dispatcher.force_load_balance = (
+                        debug.moe_force_load_balance
+                    )
                     # ETP was deprecated upstream (#3167); the comm_backend now
                     # lives on the token_dispatcher, not on parallelism config.
                     comm_backend = getattr(
