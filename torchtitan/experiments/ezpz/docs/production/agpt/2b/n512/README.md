@@ -39,21 +39,21 @@
 |--------|---------:|------:|-------------------:|--------:|----:|--------|
 | 8460301 | 6h | 1–1387 | 12.65 → 3.59 | ~2,700 | ~10% | NODE_FAIL after step 1387. 13 ckpts saved. |
 | 8463626 | 12h | 1300–5073 | 3.59 → 2.97 | ~2,700 | ~10% | Walltime hit (NODE_FAIL at end). **50 ckpts saved (every 100 steps).** |
-| 8463627 | 12h | 5000–6955+ | 2.97 → **2.90** | varies | varies | **Running** (~7h elapsed; resumed from step-5000, ~1,900 steps in) |
-| 8466847 | 12h | (cont.) | — | — | — | Held (`afterany:8463627`) |
+| 8463627 | 12h | 5000–6955 | 2.97 → 2.90 | varies | varies | Done (walltime, 12h00m18s). |
+| 8466847 | 12h | 6900–11700+ | 2.90 → **2.81** | ~2,800 | ~10% | **Running** (~8h35m elapsed; ~4,800 steps in) |
 
-**Latest checkpoint:** step-6900 (8463627 saving every 100 steps)
+**Latest checkpoint:** step-11700 (8466847 saving every 100 steps)
 
-**Cumulative steps:** ~6,955
+**Cumulative steps:** ~11,700
 
-**Tokens consumed:** 6,955 × 12,288 × 8,192 = **700B tokens** (15.0% of 4.67T target)
+**Tokens consumed:** 11,700 × 12,288 × 8,192 = **1.18T tokens** (25.3% of 4.67T target — quarter mark reached)
 
 **Logs:**
 
 - `8460301`: `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n512.o8460301`
 - `8463626`: `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n512-v2-chain1.o8463626`
 - `8463627`: `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n512-v2-chain2.o8463627`
-- `8466847`: held (`afterany:8463627`) — log will land in `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/`
+- `8466847`: `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n512-v2-chain3.o8466847`
 
 ---
 

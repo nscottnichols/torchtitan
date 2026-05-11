@@ -6,18 +6,13 @@
 
 ## v2 — 20B @ 256N — SophiaG LR=2.28e-5 (fp32 master)
 
-> Status: 8463659 ran for **9h walltime** then hit **NODE_FAIL** after
-> step 364 (`shepherd died from signal 9` on node `x4406c6s7b0n0`,
-> exit -20 — same recurring Aurora bad-node failure mode as 8459818
-> and 8460301). step-300 ckpt saved cleanly. Continuation chain
-> (8470102 + 8470103) submitted 2026-05-04 because the canonical 512N
-> chain (8466848) has been Q for 4+ days waiting for 512N slots —
-> falling back to 256N to keep training advancing. Will resume from
-> step-300. Throughput bounced between 21 and 410 TPS depending on
-> concurrent flare bandwidth — when uncontested the run hit ~20% MFU;
-> under contention (eval ckpt I/O, other yeet-env jobs) it dropped to
-> ~1% MFU. Independent trajectory from the canonical 512N chain
-> ([n512/](../n512/README.md)) — different ckpt dir
+> Status: at step 400, ~40B tokens. Three runs so far:
+> 8463659 NODE_FAIL @ 364 (signal 9 on bad node), then 8470102 + 8470103
+> chain both crashed with **gloo TCP timeouts at ~3h elapsed** (likely
+> bad-node communication issue). One additional ckpt (step-400) saved
+> from 8470102 before the crash. 8479581 just submitted to retry
+> (resumes from step-400). Independent trajectory from the canonical
+> 512N chain ([n512/](../n512/README.md)) — different ckpt dir
 > (`gbs6144` vs `gbs12288`), so it can't extend the chain — but
 > useful as a per-token comparator at the same optimizer state.
 
@@ -51,19 +46,23 @@
 
 | Job ID | Walltime | Steps | Loss (start → end) | TPS/GPU | MFU | Status |
 |--------|---------:|------:|-------------------:|--------:|----:|--------|
-| 8463659 | 12h | 1–364 | 12.96 → **4.61** | 21-410 (variable) | 1-20% (variable) | **NODE_FAIL** after step 364 (`shepherd died from signal 9` on `x4406c6s7b0n0`, exit -20). step-100/200/300 ckpts saved. |
-| 8470102 | 12h | 300+ | (resuming) | — | — | **Queued** (will resume from step-300 — submitted 2026-05-04 since 512N slots stuck) |
-| 8470103 | 12h | (cont.) | — | — | — | Held (`afterany:8470102`) |
+| 8463659 | 12h | 1–364 | 12.96 → 4.61 | 21-410 (variable) | 1-20% (variable) | **NODE_FAIL** after step 364 (`shepherd died from signal 9` on `x4406c6s7b0n0`, exit -20). step-100/200/300 ckpts saved. |
+| 8470102 | 12h | 300–~500 | 4.61 → ~5.5 | varies | varies | **Crashed** @ 3h15m (gloo TCP timeout `Connection closed by peer`, multiple ranks). step-400 ckpt saved. |
+| 8470103 | 12h | 300–~500 | (resumed but) | — | — | **Crashed** @ 2h59m (also gloo TCP timeout). |
+| 8479581 | 12h | 400+ | — | — | — | **Queued** (resubmit, 2026-05-11) — auto-resumes from step-400 |
+| 8479582 | 12h | (cont.) | — | — | — | Held (`afterany:8479581`) |
 
-**Latest checkpoint:** step-300
+**Latest checkpoint:** step-400
 
-**Tokens consumed:** 364 × 6,144 × 8,192 = **18.3B tokens** (0.39% of 4.67T target)
+**Tokens consumed:** 400 × 6,144 × 8,192 = **20.1B tokens** (0.43% of 4.67T target)
 
 **Logs:**
 
 - `8463659`: `/flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/agpt-20b-n256-v2.o8463659`
-- `8470102`: queued — log will land in `/flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/` on start
-- `8470103`: held (`afterany:8470102`) — log will land in `/flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/`
+- `8470102`: `/flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/agpt-20b-n256-v2-chain1.o8470102`
+- `8470103`: `/flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/agpt-20b-n256-v2-chain2.o8470103`
+- `8479581`: queued — log will land in `/flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/` on start
+- `8479582`: held (`afterany:8479581`)
 
 ---
 
