@@ -16,16 +16,16 @@ going?" Tracking is per-model and per-node-count.
 
 | Page | Notes | Modified |
 |------|-------|---------:|
-| [Production Index](./production/README.md) | Top-level snapshot of every active trajectory | 2026-05-05 |
-| [Dense (agpt) Production](./production/agpt/README.md) | 2B / 20B / 80B chains, v1-vs-v2 overlays | 2026-05-05 |
-| [agpt 20B](./production/agpt/20b/README.md) | All 20B trajectories + v1-vs-v2 overlay | 2026-05-05 |
-| [20B 256N](./production/agpt/20b/n256/README.md) | 8463659 NODE_FAIL → 8470102/8470103 256N continuation chain | 2026-05-05 |
-| [2B 256N](./production/agpt/2b/n256/README.md) | 8470100/8470101 256N continuation chain (resume from step-2000) | 2026-05-05 |
+| [Production Index](./production/README.md) | Top-level snapshot of every active trajectory | 2026-05-11 |
+| [Dense (agpt) Production](./production/agpt/README.md) | 2B / 20B / 80B chains, v1-vs-v2 overlays | 2026-05-11 |
+| [agpt 20B](./production/agpt/20b/README.md) | All 20B trajectories + v1-vs-v2 overlay | 2026-05-11 |
+| [2B 512N](./production/agpt/2b/n512/README.md) | **Canonical 2B chain** (step **11,700**, loss **2.81**, **1.18T tokens / 25.3%**) | 2026-05-11 |
+| [2B 256N](./production/agpt/2b/n256/README.md) | 2B 256N continuation (step **10,723**, loss **2.84**, 540B tokens) | 2026-05-11 |
+| [20B 512N](./production/agpt/20b/n512/README.md) | **Canonical 20B chain** (stuck at step 863 since 2026-05-04 — 8466848 hit `set_determinism` `std::bad_alloc`; 8479579 resubmit Q) | 2026-05-11 |
+| [20B 256N](./production/agpt/20b/n256/README.md) | 20B 256N at step 400 (3 crashes: NODE_FAIL + 2× gloo TCP timeout); 8479581 resubmit Q | 2026-05-11 |
 | [20B 1024N](./production/agpt/20b/n1024/README.md) | First attempt (8463183) crashed at startup | 2026-05-04 |
 | [2B 1024N](./production/agpt/2b/n1024/README.md) | First attempt (8463182) crashed at startup | 2026-05-04 |
 | [agpt 2B](./production/agpt/2b/README.md) | All 2B trajectories + v1-vs-v2 overlay | 2026-05-03 |
-| [20B 512N](./production/agpt/20b/n512/README.md) | **Canonical 20B chain** (step 863, loss 3.46) | 2026-05-03 |
-| [2B 512N](./production/agpt/2b/n512/README.md) | **Canonical 2B chain** (step 5,073, loss 2.97) | 2026-05-03 |
 | [agpt 2B-MDS](./production/agpt/2b-mds/README.md) | Pre-torchtitan Megatron-DeepSpeed reference baseline | 2026-05-03 |
 | [Production Scaling Report](./production/scaling-performance.md) | Apr 18-21 experiments (historical) | 2026-04-26 |
 
@@ -58,7 +58,7 @@ relevant guide before suggesting work that touches one of these.
 | Page | Notes | Modified |
 |------|-------|---------:|
 | [Development Journal](./journal.md) | Session-by-session log of what happened, with findings and incidents | 2026-05-05 |
-| [AuroraGPT Sync Notes](./meeting-notes/agpt-sync.md) | Recurring agendas + action items | 2026-05-04 |
+| [AuroraGPT Sync Notes](./meeting-notes/agpt-sync.md) | Recurring agendas + action items | 2026-05-05 |
 | [Meeting Notes Index](./meeting-notes/README.md) | Top-level meeting index | 2026-05-04 |
 | [Summary 2026-04-12 → 2026-04-27](./summaries/2026-04-12_to_2026-04-27.md) | 2-week retrospective | 2026-05-04 |
 | [Periodic Summaries Index](./summaries/README.md) | Index of 2-week / monthly retros | 2026-05-04 |
