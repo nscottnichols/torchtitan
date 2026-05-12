@@ -21,9 +21,9 @@
 
 ### Progress
 
-| Job ID | Walltime | Steps | Status |
-|--------|---------:|------:|--------|
-| 8463183 | 12h | — | **Crashed at startup** (211s, exit 143). `rank 4732 died from signal 11` during `set_determinism` distributed-init. |
+| Job ID | Date | Walltime | Steps | Status |
+|--------|------|---------:|------:|--------|
+| [`8463183`][8463183] | 2026-05-04 | 12h | — | **Crashed at startup** (211s, exit 143). `rank 4732 died from signal 11` during `set_determinism` distributed-init. |
 
 **Logs:**
 
@@ -35,3 +35,6 @@ This is an *independent* trajectory from the canonical 512N chain
 as a scaling experiment, not as a chain extension.
 
 There are no v1 figures for 1024N — v1 never ran at this scale.
+
+<!-- Job-ID reference-style link definitions -->
+[8463183]: /flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/agpt-20b-n1024-v2.o8463183

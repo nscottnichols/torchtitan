@@ -44,13 +44,13 @@
 
 ### Progress (chain)
 
-| Job ID | Walltime | Steps | Loss (start → end) | TPS/GPU | MFU | Status |
-|--------|---------:|------:|-------------------:|--------:|----:|--------|
-| 8460302 | 6h | 1–300 | 12.94 → 4.95 | ~355 | ~17.7% | Walltime hit (NODE_FAIL at end). 3 ckpts saved. |
-| 8463628 | 12h | 200–863 | 5.62 → **3.46** | ~355 | ~17.8% | Done (walltime, step-100..800 ckpts saved). |
-| 8466848 | — | — | — | — | — | **Crashed @ startup** (127s) — `MemoryError: std::bad_alloc` in `torch.distributed.broadcast` during `set_determinism`. Intermittent: didn't reproduce on retry. |
-| 8479579 | 12h | 800–803 | 3.46 → 3.53 | ~340 then 0 | ~17.6% then 0 | **Killed by qdel @ 5h56m** — silent hang after step 803 (logged 13:30, no further training output through 18:23). W&B heartbeat continued unchanged for 5h. New failure mode (no exit, no crash, no traceback). See [`docs/experiments/agpt/aurora/20260511-20b-n512-hang-8479579.md`](../../../../experiments/agpt/aurora/20260511-20b-n512-hang-8479579.md). |
-| 8479580 | 12h | 800+ | — | — | — | **Queued** — auto-released from hold by `afterany:8479579`, will resume from step-800 |
+| Job ID | Date | Walltime | Steps | Loss (start → end) | TPS/GPU | MFU | Status |
+|--------|------|---------:|------:|-------------------:|--------:|----:|--------|
+| [`8460302`][8460302] | 2026-05-01 | 6h | 1–300 | 12.94 → 4.95 | ~355 | ~17.7% | Walltime hit (NODE_FAIL at end). 3 ckpts saved. |
+| [`8463628`][8463628] | 2026-05-03 | 12h | 200–863 | 5.62 → **3.46** | ~355 | ~17.8% | Done (walltime, step-100..800 ckpts saved). |
+| [`8466848`][8466848] | 2026-05-07 | — | — | — | — | — | **Crashed @ startup** (127s) — `MemoryError: std::bad_alloc` in `torch.distributed.broadcast` during `set_determinism`. Intermittent: didn't reproduce on retry. |
+| [`8479579`][8479579] | 2026-05-11 | 12h | 800–803 | 3.46 → 3.53 | ~340 then 0 | ~17.6% then 0 | **Killed by qdel @ 5h56m** — silent hang after step 803 (logged 13:30, no further training output through 18:23). W&B heartbeat continued unchanged for 5h. New failure mode (no exit, no crash, no traceback). See [`docs/experiments/agpt/aurora/20260511-20b-n512-hang-8479579.md`](../../../../experiments/agpt/aurora/20260511-20b-n512-hang-8479579.md). |
+| [`8479580`][8479580] | 2026-05-11 | 12h | 800+ | — | — | — | **Queued** — auto-released from hold by `afterany:8479579`, will resume from step-800 |
 
 **Latest checkpoint:** step-800 (244 GB on disk per ckpt)
 
@@ -97,11 +97,11 @@ Don't draw conclusions from these loss curves.
 
 ### Progress
 
-| Job ID | Steps | Loss (start → end) | TPS/GPU | MFU | Memory | Status |
-|--------|-------|---------------------|---------|-----|--------|--------|
-| 8443819 | 1–458 | 12.94 → 7.09 | 41 | 2.1% | 54.14 GiB | Complete (walltime) |
-| 8446343 | 0 | — | — | — | — | Segfault (signal 11) |
-| 8446344 | — | — | — | — | — | Queued |
+| Job ID | Date | Steps | Loss (start → end) | TPS/GPU | MFU | Memory | Status |
+|--------|------|-------|---------------------|---------|-----|--------|--------|
+| [`8443819`][8443819] | 2026-04-22 | 1–458 | 12.94 → 7.09 | 41 | 2.1% | 54.14 GiB | Complete (walltime) |
+| [`8446343`][8446343] | 2026-04-25 | 0 | — | — | — | — | Segfault (signal 11) |
+| [`8446344`][8446344] | 2026-04-26 | — | — | — | — | — | Queued |
 
 **W&B:** [8of5hse0](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/8of5hse0)
 
@@ -127,3 +127,17 @@ Don't draw conclusions from these loss curves.
 ```
 
 </details>
+
+<!-- Job-ID reference-style link definitions -->
+
+<!-- v2 chain -->
+[8460302]: /flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/agpt-20b-n512.o8460302
+[8463628]: /flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/agpt-20b-n512-v2-chain1.o8463628
+[8466848]: /flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/agpt-20b-n512-v2-chain2.o8466848
+[8479579]: /flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/agpt-20b-n512-v2-chain2.o8479579
+[8479580]: /flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/
+
+<!-- v1 (historical) -->
+[8443819]: /lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz/agpt-20b-sophiag-n512.o8443819
+[8446343]: /lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz/agpt-20b-sophiag-n512.o8446343
+[8446344]: /lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz/agpt-20b-sophiag-n512.o8446344

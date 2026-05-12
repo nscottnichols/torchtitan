@@ -34,11 +34,11 @@ Production clone: `/flare/AuroraGPT/foremans/runs/agpt-80b-v2/torchtitan-ezpz/`.
 
 ### Progress
 
-| Job ID | Steps | Loss (start → end) | TPS/GPU | MFU | Memory | Status |
-|--------|-------|---------------------|---------|-----|--------|--------|
-| 8444124 | 0 | — | — | — | — | Segfault (node) |
-| 8446345 | 1–685+ | 12.94 → NaN (step 138) | 92 | 16.8% | 52.94 GiB | **Running** (NaN) |
-| 8446346 | cont. | — | — | — | — | Held (dep) |
+| Job ID | Date | Steps | Loss (start → end) | TPS/GPU | MFU | Memory | Status |
+|--------|------|-------|---------------------|---------|-----|--------|--------|
+| [`8444124`][8444124] | 2026-04-22 | 0 | — | — | — | — | Segfault (node) |
+| [`8446345`][8446345] | 2026-04-25 | 1–685+ | 12.94 → NaN (step 138) | 92 | 16.8% | 52.94 GiB | **Running** (NaN) |
+| [`8446346`][8446346] | 2026-04-25 | cont. | — | — | — | — | Held (dep) |
 
 **W&B:** [47pxgzf3](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/47pxgzf3)
 
@@ -77,11 +77,11 @@ both produce NaN due to bf16 overflow at dim=9216.
 
 ### Progress
 
-| Job ID | Steps | Loss (start → end) | TPS/GPU | MFU | Memory | Status |
-|--------|-------|---------------------|---------|-----|--------|--------|
-| 8443820 | 0 | — | — | — | — | CPU OOM (compile) |
-| 8446347 | — | — | — | — | — | Queued |
-| 8446348 | 1–495+ | 12.94 → NaN (step 15) | 65 | 11.9% | 56.33 GiB | **Running** (NaN) |
+| Job ID | Date | Steps | Loss (start → end) | TPS/GPU | MFU | Memory | Status |
+|--------|------|-------|---------------------|---------|-----|--------|--------|
+| [`8443820`][8443820] | 2026-04-22 | 0 | — | — | — | — | CPU OOM (compile) |
+| [`8446347`][8446347] | 2026-04-25 | — | — | — | — | — | Queued |
+| [`8446348`][8446348] | 2026-04-25 | 1–495+ | 12.94 → NaN (step 15) | 65 | 11.9% | 56.33 GiB | **Running** (NaN) |
 
 **W&B:** [mbszs7ij](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/mbszs7ij)
 
@@ -104,10 +104,10 @@ the effective learning rate even more aggressive.
 
 ### Progress
 
-| Job ID | Steps | Loss (start → end) | TPS/GPU | MFU | Memory | Status |
-|--------|-------|---------------------|---------|-----|--------|--------|
-| 8451225 | 1–51 | 12.94 → 12.91 | — | — | — | Complete (walltime) |
-| 8451226 | 0 | — | — | — | — | Crashed (Gloo timeout, bad node) |
+| Job ID | Date | Steps | Loss (start → end) | TPS/GPU | MFU | Memory | Status |
+|--------|------|-------|---------------------|---------|-----|--------|--------|
+| [`8451225`][8451225] | 2026-04-26 | 1–51 | 12.94 → 12.91 | — | — | — | Complete (walltime) |
+| [`8451226`][8451226] | 2026-04-26 | 0 | — | — | — | — | Crashed (Gloo timeout, bad node) |
 
 **Note:** LR=1e-6 stabilized the 80B model (51 steps without NaN).
 Job 8451226 crashed during dataloader init due to an unreachable node
@@ -123,3 +123,13 @@ Job 8451226 crashed during dataloader init due to an unreachable node
 ```
 
 </details>
+
+<!-- Job-ID reference-style link definitions -->
+[8444124]: /lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz/agpt-80b-AdamW-n256.o8444124
+[8446345]: /lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz/agpt-80b-AdamW-n256.o8446345
+[8446346]: /lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz/agpt-80b-AdamW-n256.o8446346
+[8443820]: /lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz/agpt-80b-AdamW-n512.o8443820
+[8446347]: /lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz/agpt-80b-AdamW-n512.o8446347
+[8446348]: /lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz/agpt-80b-AdamW-n512.o8446348
+[8451225]: /lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz/agpt-80b-AdamW-lr1e6-n256.o8451225
+[8451226]: /lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz/agpt-80b-AdamW-lr1e6-n256.o8451226

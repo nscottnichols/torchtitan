@@ -44,11 +44,11 @@
 
 ### Progress
 
-| Job ID | Steps | Loss (start → end) | TPS/GPU | MFU | Status |
-|--------|-------|---------------------|---------|-----|--------|
-| 8459818 | 1–2070 | 12.93 → 3.33 | ~3,500 | ~13% | NODE_FAIL after step 2070 (single bad node dragged TPS to ~30 then killed). 20 ckpts saved (every 100 steps). |
-| 8470100 | 2000–~10000 | 3.33 → ~2.85 | ~1,000 | ~3.8% | Done (walltime, 12h02m). Resumed from step-2000. |
-| 8470101 | 10000–10723+ | 2.85 → **2.84** | ~1,000 | ~3.8% | **Running** (~7h21m elapsed; chained continuation) |
+| Job ID | Date | Steps | Loss (start → end) | TPS/GPU | MFU | Status |
+|--------|------|-------|---------------------|---------|-----|--------|
+| [`8459818`][8459818] | 2026-05-01 | 1–2070 | 12.93 → 3.33 | ~3,500 | ~13% | NODE_FAIL after step 2070 (single bad node dragged TPS to ~30 then killed). 20 ckpts saved (every 100 steps). |
+| [`8470100`][8470100] | 2026-05-08 | 2000–~10000 | 3.33 → ~2.85 | ~1,000 | ~3.8% | Done (walltime, 12h02m). Resumed from step-2000. |
+| [`8470101`][8470101] | 2026-05-11 | 10000–12889 | 2.85 → 2.81 | ~1,000 | ~3.8% | Done (walltime, 12h00m20s; cleanly walltime-finished). |
 
 **Latest checkpoint:** step-10700 (8470101 saving every 100 steps)
 
@@ -104,12 +104,12 @@ Don't draw conclusions from these loss curves.
 
 ### Progress
 
-| Job ID | Steps | Loss (start → end) | TPS/GPU | MFU | Memory | Status |
-|--------|-------|---------------------|---------|-----|--------|--------|
-| 8444122 | 1–1431 | 12.94 → 6.13 | 489 | 1.8% | 47.12 GiB | Complete (walltime) |
-| 8446337 | 1401–9876 | 6.13 → 5.78 | 1,794 | 6.7% | — | Complete (walltime) |
-| 8446338 | 9876–17424 | 5.78 → 5.73 | 2,280 | 8.6% | 47.02 GiB | Complete (walltime) |
-| 8446339 | 17401–17518+ | 5.73 → 5.73 | 761 | 2.9% | 47.02 GiB | Walltime |
+| Job ID | Date | Steps | Loss (start → end) | TPS/GPU | MFU | Memory | Status |
+|--------|------|-------|---------------------|---------|-----|--------|--------|
+| [`8444122`][8444122] | 2026-04-22 | 1–1431 | 12.94 → 6.13 | 489 | 1.8% | 47.12 GiB | Complete (walltime) |
+| [`8446337`][8446337] | 2026-04-25 | 1401–9876 | 6.13 → 5.78 | 1,794 | 6.7% | — | Complete (walltime) |
+| [`8446338`][8446338] | 2026-04-26 | 9876–17424 | 5.78 → 5.73 | 2,280 | 8.6% | 47.02 GiB | Complete (walltime) |
+| [`8446339`][8446339] | 2026-04-27 | 17401–17518+ | 5.73 → 5.73 | 761 | 2.9% | 47.02 GiB | Walltime |
 
 **W&B:** [pjanidnw](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/pjanidnw) (job 8444122), [4u9w23p9](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/4u9w23p9) (job 8446337)
 
@@ -129,3 +129,17 @@ killed; throughput is recovering.
 - `8446339`: `/lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz/agpt-2b-sophiag-n256.o8446339`
 
 </details>
+
+<!-- Job-ID reference-style link definitions. Targets are absolute
+filesystem paths to PBS .o<jobid> log files. -->
+
+<!-- v2 chain -->
+[8459818]: /flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n256.o8459818
+[8470100]: /flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n256-v2-chain1.o8470100
+[8470101]: /flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n256-v2-chain2.o8470101
+
+<!-- v1 (historical) -->
+[8444122]: /lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz/agpt-2b-sophiag-n256.o8444122
+[8446337]: /lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz/agpt-2b-sophiag-n256.o8446337
+[8446338]: /lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz/agpt-2b-sophiag-n256.o8446338
+[8446339]: /lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz/agpt-2b-sophiag-n256.o8446339
