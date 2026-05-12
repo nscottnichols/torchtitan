@@ -2,7 +2,7 @@
 
 > [!NOTE]
 > These instructions assume we are using the fork `saforem2/torchtitan`, on
-> the branch `ezpz`, i.e.:  
+> the branch `ezpz`, i.e.:
 > [saforem2/torchtitan@ezpz](https://github.com/saforem2/torchtitan/tree/ezpz)
 
 1. Submit job:
@@ -12,10 +12,10 @@
      qsub -q prod -A <project> -l walltime=06:00:00,filesystems=flare:home -l select=2 -I
      ```
 
-   - Polaris:
+   - Polaris (using ALCF's pre-empt-able queue):
 
      ```bash
-     qsub -q preemptable -A <project> -l walltime=06:00:00,filesystems=eagle:home -l select=2 -I
+     qsub -q preempt"able" -A <project> -l walltime=06:00:00,filesystems=eagle:home -l select=2 -I
      ```
 
 1. Clone TorchTitan from [saforem2/torchtitan@ezpz](https://github.com/saforem2/torchtitan/blob/ezpz):
