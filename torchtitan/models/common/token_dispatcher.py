@@ -427,7 +427,7 @@ class AllToAllTokenDispatcher(LocalTokenDispatcher):
         """
         pieces = []
         for rank, split in enumerate(input_splits):
-            tokens_for_rank = split // num_local_experts
+            assert split % num_local_experts == 0
             piece = x[rank::ep_size].repeat(num_local_experts, 1)
             if split < equal_split_size:
                 piece = F.pad(piece, (0, 0, 0, equal_split_size - split))
