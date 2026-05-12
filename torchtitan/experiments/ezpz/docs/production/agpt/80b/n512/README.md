@@ -33,13 +33,15 @@
 
 | Job ID | Date | Walltime | Steps | Loss | TPS/GPU | MFU | Status |
 |--------|------|---------:|------:|-----:|--------:|----:|--------|
-| [`8480361`][8480361] | 2026-05-11 | 12h | — | — | — | — | **Queued** (first v2 80B attempt; failover wrapper, 522 nodes) |
-| [`8480362`][8480362] | 2026-05-11 | 12h | (cont.) | — | — | — | Held (`afterany:8480361`) |
+| [`8480361`](#log-8480361) | 2026-05-11 | 12h | — | — | — | — | **Queued** (first v2 80B attempt; failover wrapper, 522 nodes) |
+| [`8480362`](#log-8480362) | 2026-05-11 | 12h | (cont.) | — | — | — | Held (`afterany:8480361`) |
 
-**Logs:**
+### Logs
 
-- `8480361`: queued — log will land in `/flare/AuroraGPT/foremans/runs/agpt-80b-v2/torchtitan-ezpz/` on start
-- `8480362`: held (`afterany:8480361`)
+| Job ID | Path |
+|--------|------|
+| <a id="log-8480361"></a>`8480361` | queued — log will land in `/flare/AuroraGPT/foremans/runs/agpt-80b-v2/torchtitan-ezpz/` on start |
+| <a id="log-8480362"></a>`8480362` | held (`afterany:8480361`) |
 
 ## Why no v1 here
 
@@ -67,7 +69,3 @@ overflow at dim=9216). v2 is a fresh start with the working config.
 - **Silent hang at step ~800** (8479579 incident): no_progress
   watchdog NOT yet implemented in the failover wrapper. If 8480361
   hangs we'll need to qdel manually.
-
-<!-- Job-ID reference-style link definitions -->
-[8480361]: /flare/AuroraGPT/foremans/runs/agpt-80b-v2/torchtitan-ezpz/
-[8480362]: /flare/AuroraGPT/foremans/runs/agpt-80b-v2/torchtitan-ezpz/

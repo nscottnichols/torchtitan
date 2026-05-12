@@ -23,11 +23,13 @@
 
 | Job ID | Date | Walltime | Steps | Status |
 |--------|------|---------:|------:|--------|
-| [`8463182`][8463182] | 2026-05-04 | 12h | — | **Crashed at startup** (221s, exit 143). `MemoryError: std::bad_alloc` in `torch.distributed.broadcast` during `set_determinism`. |
+| [`8463182`](#log-8463182) | 2026-05-04 | 12h | — | **Crashed at startup** (221s, exit 143). `MemoryError: std::bad_alloc` in `torch.distributed.broadcast` during `set_determinism`. |
 
-**Logs:**
+### Logs
 
-- `8463182`: `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n1024-v2.o8463182`
+| Job ID | Path |
+|--------|------|
+| <a id="log-8463182"></a>`8463182` | `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n1024-v2.o8463182` |
 
 This is an *independent* trajectory from the canonical 512N chain
 ([n512/](../n512/README.md)) — it writes to a different ckpt dir
@@ -35,6 +37,3 @@ This is an *independent* trajectory from the canonical 512N chain
 as a scaling experiment, not as a chain extension.
 
 There are no v1 figures for 1024N — v1 never ran at this scale.
-
-<!-- Job-ID reference-style link definitions -->
-[8463182]: /flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n1024-v2.o8463182

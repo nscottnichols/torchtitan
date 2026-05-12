@@ -31,27 +31,27 @@ for the diagnosis.
 
 | Model | Nodes | Cumulative steps | Loss | Tokens | Latest job | Status |
 |-------|------:|-----------------:|-----:|-------:|------------|--------|
-| 2B  | 512 | **13,279** | **2.79** | **1.34T** (28.7%) | [`8466847`][8466847] → [`8479988`][8479988] | 8466847 walltime-finished; **8479988 Q** (resubmit, resumes from step-13200) |
-| 20B | 512 | **803**    | **3.53** | **81B** (1.7%)    | [`8479580`][8479580] | **Killed by qdel** — 8479579 silently hung after step 803 (no exit, W&B heartbeat alive but training metrics dead for 5h). 8479580 (held) auto-released, Q to resume from step-800. See [hang report](../experiments/agpt/aurora/20260511-20b-n512-hang-8479579.md). |
-| 80B | 512 | — | — | — | [`8480361`][8480361] | **Q** — first v2 production attempt (failover wrapper, 522 nodes = 512 active + 10 spare; AdamW LR=1e-6, TP=2, AC=full, compile=OFF — proven config from 4N smoke 12466025) |
+| 2B  | 512 | **13,279** | **2.79** | **1.34T** (28.7%) | [`8466847`](agpt/2b/n512/README.md#log-8466847) → [`8479988`](agpt/2b/n512/README.md#log-8479988) | 8466847 walltime-finished; **8479988 Q** (resubmit, resumes from step-13200) |
+| 20B | 512 | **803**    | **3.53** | **81B** (1.7%)    | [`8479580`](agpt/20b/n512/README.md#log-8479580) | **Killed by qdel** — 8479579 silently hung after step 803 (no exit, W&B heartbeat alive but training metrics dead for 5h). 8479580 (held) auto-released, Q to resume from step-800. See [hang report](../experiments/agpt/aurora/20260511-20b-n512-hang-8479579.md). |
+| 80B | 512 | — | — | — | [`8480361`](agpt/80b/n512/README.md#log-8480361) | **Q** — first v2 production attempt (failover wrapper, 522 nodes = 512 active + 10 spare; AdamW LR=1e-6, TP=2, AC=full, compile=OFF — proven config from 4N smoke 12466025) |
 
 ### Active 256N trajectories
 
 | Model | Nodes | Cumulative steps | Loss | Tokens | Latest job | Status |
 |-------|------:|-----------------:|-----:|-------:|------------|--------|
-| 2B  | 256 | **12,889** | **2.81** | **650B** (13.9%) | [`8470101`][8470101] | Done (walltime, 12h00m20s; cleanly walltime-finished) — caught up to canonical 512N per-step |
-| 20B | 256 | **500** | **4.08** | 25B (0.54%) | [`8479581`][8479581] | **Crashed** (gloo TCP timeout @ 3h39m); 8479582 Q to resume from step-500 |
+| 2B  | 256 | **12,889** | **2.81** | **650B** (13.9%) | [`8470101`](agpt/2b/n256/README.md#log-8470101) | Done (walltime, 12h00m20s; cleanly walltime-finished) — caught up to canonical 512N per-step |
+| 20B | 256 | **500** | **4.08** | 25B (0.54%) | [`8479581`](agpt/20b/n256/README.md#log-8479581) | **Crashed** (gloo TCP timeout @ 3h39m); 8479582 Q to resume from step-500 |
 
 ### Other jobs
 
 | Job ID | Date | Model | Nodes | Walltime | Status |
 |--------|------|-------|------:|---------:|--------|
-| [`8463182`][8463182] | 2026-05-04 | 2B | 1024 | 12h | **Crashed @ startup (211s, std::bad_alloc)** |
-| [`8463183`][8463183] | 2026-05-04 | 20B | 1024 | 12h | **Crashed @ startup (211s, SIGSEGV)** |
-| [`8463659`][8463659] | 2026-05-04 | 20B | 256 | 12h | **NODE_FAIL** after step 364 (loss 4.61); step-300 ckpt saved |
-| [`8466848`][8466848] | 2026-05-07 | 20B | 512 | — | **Crashed @ startup** (`set_determinism` `std::bad_alloc`); didn't reproduce on 8479579 retry |
-| [`8467141`][8467141]/[`8467142`][8467142] | 2026-05-07/11 | 2B | 512 | 12h | √2-LR fork — chain1 ran 4h, chain2 ran 1h53m; both done. Tests `LR=3.22e-5` at GBS=12,288 (separate ckpt dir `gbs12288-lr3.22e-5`) |
-| [`8470102`][8470102]/[`8470103`][8470103] | 2026-05-08 | 20B | 256 | — | Both **crashed** with gloo TCP timeouts at ~3h elapsed |
+| [`8463182`](agpt/2b/n1024/README.md#log-8463182) | 2026-05-04 | 2B | 1024 | 12h | **Crashed @ startup (211s, std::bad_alloc)** |
+| [`8463183`](agpt/20b/n1024/README.md#log-8463183) | 2026-05-04 | 20B | 1024 | 12h | **Crashed @ startup (211s, SIGSEGV)** |
+| [`8463659`](agpt/20b/n256/README.md#log-8463659) | 2026-05-04 | 20B | 256 | 12h | **NODE_FAIL** after step 364 (loss 4.61); step-300 ckpt saved |
+| [`8466848`](agpt/20b/n512/README.md#log-8466848) | 2026-05-07 | 20B | 512 | — | **Crashed @ startup** (`set_determinism` `std::bad_alloc`); didn't reproduce on 8479579 retry |
+| [`8467141`](agpt/2b/n512/README.md#log-8467141)/[`8467142`](agpt/2b/n512/README.md#log-8467142) | 2026-05-07/11 | 2B | 512 | 12h | √2-LR fork — chain1 ran 4h, chain2 ran 1h53m; both done. Tests `LR=3.22e-5` at GBS=12,288 (separate ckpt dir `gbs12288-lr3.22e-5`) |
+| [`8470102`](agpt/20b/n256/README.md#log-8470102)/[`8470103`](agpt/20b/n256/README.md#log-8470103) | 2026-05-08 | 20B | 256 | — | Both **crashed** with gloo TCP timeouts at ~3h elapsed |
 
 ### Dense (agpt) — bf16-tainted (superseded, kept for record)
 
@@ -86,20 +86,3 @@ See per-model READMEs (`agpt/2b/`, `agpt/20b/`, `agpt/80b/`).
    tarball mode (`ezpz yeet-env --src .venv.tar.gz`, default in v2
    submit scripts) does the same broadcast in 70-420 seconds at
    8-2048N. See [yeet_env scaling](../scaling/yeet_env/README.md).
-
-<!-- Job-ID reference-style link definitions (collected here for cross-table reuse) -->
-
-[8463182]: /flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n1024-v2.o8463182
-[8463183]: /flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/agpt-20b-n1024-v2.o8463183
-[8463659]: /flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/agpt-20b-n256-v2.o8463659
-[8466847]: /flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n512-v2-chain3.o8466847
-[8466848]: /flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/agpt-20b-n512-v2-chain2.o8466848
-[8467141]: /flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n512-v2-lr3.22e-5.o8467141
-[8467142]: /flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n512-v2-lr3.22e-5-chain2.o8467142
-[8470101]: /flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n256-v2-chain2.o8470101
-[8470102]: /flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/agpt-20b-n256-v2-chain1.o8470102
-[8470103]: /flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/agpt-20b-n256-v2-chain2.o8470103
-[8479580]: /flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/
-[8479581]: /flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/agpt-20b-n256-v2-chain3.o8479581
-[8479988]: /flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/
-[8480361]: /flare/AuroraGPT/foremans/runs/agpt-80b-v2/torchtitan-ezpz/
