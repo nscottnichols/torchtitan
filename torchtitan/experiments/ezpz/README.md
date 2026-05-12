@@ -92,7 +92,7 @@
 
 ## Launching with `run_train.sh`
 
-- [run_train.sh](torchtitan/experiments/ezpz/run_train.sh)
+- [run_train.sh](run_train.sh)
 
   ```bash
   # AuroraGPT-2B model:
