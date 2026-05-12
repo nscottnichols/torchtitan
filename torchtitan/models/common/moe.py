@@ -17,7 +17,7 @@ from torchtitan.models.common.linear import Linear
 
 from torchtitan.protocols.module import Module
 
-from .token_dispatcher import LocalTokenDispatcher, _record_moe_fastpath
+from .token_dispatcher import _record_moe_fastpath, LocalTokenDispatcher
 
 
 # NOTE: keeping this for-loop implementation for comparison
@@ -40,7 +40,10 @@ def _run_experts_for_loop(
 
     if (
         len(num_tokens_per_expert_list) > 0
-        and all(count == num_tokens_per_expert_list[0] for count in num_tokens_per_expert_list)
+        and all(
+            count == num_tokens_per_expert_list[0]
+            for count in num_tokens_per_expert_list
+        )
         and num_tokens_per_expert_list[0] > 0
         and not torch.is_grad_enabled()
     ):
@@ -188,6 +191,7 @@ class GroupedExperts(Module):
             w3 = self.w3
 
         if self.use_grouped_mm:
+            assert isinstance(num_tokens_per_expert, torch.Tensor)
             return _run_experts_grouped_mm(w1, w2, w3, x, num_tokens_per_expert)
         else:
             return _run_experts_for_loop(
@@ -219,10 +223,7 @@ class GroupedExperts(Module):
         num_tokens_per_expert_list = getattr(
             metadata, "num_tokens_per_expert_list", None
         )
-        if (
-            not self.use_grouped_mm
-            and num_tokens_per_expert_list is not None
-        ):
+        if not self.use_grouped_mm and num_tokens_per_expert_list is not None:
             num_tokens_for_experts = num_tokens_per_expert_list
         else:
             num_tokens_for_experts = num_tokens_local

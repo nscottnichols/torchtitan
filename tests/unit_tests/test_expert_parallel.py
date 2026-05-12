@@ -4,8 +4,8 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-import unittest
 import os
+import unittest
 
 import torch
 import torch.nn.functional as F
@@ -13,17 +13,17 @@ from torch import nn
 
 from torchtitan.models.common.linear import Linear
 from torchtitan.models.common.moe import (
+    _run_experts_for_loop,
     GroupedExperts,
     TokenChoiceTopKRouter,
-    _run_experts_for_loop,
 )
 from torchtitan.models.common.token_dispatcher import (
-    AllToAllTokenDispatcher,
-    LocalTokenDispatcher,
-    TorchAOTokenDispatcher,
     _MOE_FASTPATH_COUNTERS,
     _normal_equal_a2a_padding_enabled,
     _record_moe_fastpath,
+    AllToAllTokenDispatcher,
+    LocalTokenDispatcher,
+    TorchAOTokenDispatcher,
 )
 from torchtitan.ops.scatter_add import (
     deterministic_scatter_add,
@@ -221,9 +221,7 @@ class TestLocalTokenDispatcherCorrectness(unittest.TestCase):
                     x[token_idx].float() * top_scores[token_idx, choice_idx]
                 )
 
-        torch.testing.assert_close(
-            actual.float(), expected, rtol=1e-2, atol=1e-2
-        )
+        torch.testing.assert_close(actual.float(), expected, rtol=1e-2, atol=1e-2)
 
     def test_no_grad_combine_does_not_mutate_input_when_shared_experts_aliases_x(self):
         dispatcher = LocalTokenDispatcher(
@@ -281,7 +279,9 @@ class TestLocalTokenDispatcherCorrectness(unittest.TestCase):
                 shared_experts=shared_experts,
             )
 
-        self.assertEqual(out.untyped_storage().data_ptr(), shared_out.untyped_storage().data_ptr())
+        self.assertEqual(
+            out.untyped_storage().data_ptr(), shared_out.untyped_storage().data_ptr()
+        )
         torch.testing.assert_close(out, x * 1.25)
 
 
@@ -363,14 +363,14 @@ class TestForceLoadBalanceRouting(unittest.TestCase):
         )
         scores = torch.randn(5, 4)
 
-        selected_experts_indices, top_scores, num_tokens_per_expert = (
-            router._debug_force_load_balance_routing(scores)
-        )
+        (
+            selected_experts_indices,
+            top_scores,
+            num_tokens_per_expert,
+        ) = router._debug_force_load_balance_routing(scores)
 
         expected_indices = torch.arange(15).reshape(5, 3) % 4
-        expected_counts = torch.bincount(
-            expected_indices.reshape(-1), minlength=4
-        )
+        expected_counts = torch.bincount(expected_indices.reshape(-1), minlength=4)
         torch.testing.assert_close(selected_experts_indices, expected_indices)
         torch.testing.assert_close(top_scores, scores.gather(1, expected_indices))
         torch.testing.assert_close(num_tokens_per_expert, expected_counts)
@@ -632,7 +632,9 @@ class TestPermute(unittest.TestCase):
 
         self.assertEqual(input_shape, expected_shape)
         self.assertEqual(rank_major_shape, (ep_size, num_local_experts, uniform_count))
-        self.assertEqual(actual_counts_list, [ep_size * uniform_count] * num_local_experts)
+        self.assertEqual(
+            actual_counts_list, [ep_size * uniform_count] * num_local_experts
+        )
         torch.testing.assert_close(actual_routed_input, expected_routed_input)
         torch.testing.assert_close(actual_counts, expected_counts)
         torch.testing.assert_close(
