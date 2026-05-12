@@ -46,7 +46,13 @@ def _run_experts_for_loop(
     ):
         _record_moe_fastpath("batched_no_grad_experts")
         tokens_per_expert = num_tokens_per_expert_list[0]
-        x_grouped = x.view(len(num_tokens_per_expert_list), tokens_per_expert, x.shape[-1])
+        expected_numel = (
+            len(num_tokens_per_expert_list) * tokens_per_expert * x.shape[-1]
+        )
+        assert x.numel() == expected_numel
+        x_grouped = x.reshape(
+            len(num_tokens_per_expert_list), tokens_per_expert, x.shape[-1]
+        )
         if w13 is None:
             w13 = torch.cat((w1, w3), dim=1)
         h13 = torch.bmm(x_grouped, w13.transpose(-2, -1))
