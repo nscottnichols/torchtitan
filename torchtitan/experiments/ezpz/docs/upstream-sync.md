@@ -850,7 +850,7 @@ No changes to `models/`, `distributed/`, or `trainer.py`.
 
 **Upstream commits:**
 
-- `878041cb` — [Bugfix] Reenable llvm with triton pin update (#2873)
+- `878041cb` — [Bugfix] Reenable llvm with triton pin update (#2873) <!-- codespell:ignore-line -->
 
 **Files changed:** `models/common/attention.py` — removed `DISABLE_LLVM_OPT=1`
 env var workaround. The upstream Triton pin (pytorch/pytorch#179586) fixed

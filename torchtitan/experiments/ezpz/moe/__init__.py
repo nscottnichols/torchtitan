@@ -12,17 +12,11 @@ from typing import Literal
 import torch.nn as nn
 
 from torchtitan.components.optimizer import register_moe_load_balancing_hook
-from torchtitan.models.common import (
-    Embedding,
-    Linear,
-    RMSNorm,
-    RoPE,
-    TransformerBlock,
-)
 from torchtitan.experiments.ezpz.agpt import (
     _default_inner_attention,
     _ezpz_get_attention_config,
 )
+from torchtitan.models.common import Embedding, Linear, RMSNorm, RoPE, TransformerBlock
 from torchtitan.models.common.config_utils import (
     make_experts_config,
     make_ffn_config,
@@ -32,7 +26,7 @@ from torchtitan.models.common.config_utils import (
 from torchtitan.models.common.param_init import depth_scaled_std
 from torchtitan.protocols.model_spec import ModelSpec
 
-from .experts import EzpzGroupedExperts, ExpertComputeBackend
+from .experts import ExpertComputeBackend, EzpzGroupedExperts
 from .model import Attention, moeModel, moeTransformerBlock
 
 from .parallelize import parallelize_moe
@@ -67,14 +61,13 @@ def make_ezpz_experts_config(
     # Re-wrap as the ezpz subclass Config so the runtime build instantiates
     # EzpzGroupedExperts (which understands `compute_backend`).
     field_values = {
-        f.name: getattr(base, f.name)
-        for f in dataclasses.fields(base)
-        if f.init
+        f.name: getattr(base, f.name) for f in dataclasses.fields(base) if f.init
     }
     return EzpzGroupedExperts.Config(
         **field_values,
         compute_backend=compute_backend,
     )
+
 
 __all__ = [
     "parallelize_moe",

@@ -104,6 +104,4 @@ class EzpzGroupedExperts(GroupedExperts):
 
         if self.compute_backend == "for_loop":
             return _run_experts_for_loop(w1, w2, w3, x, num_tokens_per_expert)
-        raise ValueError(
-            f"Unknown expert compute backend: {self.compute_backend!r}"
-        )
+        raise ValueError(f"Unknown expert compute backend: {self.compute_backend!r}")
