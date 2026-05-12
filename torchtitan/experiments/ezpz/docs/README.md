@@ -50,6 +50,7 @@ relevant guide before suggesting work that touches one of these.
 
 | Page | Notes | Modified |
 |------|-------|---------:|
+| [Bad-node failover wrapper](./guides/bad-node-failover.md) | Production submit scripts that request N+spare nodes, swap bad nodes for spares on crash, retry. Handles 6+ recurring Aurora failure modes. **Does NOT handle silent hangs** — see hang report below. | 2026-05-11 |
 | [bf16-master RMSNorm freeze](./guides/training-dtype-bf16-norm-freeze.md) | Root cause of v1 → v2 restart; `dtype=float32` is now default | 2026-05-03 |
 | [TP > 1 loss reporting off by `dp_world_size`](./guides/loss-reporting-tp-dist-reduce.md) | Upstream regression since 2026-04-27. Fix filed as pytorch/torchtitan#3204 | 2026-05-03 |
 | [Known Issues / Operational Notes](./guides/known-issues.md) | Catch-all for live workarounds | 2026-04-29 |
