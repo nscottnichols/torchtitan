@@ -24,6 +24,67 @@ tests and checking against the saved baselines — see
 
 ---
 
+## 2026-05-12 (33rd sync — `_grouped_mm` only path + graph_trainer churn)
+
+**Upstream commits (12 in batch):**
+
+- `b301dfa0` — **[MoE] Remove expert for-loop fallback (#3308).** Deletes
+  `_run_experts_for_loop` and the `use_grouped_mm` config field from
+  `models/common/moe.py`. `GroupedExperts._experts_forward` now always
+  calls `torch._grouped_mm`. Upstream's argument is that
+  `torch._grouped_mm` already provides a CUDA fallback path on pre-SM90
+  hardware. **This breaks `experiments/ezpz/moe/model.py` which used
+  `use_grouped_mm = False` as the XPU fallback** (XPU has no
+  `_grouped_mm` kernel at all).
+- `d57df092` — Make ChunkedCELoss support `torch.autograd.grad` (#3249).
+- `5ca23a5d` — [GraphTrainer] Add Context Parallel support (#3305).
+- `1a0fe3e3` — [graph_trainer] Refactor passes.py into focused modules (#3319).
+- `e9dbff63` — [graph_trainer] Refactor selective activation remat to in-place (#3270).
+- `2ceff82b` — [graph_trainer] Add log_timer utility for tracing step timing (#3311).
+- `0fadde3b` — [graph_trainer] Fix AutoParallel input_fn to include positions tensor (#3315).
+- `34801c00` — [graph_trainer] Improve SAC tagging and CPU offload pass metadata (#3321).
+- `0b5e8998` — Fix precompile tests (#3316).
+- `ca4c7f22` — [rl] Register customized config parser to vllm + less vllm config dependency (#3242).
+- `7f602b98` — Add AGENTS.md symlinks for Codex usage (#3326).
+- `7f070c93` — Enhance Lychee Link Checker (Resiliency & Performance) (#3203).
+
+**Replayed onto ezpz:**
+
+`experiments/ezpz/moe/`:
+
+- New `experts.py` defining `EzpzGroupedExperts(GroupedExperts)` with a
+  `compute_backend: Literal["for_loop", "grouped_mm"]` config field.
+  Default `"grouped_mm"` defers to upstream; `"for_loop"` re-vendors
+  the `_run_experts_for_loop` body that #3308 deleted, restoring the
+  XPU / pre-SM90 path.
+- New `make_ezpz_experts_config(...)` wrapper in `__init__.py` that
+  calls upstream's `make_experts_config(...)` then re-wraps the result
+  as `EzpzGroupedExperts.Config`. `_build_moe_layers` now threads a
+  `compute_backend` kwarg (default `"grouped_mm"`) through to it.
+- `model.py` `update_from_config` previously mutated
+  `experts.use_grouped_mm = False` on pre-SM90 devices; that field no
+  longer exists. Replaced with `experts_cfg.compute_backend = "for_loop"`
+  guarded by `getattr(..., "compute_backend", "grouped_mm")` so the
+  block is robust to future config-shape changes.
+
+`experiments/ezpz/agpt/`: no replay needed; #3308's deletion was
+MoE-only, and none of the other upstream commits in this batch touch
+`models/llama3/` in a way ezpz/agpt depends on.
+
+**Notes for downstream PRs:**
+
+- Open PR #9 (Sam Wheeler — HSDP fix), #10 (Sam Wheeler —
+  `batched_mm_padded` backend), and #11 (Nathan Nichols — MoE
+  optimizations) all assume the pre-#3308 `GroupedExperts` shape
+  (`use_grouped_mm` config field, `_run_experts_for_loop` importable
+  from `models/common/moe.py`). They will need to rebase onto the
+  resync'd `ezpz` and adapt to the `EzpzGroupedExperts` subclass.
+  PR #10's `compute_backend` selector becomes a third option in
+  `ExpertComputeBackend`; PR #11's expert-side optimizations layer
+  onto the for-loop method here.
+
+---
+
 ## 2026-05-05 (32nd sync — observability + MoE token-pad + CP fix + RL/graph_trainer churn)
 
 **Upstream commits (11 in batch):**
