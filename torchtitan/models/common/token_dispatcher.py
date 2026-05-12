@@ -160,6 +160,7 @@ class LocalTokenDispatcher(Configurable):
             x: (num_tokens, dim) all input tokens
             top_scores: (num_tokens, top_k) routing scores
             selected_experts_indices: (num_tokens, top_k) expert indices per token
+            num_tokens_per_expert: optional precomputed token counts per expert
 
         Returns:
             routed_input: (num_tokens * top_k, dim) tokens sorted by expert index
@@ -233,12 +234,9 @@ class LocalTokenDispatcher(Configurable):
                 _record_moe_fastpath("score_after_experts_bf16")
             else:
                 _record_moe_fastpath("score_after_experts")
-            routed_output = (
-                routed_output
-                * metadata.top_scores_experts_sorted.to(routed_output.dtype).reshape(
-                    -1, 1
-                )
-            )
+            routed_output = routed_output * metadata.top_scores_experts_sorted.to(
+                routed_output.dtype
+            ).reshape(-1, 1)
 
         dim = x.shape[-1]
         scatter_index = metadata.token_indices_experts_sorted.reshape(-1, 1).expand(
@@ -473,6 +471,7 @@ class AllToAllTokenDispatcher(LocalTokenDispatcher):
             x: (num_tokens, dim) all input tokens (global if sp_size > 1)
             top_scores: (num_tokens, top_k) routing scores
             selected_experts_indices: (num_tokens, top_k) expert indices per token
+            num_tokens_per_expert: optional precomputed token counts per expert
 
         Returns:
             routed_input: (R, dim) tokens in expert-major order for local experts
@@ -532,9 +531,10 @@ class AllToAllTokenDispatcher(LocalTokenDispatcher):
         # Reorder the token indices to match the order of the experts
         # token_indices_experts_sorted shape (bs*slen*top_k,)
         if use_force_load_balance_fast_path:
-            assignment_indices_experts_sorted, token_indices_experts_sorted = (
-                self._force_load_balance_sort_indices(selected_experts_indices)
-            )
+            (
+                assignment_indices_experts_sorted,
+                token_indices_experts_sorted,
+            ) = self._force_load_balance_sort_indices(selected_experts_indices)
         else:
             assignment_indices_experts_sorted = torch.argsort(
                 selected_experts_indices.view(-1), stable=True
@@ -553,14 +553,12 @@ class AllToAllTokenDispatcher(LocalTokenDispatcher):
                 input_splits_list,
                 output_splits_list,
                 uniform_local_count,
-            ) = (
-                self._force_load_balance_splits(
-                    original_num_tokens,
-                    ep_size,
-                    self.ep_mesh.get_local_rank(),
-                    num_tokens_per_expert.dtype,
-                    num_tokens_per_expert.device,
-                )
+            ) = self._force_load_balance_splits(
+                original_num_tokens,
+                ep_size,
+                self.ep_mesh.get_local_rank(),
+                num_tokens_per_expert.dtype,
+                num_tokens_per_expert.device,
             )
         else:
             uniform_local_count = None
@@ -598,9 +596,8 @@ class AllToAllTokenDispatcher(LocalTokenDispatcher):
         equal_a2a_split_size = None
         direct_equal_split_route = False
         normal_equal_a2a_padding = False
-        if (
-            use_force_load_balance_fast_path
-            and self._can_use_equal_a2a_splits(input_splits_list)
+        if use_force_load_balance_fast_path and self._can_use_equal_a2a_splits(
+            input_splits_list
         ):
             equal_a2a_split_size = max(input_splits_list)
             _record_moe_fastpath("equal_a2a_padding_dispatch")
@@ -634,6 +631,7 @@ class AllToAllTokenDispatcher(LocalTokenDispatcher):
             dispatch_output_splits = output_splits_list
 
         if direct_equal_split_route:
+            assert equal_a2a_split_size is not None
             _record_moe_fastpath("direct_equal_split_dispatch")
             routed_input = self._force_load_balance_equal_split_routed_input(
                 x,
@@ -875,8 +873,7 @@ class AllToAllTokenDispatcher(LocalTokenDispatcher):
                 _record_moe_fastpath(
                     "normal_equal_a2a_combine_padded_tokens",
                     sum(
-                        equal_a2a_split_size - split
-                        for split in metadata.output_splits
+                        equal_a2a_split_size - split for split in metadata.output_splits
                     ),
                 )
             else:
@@ -910,12 +907,9 @@ class AllToAllTokenDispatcher(LocalTokenDispatcher):
                 _record_moe_fastpath("score_after_experts_bf16")
             else:
                 _record_moe_fastpath("score_after_experts")
-            routed_output = (
-                routed_output
-                * metadata.top_scores_experts_sorted.to(routed_output.dtype).reshape(
-                    -1, 1
-                )
-            )
+            routed_output = routed_output * metadata.top_scores_experts_sorted.to(
+                routed_output.dtype
+            ).reshape(-1, 1)
 
         # When sequence_parallel is active, dispatch splits tokens to a local
         # shard, so token_indices_experts_sorted are 0-based local indices.
