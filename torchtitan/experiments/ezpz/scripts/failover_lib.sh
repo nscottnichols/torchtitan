@@ -161,13 +161,32 @@ failover_run() {
     local attempt=1
     local rc
 
+    # If the command is `ezpz launch ...`, inject explicit topology args so
+    # ezpz launch doesn't re-derive nhosts/ngpus from the original PBS aux
+    # file (which still has 260/522 nodes — the spares we excluded). Without
+    # this, _infer_topology computes ngpus=N_full*12 then trips
+    # "ngpus must be > 0 and <= N_active*12, got N_full*12".
+    local cmd=("$@")
+    if [[ "${cmd[0]}" == "ezpz" && "${cmd[1]}" == "launch" ]]; then
+        local ppn="${NGPU_PER_HOST:-12}"
+        local nproc=$(( NHOSTS * ppn ))
+        cmd=(
+            "${cmd[@]:0:2}"
+            "--hostfile=$FAILOVER_ACTIVE"
+            "--nhosts=$NHOSTS"
+            "--nproc-per-node=$ppn"
+            "--nproc=$nproc"
+            "${cmd[@]:2}"
+        )
+    fi
+
     while (( attempt <= max + 1 )); do
         local logf="$FAILOVER_LOG_DIR/attempt-${attempt}.log"
         _failover_log "attempt ${attempt}/${max} — active=$(wc -l < "$FAILOVER_ACTIVE") nodes, spare=$(wc -l < "$FAILOVER_SPARE") nodes"
         _failover_log "logging to $logf"
 
         # Use stdbuf to keep tee'd output unbuffered, redirect both stderr and stdout.
-        "$@" 2>&1 | tee "$logf"
+        "${cmd[@]}" 2>&1 | tee "$logf"
         rc=${PIPESTATUS[0]}
 
         if (( rc == 0 )); then
