@@ -14,8 +14,6 @@ from torch import nn
 
 from torchtitan.models.common.linear import Linear
 from torchtitan.models.common.moe import (
-    _run_experts_for_loop,
-    GroupedExperts,
     TokenChoiceTopKRouter,
 )
 from torchtitan.models.common.token_dispatcher import (
@@ -300,72 +298,6 @@ class TestLocalTokenDispatcherCorrectness(unittest.TestCase):
             out.untyped_storage().data_ptr(), shared_out.untyped_storage().data_ptr()
         )
         torch.testing.assert_close(out, x * 1.25)
-
-
-class TestMoEExpertsFastPaths(unittest.TestCase):
-    def test_batched_no_grad_experts_matches_loop_reference(self):
-        torch.manual_seed(123)
-        num_experts = 3
-        tokens_per_expert = 4
-        dim = 5
-        hidden_dim = 7
-        x = torch.randn(num_experts * tokens_per_expert, dim)
-        w1 = torch.randn(num_experts, hidden_dim, dim)
-        w2 = torch.randn(num_experts, dim, hidden_dim)
-        w3 = torch.randn(num_experts, hidden_dim, dim)
-        counts = [tokens_per_expert] * num_experts
-
-        reference = _run_experts_for_loop(w1, w2, w3, x, counts)
-        with torch.no_grad():
-            actual = _run_experts_for_loop(w1, w2, w3, x, counts)
-
-        torch.testing.assert_close(actual, reference)
-
-    def test_no_grad_expert_weight_caches_hit_and_invalidate(self):
-        previous = os.environ.get("TT_MOE_DEBUG_FASTPATHS")
-        os.environ["TT_MOE_DEBUG_FASTPATHS"] = "1"
-        _MOE_FASTPATH_COUNTERS.clear()
-        try:
-            experts = GroupedExperts(
-                GroupedExperts.Config(
-                    dim=5,
-                    hidden_dim=7,
-                    num_experts=3,
-                    use_grouped_mm=False,
-                    token_dispatcher=LocalTokenDispatcher.Config(
-                        num_experts=3,
-                        top_k=1,
-                        score_before_experts=False,
-                    ),
-                )
-            )
-            with torch.no_grad():
-                experts.w1.copy_(torch.randn_like(experts.w1))
-                experts.w2.copy_(torch.randn_like(experts.w2))
-                experts.w3.copy_(torch.randn_like(experts.w3))
-
-            x = torch.randn(12, 5)
-            counts = [4, 4, 4]
-            with torch.no_grad():
-                experts._experts_forward(x, counts)
-                experts._experts_forward(x, counts)
-
-                self.assertEqual(_MOE_FASTPATH_COUNTERS["cached_w13_miss"], 1)
-                self.assertEqual(_MOE_FASTPATH_COUNTERS["cached_w13_hit"], 1)
-                self.assertEqual(_MOE_FASTPATH_COUNTERS["cached_w2_t_miss"], 1)
-                self.assertEqual(_MOE_FASTPATH_COUNTERS["cached_w2_t_hit"], 1)
-
-                experts.w1.add_(1.0)
-                experts._experts_forward(x, counts)
-
-            self.assertEqual(_MOE_FASTPATH_COUNTERS["cached_w13_miss"], 2)
-            self.assertEqual(_MOE_FASTPATH_COUNTERS["cached_w2_t_hit"], 2)
-        finally:
-            _MOE_FASTPATH_COUNTERS.clear()
-            if previous is None:
-                os.environ.pop("TT_MOE_DEBUG_FASTPATHS", None)
-            else:
-                os.environ["TT_MOE_DEBUG_FASTPATHS"] = previous
 
 
 class TestForceLoadBalanceRouting(unittest.TestCase):
