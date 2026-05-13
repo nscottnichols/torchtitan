@@ -4,6 +4,57 @@ Running log of what's happening, session by session. Most recent first.
 
 ---
 
+## 2026-05-12 — Upstream resync (#3308) + `for_loop` backend smoke
+
+### Resync PR #13
+
+Pulled 12 commits from `upstream/main` into a fresh `ezpz-moe-resync`
+branch. The big-ticket landing was
+[pytorch/torchtitan#3308](https://github.com/pytorch/torchtitan/pull/3308),
+which deleted `_run_experts_for_loop` and the `use_grouped_mm` config
+field from `models/common/moe.py` and inlined `torch._grouped_mm` as the
+only expert path. Upstream's argument: `_grouped_mm` already provides a
+CUDA fallback. **XPU has no `_grouped_mm` kernel at all**, so this would
+have broken every ezpz MoE config on Aurora / Sunspot at first forward.
+
+Replay strategy: introduce `EzpzGroupedExperts(GroupedExperts)` in
+`experiments/ezpz/moe/experts.py` with a
+`compute_backend: Literal["for_loop", "grouped_mm"]` selector. Default
+defers to upstream. The `for_loop` branch re-vendors the deleted
+`_run_experts_for_loop` body verbatim, restoring the XPU / pre-SM90 path.
+`model.py` `update_from_config` now switches to `for_loop` on any device
+that fails `has_cuda_capability(9, 0)`.
+
+PR #13: https://github.com/saforem2/torchtitan/pull/13 (replaces #12).
+PRs #9 / #10 / #11 (Sam Wheeler / Sam Wheeler / Nathan Nichols) flagged
+on each that they should rebase onto this and adapt to the
+`EzpzGroupedExperts` subclass.
+
+### Smoke validation (Sunspot 8N)
+
+Job `12466707` on `x1921c5s0b0n0`–`x1921c5s7b0n0`. `moe_500m`, 50 steps,
+local batch 4, seq 8192, GBS 384. Run:
+[`fluent-glitter-2042`](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/lt77xx0o).
+
+- 11 layer-wise warnings emitted (1 per MoE layer):
+  `torch._grouped_mm requires SM90+ CUDA; falling back to for_loop expert backend.`
+  Confirms PR #13's `compute_backend = "for_loop"` switch is taken.
+- Loss descended cleanly **12.90 → 6.66 (-6.24 nats)** over 50 steps.
+- Steady-state throughput **~8,694 TPS / GPU, ~13% MFU** — actually ~20%
+  per-GPU TPS uplift vs the
+  [2026-04-13 2N benchmark](experiments/moe/sunspot/20260413-benchmark-n2.md)'s
+  7,228 TPS / 9.11%, attributable to torch.compile inductor improvements.
+  **No measurable regression vs the upstream `_run_experts_for_loop`
+  body that #3308 deleted** (which makes sense — it's the same kernel).
+- Memory stable at 54.6% across the run.
+- Wall: 541s end-to-end including env setup + compile warmup.
+- Report:
+  [`docs/experiments/moe/sunspot/20260512-for-loop-smoke-n8.md`](experiments/moe/sunspot/20260512-for-loop-smoke-n8.md).
+
+PR #13 is now smoke-validated end-to-end on XPU.
+
+---
+
 ## 2026-05-05 — 80B DeviceMesh-bisect: torch-version, not depth
 
 ### Bisect kills the May 3 "depth-sensitive" claim
