@@ -39,6 +39,41 @@ def agpt_2b_hf() -> FaultTolerantTrainer.Config:
     return cfg
 
 
+def _set_rope_backend(
+    cfg: FaultTolerantTrainer.Config,
+    backend: Literal["complex", "cos_sin"],
+) -> FaultTolerantTrainer.Config:
+    """Switch every RoPE callsite in the model spec to ``backend``.
+
+    Both the model-level rope.backend and each layer's
+    attention.rope_backend need to flip — they're independent fields
+    in the config tree (the model owns the freqs cache; each
+    GQAttention reads its own rope_backend at forward time).
+    """
+    model = cfg.model_spec.model
+    model.rope.backend = backend
+    for layer in model.layers:
+        layer.attention.rope_backend = backend
+    return cfg
+
+
+def agpt_2b_real() -> FaultTolerantTrainer.Config:
+    """agpt_2b with real-valued (cos_sin) RoPE instead of complex.
+
+    The default `RoPE.Config(backend="complex")` uses torch.complex64
+    ops that torch.compile inductor refuses to lower:
+
+        UserWarning: Torchinductor does not support code generation
+        for complex operators. Performance may be worse than eager.
+
+    The `cos_sin` backend uses real-valued sin/cos rotations that
+    inductor can compile, so this flavor exists to A/B test whether
+    eliminating the eager fallback inside the compiled graph
+    improves XPU throughput.
+    """
+    return _set_rope_backend(ezpz_agpt_2b(), "cos_sin")
+
+
 def agpt_2b_flex_attn() -> FaultTolerantTrainer.Config:
     return ezpz_agpt_2b_flex_attn()
 
@@ -282,6 +317,11 @@ def agpt_20b_chunkedce() -> FaultTolerantTrainer.Config:
     return cfg
 
 
+def agpt_20b_real() -> FaultTolerantTrainer.Config:
+    """agpt_20b with real-valued (cos_sin) RoPE. See agpt_2b_real."""
+    return _set_rope_backend(ezpz_agpt_20b(), "cos_sin")
+
+
 def ezpz_agpt_50b() -> FaultTolerantTrainer.Config:
     return agpt("50b")
 
@@ -319,6 +359,11 @@ def agpt_80b_chunkedce() -> FaultTolerantTrainer.Config:
     cfg = ezpz_agpt_80b()
     cfg.loss = ChunkedCELoss.Config(num_chunks=8)
     return cfg
+
+
+def agpt_80b_real() -> FaultTolerantTrainer.Config:
+    """agpt_80b with real-valued (cos_sin) RoPE. See agpt_2b_real."""
+    return _set_rope_backend(ezpz_agpt_80b(), "cos_sin")
 
 
 def ezpz_agpt_80b_alt() -> FaultTolerantTrainer.Config:
