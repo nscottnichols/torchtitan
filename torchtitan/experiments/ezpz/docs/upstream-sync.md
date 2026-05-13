@@ -24,6 +24,30 @@ tests and checking against the saved baselines — see
 
 ---
 
+## 2026-05-13 (34th sync — RL vLLM v2 + repeat_interleave revert + graph_trainer AOT removal)
+
+**Upstream commits (3 in batch):**
+
+- `6f2fa2f9a` — [rl] switch to vllm v2 engine (#3330). Touches
+  `experiments/rl/actors/generator.py`. ezpz/rl is unaffected — we
+  don't subclass the upstream RL actors directly.
+- `7b418ab30` — Revert "Avoid repeat_interleave output-size sync (#3274)"
+  (#3335). Restores prior behavior in
+  `models/common/token_dispatcher.py` after the optimization broke
+  deepseek_v3 at TP=1 + PP=4 + EP=32 + AC=full. Pure revert; no new
+  logic. ezpz/moe defers to upstream `LocalTokenDispatcher` so this
+  silently restores correctness on any high-EP config.
+- `1a22c2da1` — [graph_trainer] Remove deprecated AOT compile mode
+  (#3327). Touches `experiments/graph_trainer/` only; no ezpz dependency.
+
+**Replayed onto ezpz:** none. Zero ezpz/{agpt,moe,qwen3} files
+touched by these commits.
+
+**Verification:** `agpt_{debugmodel,2b,2b_real,20b,80b,80b_real}` and
+`moe_{debugmodel,500m,10B_2B_sdpa}` all build cleanly post-merge.
+
+---
+
 ## 2026-05-12 (33rd sync — `_grouped_mm` only path + graph_trainer churn)
 
 **Upstream commits (12 in batch):**
