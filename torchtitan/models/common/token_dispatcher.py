@@ -67,6 +67,8 @@ def _record_moe_fastpath(name: str, count: int = 1) -> None:
     global _MOE_FASTPATH_ATEXIT_REGISTERED
     if not _moe_fastpath_debug_enabled():
         return
+    if torch.compiler.is_compiling():
+        return
     if not _MOE_FASTPATH_ATEXIT_REGISTERED:
         atexit.register(_print_moe_fastpath_counters)
         _MOE_FASTPATH_ATEXIT_REGISTERED = True

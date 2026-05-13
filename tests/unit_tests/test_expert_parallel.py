@@ -6,6 +6,7 @@
 
 import os
 import unittest
+from unittest import mock
 
 import torch
 import torch.nn.functional as F
@@ -52,6 +53,22 @@ class TestMoEFastPathCounters(unittest.TestCase):
             os.environ["TT_MOE_DEBUG_FASTPATHS"] = "1"
             _record_moe_fastpath("enabled_counter")
             self.assertEqual(_MOE_FASTPATH_COUNTERS["enabled_counter"], 1)
+        finally:
+            _MOE_FASTPATH_COUNTERS.clear()
+            if previous is None:
+                os.environ.pop("TT_MOE_DEBUG_FASTPATHS", None)
+            else:
+                os.environ["TT_MOE_DEBUG_FASTPATHS"] = previous
+
+    def test_counters_are_skipped_while_compiling(self):
+        previous = os.environ.get("TT_MOE_DEBUG_FASTPATHS")
+        os.environ["TT_MOE_DEBUG_FASTPATHS"] = "1"
+        _MOE_FASTPATH_COUNTERS.clear()
+        try:
+            with mock.patch.object(torch.compiler, "is_compiling", return_value=True):
+                _record_moe_fastpath("compiled_counter")
+
+            self.assertNotIn("compiled_counter", _MOE_FASTPATH_COUNTERS)
         finally:
             _MOE_FASTPATH_COUNTERS.clear()
             if previous is None:
