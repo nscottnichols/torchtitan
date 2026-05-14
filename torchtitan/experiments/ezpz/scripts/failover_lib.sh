@@ -166,6 +166,12 @@ failover_run() {
     # file (which still has 260/522 nodes — the spares we excluded). Without
     # this, _infer_topology computes ngpus=N_full*12 then trips
     # "ngpus must be > 0 and <= N_active*12, got N_full*12".
+    #
+    # IMPORTANT: ezpz launch's argparse uses UNDERSCORE forms for the long
+    # flags (--nproc_per_node, --nnodes), not dash forms. Passing the dash
+    # variant (--nproc-per-node) silently leaks the arg into cmd_to_launch
+    # where mpiexec then rejects it with "unrecognized option". Use the
+    # short flags (-n, -ppn) and the registered long forms to avoid that.
     local cmd=("$@")
     if [[ "${cmd[0]}" == "ezpz" && "${cmd[1]}" == "launch" ]]; then
         local ppn="${NGPU_PER_HOST:-12}"
@@ -173,9 +179,9 @@ failover_run() {
         cmd=(
             "${cmd[@]:0:2}"
             "--hostfile=$FAILOVER_ACTIVE"
-            "--nhosts=$NHOSTS"
-            "--nproc-per-node=$ppn"
-            "--nproc=$nproc"
+            "--nnodes=$NHOSTS"
+            "-ppn" "$ppn"
+            "-n" "$nproc"
             "${cmd[@]:2}"
         )
     fi
