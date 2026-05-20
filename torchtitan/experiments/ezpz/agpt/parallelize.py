@@ -8,7 +8,7 @@
 
 This is the agpt mirror of `torchtitan.models.llama3.parallelize`. It uses
 the new config-based DTensor sharding API: TP is applied via
-`model.parallelize(tp_mesh)`, which reads `sharding_config` declarations
+`model.parallelize(parallel_dims)`, which reads `sharding_config` declarations
 that were filled in by `AgptModel.Config.update_from_config`.
 
 Differences vs upstream `parallelize_llama`:
@@ -80,10 +80,13 @@ def parallelize_llama(
 
     # TP via the config-based sharding API. The model's sharding_config
     # declarations were filled in by update_from_config (see model.py).
+    # Upstream #3159 changed Module.parallelize to take ParallelDims (not a
+    # bare tp_mesh) so each Module can resolve its own SPMD submesh.
     if parallel_dims.tp_enabled:
-        tp_mesh = parallel_dims.get_mesh("tp")
-        model.parallelize(tp_mesh)
-        maybe_enable_async_tp(parallelism, compile_config, tp_mesh)
+        model.parallelize(parallel_dims)
+        maybe_enable_async_tp(
+            parallelism, compile_config, parallel_dims.get_mesh("tp")
+        )
 
     model_compile_enabled = (
         compile_config.enable and "model" in compile_config.components

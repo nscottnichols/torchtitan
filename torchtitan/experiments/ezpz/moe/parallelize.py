@@ -8,7 +8,7 @@
 
 This is the moe mirror of `torchtitan.models.deepseek_v3.parallelize`. It
 uses the new config-based DTensor sharding API for the non-MoE path: TP
-on attention/norms/dense-FFN is applied via `model.parallelize(tp_mesh)`,
+on attention/norms/dense-FFN is applied via `model.parallelize(parallel_dims)`,
 which reads `sharding_config` declarations filled in by
 `moeModel.Config.update_from_config`.
 
@@ -148,10 +148,13 @@ def parallelize_moe(
     # declarations were filled in by update_from_config (see model.py).
     # MoE blocks are intentionally not handled here — apply_moe_ep_tp
     # below does that (mirrors upstream deepseek_v3).
+    # Upstream #3159 changed Module.parallelize to take ParallelDims (not a
+    # bare tp_mesh) so each Module can resolve its own SPMD submesh.
     if parallel_dims.tp_enabled:
-        tp_mesh = parallel_dims.get_mesh("tp")
-        model.parallelize(tp_mesh)
-        maybe_enable_async_tp(parallelism, compile_config, tp_mesh)
+        model.parallelize(parallel_dims)
+        maybe_enable_async_tp(
+            parallelism, compile_config, parallel_dims.get_mesh("tp")
+        )
 
     # EP/TP for MoE blocks.
     if parallel_dims.tp_enabled or parallel_dims.ep_enabled:

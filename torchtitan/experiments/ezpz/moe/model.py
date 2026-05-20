@@ -276,7 +276,7 @@ class moeModel(Decoder):  # noqa: N801
                 )
 
             # Fill ShardingConfig on every sub-module config so
-            # Module.parallelize(tp_mesh) can distribute params/activations.
+            # Module.parallelize(parallel_dims) can distribute params/activations.
             # MoE blocks are intentionally skipped — apply_moe_ep_tp handles
             # them at parallelize-time, mirroring upstream deepseek_v3.
             from torchtitan.experiments.ezpz.moe.sharding import set_moe_sharding_config
