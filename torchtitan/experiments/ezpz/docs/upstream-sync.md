@@ -24,6 +24,31 @@ tests and checking against the saved baselines — see
 
 ---
 
+## 2026-05-20 (36th sync — RL CI fixes only, no replay)
+
+Upstream merged in `8b14712a8` (2 commits, `52a292d29..cfe97c605`).
+Both touch `experiments/rl/` exclusively; ezpz does not subclass the
+upstream RL actors.
+
+**Upstream commits (2):**
+
+- `cfe97c605` — [rl] use wandb=False in CI (#3408). README + integration
+  test update to use `MetricsProcessor.Config(enable_wandb=True)` after
+  the API change in #3391. Touches `experiments/rl/README.md` (+2) and
+  `experiments/rl/tests/integration_tests.py` (+3). No ezpz dependency.
+- `2057b5621` — [rl] fix CI timeout: vllm engine V2 teardown (#3365).
+  Touches `experiments/rl/actors/generator.py` only (+5 −8). No ezpz
+  dependency.
+
+**Replayed onto ezpz:** none. Zero ezpz/{agpt,moe,qwen3} files touched
+by these commits.
+
+**Verification:** No code change required; no smoke needed. The build
+state is identical to the 35th sync verification (which validated
+agpt + moe end-to-end on Sunspot 2N on 2026-05-20).
+
+---
+
 ## 2026-05-19 (35th sync — Full DTensor for Llama3 + graph_trainer churn + RL observability)
 
 Upstream merged in `a14987132` (22 commits, `ee4e91a13..52a292d29`).
