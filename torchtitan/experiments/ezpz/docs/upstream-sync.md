@@ -105,7 +105,28 @@ Upstream merged in `a14987132` (22 commits, `ee4e91a13..52a292d29`).
 **Verification:** `agpt/parallelize.py` and `moe/parallelize.py` import
 cleanly via `.venv/bin/python -c "import ...parallelize"` post-replay;
 both files round-trip the new `Module.parallelize(parallel_dims)`
-signature. A real smoke run is pending (next compute allocation).
+signature.
+
+**Compute-node smoke (2026-05-20, Sunspot 2N, job 12467124):** all four
+configs ran 50 steps cleanly; no NaN/OOM, monotonic loss descent.
+
+| Config              | LBS | Final loss | TPS/GPU | MFU    | Peak mem            | Report |
+|---------------------|----:|-----------:|--------:|-------:|---------------------|--------|
+| `agpt_debugmodel`   | 2   | 6.77       | ~37,500 | ~2.9%  | 2.60 GiB (4.06%)    | [link](experiments/agpt/sunspot/20260520-smoke-n2-postresync.md) |
+| `agpt_2b` (LBS=1)   | 1   | 6.01       | ~6,100  | ~22.8% | 24.34 GiB (38.04%)  | [link](experiments/agpt/sunspot/20260520-smoke-n2-postresync.md) |
+| `agpt_2b` (LBS=2)   | 2   | 6.12       | ~7,200  | ~27.0% | 44.73 GiB (69.91%)  | [link](experiments/agpt/sunspot/20260520-smoke-n2-postresync.md) |
+| `moe_debugmodel`    | 2   | 7.01       | ~13,000 | ~9.0%  | 16.99 GiB (26.55%)  | [link](experiments/moe/sunspot/20260520-smoke-n2-postresync.md)  |
+| `moe_2b` (LBS=1)    | 1   | 6.16       | ~2,900  | ~8.4%  | 14.47 GiB (22.62%)  | [link](experiments/moe/sunspot/20260520-smoke-n2-postresync.md)  |
+
+`agpt_2b` at LBS=2 matches the historical [2026-04-25 n=2 baseline](experiments/agpt/sunspot/20260425-scaling-2b-venv-torch213.md)
+(7,142 TPS / 27.6% MFU) within noise -- the resync did not perturb
+steady-state throughput. The `for_loop` MoE expert backend (PR #13)
+still fires correctly on XPU under the new parallelize signature.
+
+Note: default `moe_2b()` is LBS=16, which OOMs on a 64 GiB Max 1550 tile
+with a single 62.53 GiB allocation; LBS=1 is the safe per-GPU batch for
+the for_loop path. This is a pre-existing XPU constraint, not caused by
+the resync.
 
 ---
 
