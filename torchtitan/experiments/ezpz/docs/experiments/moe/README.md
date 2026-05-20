@@ -23,6 +23,7 @@ MoE training benchmarks using DeepSeek-style MLA + MoE architecture across ALCF 
 | 2026-04-18 | [Torch 2.12 Benchmark (n2)](../agpt/sunspot/20260418-torch212-benchmark-n2.md) | 4 MoE configs + EP sweep | 2 | EP unblocked; 7b EP=2 +33% TPS; moe_2b crash |
 | 2026-04-21 | [LR Finder (n2)](../lr-finder/moe/sunspot/20260421-lr-finder-moe-n2.md) | 5 configs x 3 opts | 2 | All stable; 0 NaN for AdamW/Muon; 10b OOM at 8192 |
 | 2026-05-12 | [`for_loop` backend smoke (n8)](sunspot/20260512-for-loop-smoke-n8.md) | moe_500m | 8 | PR #13 validated: for_loop fallback fires on XPU; loss 12.90→6.66 over 50 steps; 8,694 TPS / 13% MFU |
+| 2026-05-20 | [Post-resync smoke (n2)](sunspot/20260520-smoke-n2-postresync.md) | debugmodel, 2b (LBS=1) | 2 | PR #3159 replay verified: debugmodel 12.96→7.01, moe_2b 12.91→6.16 in 50 steps each |
 
 ### Polaris
 
