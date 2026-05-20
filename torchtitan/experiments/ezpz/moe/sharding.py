@@ -10,10 +10,11 @@ Mirrors `torchtitan.models.deepseek_v3.sharding` but binds against
 `torchtitan.experiments.ezpz.moe.model.Attention` (our MLA Attention is a
 separate class from upstream's, even though the structure is identical).
 
-Note: the MoE block itself is NOT touched here. MoE TP/EP wiring is still
-done at parallelize-time by `apply_moe_ep_tp` — that mirrors upstream's
-deepseek_v3 pattern, which also leaves the MoE block out of
-`set_deepseek_v3_sharding_config`.
+Post upstream PR #3386 (37th sync), MoE sub-configs (router gate, shared
+experts, routed experts) are populated unconditionally via upstream's
+``set_moe_sharding_config`` helper from ``models/common/moe_sharding``.
+``resolve_mesh`` filters disabled axes at runtime, so this matches the
+new ``model.parallelize(parallel_dims)`` flow.
 """
 
 from typing import TYPE_CHECKING
@@ -31,6 +32,9 @@ from torchtitan.models.common.decoder_sharding import (
     set_dense_ffn_sharding,
     set_gqa_inner_attention_local_map,
 )
+from torchtitan.models.common.moe_sharding import (
+    set_moe_sharding_config as _set_moe_block_sharding_config,
+)
 from torchtitan.protocols.sharding import ShardingConfig
 
 if TYPE_CHECKING:
@@ -40,35 +44,52 @@ if TYPE_CHECKING:
     )
 
 
+# Routed-expert layout for the shared ``GroupedExperts`` / ``EzpzGroupedExperts``
+# (w1/w2/w3). Matches upstream ``deepseek_v3.sharding._GROUPED_EXPERTS_PARAM_LAYOUT``.
+_GROUPED_EXPERTS_PARAM_LAYOUT: dict[str, Placement] = {
+    "w1": Shard(1),
+    "w2": Shard(2),
+    "w3": Shard(1),
+}
+
+
 def set_moe_sharding_config(
     config: "moeModel.Config",
     *,
     loss_parallel: bool,
     enable_sp: bool,
+    enable_ep: bool,
 ) -> None:
-    """Fill ``sharding_config`` on all moe (non-MoE-block) sub-configs.
+    """Fill ``sharding_config`` on all moe sub-configs (dense + MoE).
 
-    No-op on MoE blocks — those are handled at parallelize-time by
-    ``apply_moe_ep_tp``.
+    Dense sub-configs (attention, norms, dense FFN) are populated
+    unconditionally — ``Module.parallelize`` filters disabled axes at
+    runtime.
+
+    MoE sub-configs (router, shared experts, routed experts) are
+    populated unconditionally via upstream's ``set_moe_sharding_config``
+    helper — ``resolve_mesh`` filters disabled axes at runtime.
     """
     set_decoder_sharding_config(
         config, loss_parallel=loss_parallel, enable_sp=enable_sp
     )
     for layer_cfg in config.layers:
-        _set_moe_layer_sharding(layer_cfg, enable_sp=enable_sp)
+        _set_moe_layer_sharding(
+            layer_cfg, enable_sp=enable_sp, enable_ep=enable_ep
+        )
 
 
 def _set_moe_layer_sharding(
-    layer_cfg: "moeTransformerBlock.Config", *, enable_sp: bool
+    layer_cfg: "moeTransformerBlock.Config",
+    *,
+    enable_sp: bool,
+    enable_ep: bool,
 ) -> None:
     """Set sharding on one moe transformer layer.
 
     MLA attention: low-rank projections (wkv_a, wq_a, kv_norm, q_norm)
     stay replicated. Up-projections (wkv_b, wq_b, wq) are colwise.
-
-    On non-MoE layers (the dense FFN at the bottom of the stack), also
-    sets dense FFN sharding. MoE-layer feed_forward sub-module is None;
-    its `moe` block is left for ``apply_moe_ep_tp``.
+    MoE FFN is routed through upstream's ``set_moe_sharding_config``.
     """
     attention = layer_cfg.attention
     assert isinstance(attention, Attention.Config)
@@ -118,11 +139,21 @@ def _set_moe_layer_sharding(
         attention.q_norm.sharding_config = replicate_weight
         attention.wq_b.sharding_config = colwise_config()
 
-    # Dense FFN (non-MoE layers only). MoE blocks are handled at
-    # parallelize-time by apply_moe_ep_tp.
+    # Dense FFN (non-MoE layers only).
     if layer_cfg.feed_forward is not None:
         set_dense_ffn_sharding(
             layer_cfg.feed_forward,
             attn_x_placement=attn_x_placement,
             enable_sp=enable_sp,
+        )
+
+    # MoE FFN (MoE-enabled layers only). Routes through upstream's helper
+    # which populates router gate / shared experts / routed experts
+    # ``sharding_config`` declarations.
+    if layer_cfg.moe is not None:
+        _set_moe_block_sharding_config(
+            layer_cfg.moe,
+            enable_ep=enable_ep,
+            enable_sp=enable_sp,
+            expert_param_layout=_GROUPED_EXPERTS_PARAM_LAYOUT,
         )

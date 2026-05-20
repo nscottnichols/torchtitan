@@ -6,15 +6,12 @@
 
 """Apply PT-D parallelisms + AC + compile + FSDP to the ezpz/moe model.
 
-This is the moe mirror of `torchtitan.models.deepseek_v3.parallelize`. It
-uses the new config-based DTensor sharding API for the non-MoE path: TP
-on attention/norms/dense-FFN is applied via `model.parallelize(parallel_dims)`,
-which reads `sharding_config` declarations filled in by
-`moeModel.Config.update_from_config`.
-
-MoE expert/router TP and EP are still applied at parallelize-time by
-`apply_moe_ep_tp` — that mirrors upstream deepseek_v3, where
-`set_deepseek_v3_sharding_config` also leaves the MoE block alone.
+This is the moe mirror of `torchtitan.models.deepseek_v3.parallelize`.
+Post upstream PR #3386 (37th sync), MoE TP/EP is no longer applied by a
+separate `apply_moe_ep_tp` pass — it is now folded into the config-based
+DTensor sharding API (`ShardingConfig` declarations populated by
+`moeModel.Config.update_from_config` and applied by
+`model.parallelize(parallel_dims)`).
 
 Differences vs upstream `parallelize_deepseekv3`:
 
@@ -40,12 +37,7 @@ import torch.nn as nn
 from ezpz.models import summarize_model
 from torch.distributed.device_mesh import DeviceMesh
 from torch.distributed.fsdp import CPUOffloadPolicy, fully_shard, MixedPrecisionPolicy
-from torch.distributed.tensor import Partial, Replicate, Shard
-from torch.distributed.tensor.parallel import (
-    parallelize_module,
-    PrepareModuleInputOutput,
-    RowwiseParallel,
-)
+from torch.distributed.tensor import Shard
 
 from torchtitan.config import (
     ActivationCheckpointConfig,
@@ -57,16 +49,8 @@ from torchtitan.config import (
 from torchtitan.distributed import ParallelDims
 from torchtitan.distributed.activation_checkpoint import apply_ac
 from torchtitan.distributed.context_parallel import apply_cp_to_forward
-from torchtitan.distributed.expert_parallel import (
-    ExpertParallel,
-    TensorParallel,
-)
 from torchtitan.distributed.fsdp import get_fsdp_reshard_after_forward_policy
-from torchtitan.distributed.tensor_parallel import (
-    ColwiseParallelWithGradPlacement,
-    maybe_enable_async_tp,
-    NoParallel,
-)
+from torchtitan.distributed.tensor_parallel import maybe_enable_async_tp
 from torchtitan.experiments.ezpz.moe import moeModel
 from torchtitan.tools.logging import logger
 
@@ -144,24 +128,18 @@ def parallelize_moe(
             parallel_dims.get_mesh("cp"),
         )
 
-    # TP via the config-based sharding API. The model's sharding_config
-    # declarations were filled in by update_from_config (see model.py).
-    # MoE blocks are intentionally not handled here — apply_moe_ep_tp
-    # below does that (mirrors upstream deepseek_v3).
-    # Upstream #3159 changed Module.parallelize to take ParallelDims (not a
-    # bare tp_mesh) so each Module can resolve its own SPMD submesh.
-    if parallel_dims.tp_enabled:
+    # TP/EP via the config-based sharding API. The model's
+    # ``sharding_config`` declarations were filled in by
+    # ``update_from_config`` (see model.py + sharding.py), covering both
+    # dense (attention, dense FFN) and MoE (router, shared/routed experts)
+    # submodules. ``GroupedExperts.parallelize`` additionally wires the
+    # EP/TP meshes onto the token dispatcher.
+    if parallel_dims.tp_enabled or parallel_dims.ep_enabled:
         model.parallelize(parallel_dims)
+
+    if parallel_dims.tp_enabled:
         maybe_enable_async_tp(
             parallelism, compile_config, parallel_dims.get_mesh("tp")
-        )
-
-    # EP/TP for MoE blocks.
-    if parallel_dims.tp_enabled or parallel_dims.ep_enabled:
-        apply_moe_ep_tp(
-            model,
-            tp_mesh=parallel_dims.get_optional_mesh("tp"),
-            ep_mesh=parallel_dims.get_optional_mesh("ep"),
         )
 
     model_compile_enabled = (
@@ -360,70 +338,3 @@ def apply_fsdp(
 
     fully_shard(model, **fsdp_config)
     disable_fsdp_gradient_division(model)
-
-
-def apply_moe_ep_tp(
-    model: nn.Module,
-    tp_mesh: DeviceMesh | None,
-    ep_mesh: DeviceMesh | None,
-):
-    """Apply MoE expert/tensor parallelism plans to MoE-enabled blocks.
-
-    Same plan structure as upstream `llama4.parallelize.apply_moe_ep_tp`,
-    minus the DeepEP/HybridEP token-dispatcher plumbing (we don't use those
-    backends on Aurora). Token dispatching for the standard backend is
-    handled internally by the LocalTokenDispatcher class at model build.
-    """
-    assert ep_mesh is not None or tp_mesh is not None
-
-    for transformer_block in model.layers.values():
-        if not transformer_block.moe_enabled:
-            continue
-
-        if tp_mesh is not None:
-            moe_layer_plan = {
-                "moe": PrepareModuleInputOutput(
-                    input_layouts=(Shard(1),),
-                    desired_input_layouts=(Replicate(),),
-                    use_local_input=False,
-                    output_layouts=(Partial(),),
-                    desired_output_layouts=(Shard(1),),
-                ),
-                "moe.router.gate": NoParallel(
-                    local_output_grad_placements=(Partial(),),
-                ),
-            }
-            if transformer_block.moe.shared_experts is not None:
-                moe_layer_plan.update(
-                    {
-                        "moe.shared_experts.w1": ColwiseParallelWithGradPlacement(
-                            local_input_grad_placements=(Partial(),)
-                        ),
-                        "moe.shared_experts.w2": RowwiseParallel(
-                            output_layouts=Partial(),
-                        ),
-                        "moe.shared_experts.w3": ColwiseParallelWithGradPlacement(
-                            local_input_grad_placements=(Partial(),)
-                        ),
-                    }
-                )
-            parallelize_module(
-                module=transformer_block,
-                device_mesh=tp_mesh,
-                parallelize_plan=moe_layer_plan,
-            )
-
-        # EP disabled: shard routed expert weights across TP mesh.
-        # EP enabled: shard across EP mesh (ETP deprecated upstream — see #3167).
-        if ep_mesh is None:
-            experts_mesh = tp_mesh
-            experts_plan = TensorParallel()
-        else:
-            experts_mesh = ep_mesh
-            experts_plan = ExpertParallel()
-
-        parallelize_module(
-            module=transformer_block.moe.experts,
-            device_mesh=experts_mesh,
-            parallelize_plan=experts_plan,
-        )

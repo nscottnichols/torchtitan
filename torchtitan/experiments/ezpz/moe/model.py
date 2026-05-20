@@ -277,14 +277,16 @@ class moeModel(Decoder):  # noqa: N801
 
             # Fill ShardingConfig on every sub-module config so
             # Module.parallelize(parallel_dims) can distribute params/activations.
-            # MoE blocks are intentionally skipped — apply_moe_ep_tp handles
-            # them at parallelize-time, mirroring upstream deepseek_v3.
+            # Post upstream PR #3386 (37th sync), MoE submodules (router gate,
+            # shared experts, routed experts) are populated via upstream's
+            # set_moe_sharding_config helper inside our sharding.py.
             from torchtitan.experiments.ezpz.moe.sharding import set_moe_sharding_config
 
             set_moe_sharding_config(
                 self,
                 loss_parallel=not parallelism.disable_loss_parallel,
                 enable_sp=parallelism.enable_sequence_parallel,
+                enable_ep=parallelism.expert_parallel_degree > 1,
             )
 
         def get_nparams_and_flops(

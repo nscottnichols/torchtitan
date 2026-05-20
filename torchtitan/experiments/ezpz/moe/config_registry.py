@@ -301,7 +301,7 @@ def smoke_moe_500m_50steps() -> FaultTolerantTrainer.Config:
 
     Smallest non-debug moe flavor (500M) on 2 nodes, AdamW, no checkpoint.
     Verifies imports, model build, sharding-config population on MLA
-    attention + dense FFN, Module.parallelize, apply_moe_ep_tp,
+    attention + dense FFN + MoE submodules, Module.parallelize,
     per-block compile, FSDP wrap, optimizer step, loss decreasing.
     Uses fineweb-edu HF stream so no local data is required.
     """
