@@ -4,6 +4,84 @@ Running log of what's happening, session by session. Most recent first.
 
 ---
 
+## 2026-05-20 — 37th upstream sync (MoE clean DTensor boundaries) + replay smoke
+
+Second sync of the day. Merged `89987072b` (2 commits beyond the 36th sync):
+
+- **`963c20cba` — PR #3386** [MoE][5/n] Refactor MoE to clean DTensor
+  boundaries for shared/routed experts. The big one.
+- **`83e490429` — PR #3346** graph_trainer `regional_inductor` refactor.
+  No ezpz dep.
+
+### What PR #3386 changes
+
+Restructures MoE TP/EP wiring from an imperative parallelize-time pass to
+config-based sharding declarations populated at `update_from_config` and
+applied by `model.parallelize(parallel_dims)`:
+
+- **Deleted upstream:** `torchtitan/distributed/expert_parallel.py`
+  (`ExpertParallel`, `TensorParallel`), `ColwiseParallelWithGradPlacement`.
+- **New upstream:** `torchtitan/models/common/moe_sharding.py` with
+  `set_moe_sharding_config(moe_cfg, *, enable_ep, enable_sp,
+  expert_param_layout)` populating router gate, shared experts, routed
+  experts.
+- **`GroupedExperts.parallelize`** added — calls `super().parallelize` then
+  `token_dispatcher.wire_meshes(ep_mesh, tp_mesh)`.
+- **`MoE.forward` simplified** — drops the explicit
+  `DTensor.to_local(grad_placements=Partial)` at the top (now handled by
+  config), splits shared-experts addition out of `combine()`.
+- **`parallelize_deepseekv3`** drops `apply_moe_ep_tp` call; new flow:
+  `if tp_enabled or ep_enabled: model.parallelize(parallel_dims)`.
+
+### Replay scope
+
+Only ezpz/moe was affected:
+
+| File | Δ lines | Change |
+|------|--------:|--------|
+| `experiments/ezpz/moe/parallelize.py` | -73 | Drop `apply_moe_ep_tp` entirely + 3 deleted-symbol imports; collapse two-pass to single `model.parallelize` |
+| `experiments/ezpz/moe/sharding.py` | +35 | Add `enable_ep` kwarg, call upstream's `set_moe_sharding_config` per MoE layer with `{w1:Shard(1), w2:Shard(2), w3:Shard(1)}` layout |
+| `experiments/ezpz/moe/model.py` | +3 | Pass `enable_ep=...` from `update_from_config` |
+| `experiments/ezpz/moe/config_registry.py` | -2 | Stale docstring scrub |
+
+`apply_fsdp` (Aurora `ShardPlacementResult` workaround) and
+`disable_fsdp_gradient_division` (CCL SUM-reduction workaround) stay
+inlined locally.
+
+### Smoke verification (Sunspot 2N, job 12467131)
+
+| Config | Final loss | Δ vs baseline | Memory | TPS |
+|--------|-----------:|--------------:|-------:|----:|
+| `moe_debugmodel` LBS=2 | 6.99880 | -0.010 | 16.99 GiB (matches) | ~12,700 |
+| `moe_2b` LBS=1 | 6.10607 | -0.050 | 14.97 GiB (+0.5 vs baseline) | ~2,900 |
+
+Both within ±0.05 nats of the 35th-sync baseline. Drift is expected:
+PR #3386's commit message states *"loss is expected to diverge compared
+to main due to different reduction pattern, and shared expert
+computation changes place"* — confirmed at our parallelism configuration.
+`for_loop` expert backend fires the same warning count (5 + 17) as
+baseline. No NaN/OOM. No recompilation events.
+
+### Concerns flagged before merging (all resolved)
+
+- **`MoE.forward` graph shape changed.** Watched for inductor
+  recompilation events — none observed. Memory uptick at moe_2b
+  (+0.5 GiB) is the only visible cost, plausibly from a separate buffer
+  for `shared_out` before the final add.
+- **Removed async overlap between shared_experts and DeepEP combine.**
+  Documented upstream as a follow-up "can restore overlap using CUDA
+  streams." We don't use DeepEP on Aurora/Sunspot so this is a no-op
+  for ezpz today, but worth tracking if we ever turn it on.
+
+### Reports + W&B
+
+- Smoke: [`docs/experiments/moe/sunspot/20260520-smoke-n2-pr3386-replay.md`](experiments/moe/sunspot/20260520-smoke-n2-pr3386-replay.md)
+- 37th sync entry: [`docs/upstream-sync.md`](upstream-sync.md)
+- W&B `moe_debugmodel`: [`efficient-bird-2070`](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/saga2gds)
+- W&B `moe_2b`: [`electric-pond-2071`](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/zudqly3y)
+
+---
+
 ## 2026-05-20 — Post-resync smoke campaign (Sunspot 2N)
 
 Validated yesterday's [35th upstream sync](#2026-05-19--upstream-resync-35th-full-dtensor-3159)

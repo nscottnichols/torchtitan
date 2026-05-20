@@ -24,6 +24,86 @@ tests and checking against the saved baselines — see
 
 ---
 
+## 2026-05-20 (37th sync — MoE clean DTensor boundaries + graph_trainer regional_inductor)
+
+Upstream merged in `89987072b` (2 commits, `cfe97c605..963c20cba`).
+
+**Upstream commits (2):**
+
+- **`963c20cba` — [MoE][5/n] Refactor MoE to clean DTensor boundaries for
+  shared/routed experts (#3386).** Substantial restructuring of how MoE
+  TP/EP sharding is wired.
+  - **Deleted:** `torchtitan/distributed/expert_parallel.py` (`ExpertParallel`,
+    `TensorParallel` ParallelStyles), `ColwiseParallelWithGradPlacement`
+    from `torchtitan/distributed/tensor_parallel.py`.
+  - **New:** `torchtitan/models/common/moe_sharding.py` providing
+    `set_moe_sharding_config(moe_cfg, *, enable_ep, enable_sp,
+    expert_param_layout)` which populates `sharding_config` declarations
+    on the MoE wrapper, router gate, shared experts (when present), and
+    routed `GroupedExperts` — replacing the old
+    `apply_moe_ep_tp(model, tp_mesh, ep_mesh)` parallelize-time pass.
+  - **`GroupedExperts.parallelize`** is a new override that calls
+    `super().parallelize(parallel_dims)` then
+    `self.token_dispatcher.wire_meshes(ep_mesh=..., tp_mesh=...)` —
+    keeping dispatch/combine mesh-aware at runtime under CooR precompile
+    without an explicit pass.
+  - **`MoE.forward` simplified.** Drops the explicit `isinstance(x,
+    DTensor): x.to_local(grad_placements=Partial)` block at the
+    top — replaced by the config-driven enter/exit redistribution
+    declared on the MoE wrapper's `sharding_config`. Also splits the
+    shared-experts addition out of `combine()`: shared experts run after
+    `experts()` (or in parallel with DeepEP's async combine, then
+    `sync_combine()` waits). Same math; different float reduction order.
+  - **`GroupedExperts.forward`** drops the `shared_experts` kwarg
+    accordingly.
+  - **`parallelize_deepseekv3` simplified.** Old flow:
+    ```
+    if tp_enabled: model.parallelize(parallel_dims)
+    if tp_enabled or ep_enabled: apply_moe_ep_tp(...)
+    ```
+    New flow:
+    ```
+    if tp_enabled or ep_enabled: model.parallelize(parallel_dims)
+    ```
+    No separate MoE pass — the config-based sharding handles both dense
+    and MoE submodules in one call.
+  - **`set_deepseek_v3_sharding_config`** gains `enable_ep: bool` and
+    populates MoE submodule sharding configs unconditionally
+    (`resolve_mesh` filters out disabled axes at runtime).
+- **`83e490429` — [graph_trainer] Rework `full_inductor_compilation_pass`
+  via `regional_inductor` + CPU attr migration (#3346).** Refactor of the
+  graph_trainer inductor compilation pass. Touches
+  `experiments/graph_trainer/` exclusively. No ezpz dependency.
+
+**Replayed onto ezpz (PR #3386):**
+
+| File | Change |
+|------|--------|
+| `experiments/ezpz/moe/parallelize.py` | Drop `apply_moe_ep_tp` function entirely + its imports (`ExpertParallel`, `TensorParallel`, `ColwiseParallelWithGradPlacement`). Replace the old "TP via configs / EP+TP via `apply_moe_ep_tp`" two-pass flow with the new single-pass `if parallel_dims.tp_enabled or parallel_dims.ep_enabled: model.parallelize(parallel_dims)`. Keep our local `apply_fsdp` (Aurora `ShardPlacementResult` workaround) and `disable_fsdp_gradient_division` (CCL backend) unchanged. |
+| `experiments/ezpz/moe/sharding.py` | Add `enable_ep` kwarg to `set_moe_sharding_config` (avoids name collision with upstream's identically-named helper by importing the upstream one as `_set_moe_block_sharding_config`). Call upstream's helper on every MoE-enabled layer with `expert_param_layout = {"w1": Shard(1), "w2": Shard(2), "w3": Shard(1)}` (matches `EzpzGroupedExperts.{w1,w2,w3}` and upstream's `_GROUPED_EXPERTS_PARAM_LAYOUT` for deepseek_v3). |
+| `experiments/ezpz/moe/model.py` | Pass `enable_ep=parallelism.expert_parallel_degree > 1` into our `set_moe_sharding_config` call from `update_from_config`. Update the surrounding comment. |
+| `experiments/ezpz/moe/config_registry.py` | Stale-docstring scrub: drop the `apply_moe_ep_tp` mention from the 500M smoke-config docstring. |
+
+**Replayed onto ezpz (PR #3346):** none. `experiments/graph_trainer/` only.
+
+**Verification:** Smoke validated on Sunspot 2N, job 12467131:
+- `moe_debugmodel` LBS=2 / 50 steps: loss 12.92 → 7.00 (Δ -0.01 vs 35th-sync
+  baseline 7.01). Memory exactly matches baseline (16.99 GiB / 26.55%).
+  TPS ~12,700.
+- `moe_2b` LBS=1 / 50 steps: loss 12.95 → 6.11 (Δ -0.05 vs 35th-sync
+  baseline 6.16). Memory 14.97 GiB (+0.5 GiB vs baseline 14.47 GiB,
+  expected from new graph shape). TPS ~2,900.
+- Both within ±0.05 nats of baseline at step 50 — fully consistent with
+  PR #3386's documented behavior (graph reordering moves `shared_experts`
+  add point, changing FP reduction order). `for_loop` expert backend
+  fires the same warning count as baseline (5 + 17). No NaN/OOM. No
+  recompilation events.
+
+Full smoke report:
+[`docs/experiments/moe/sunspot/20260520-smoke-n2-pr3386-replay.md`](experiments/moe/sunspot/20260520-smoke-n2-pr3386-replay.md).
+
+---
+
 ## 2026-05-20 (36th sync — RL CI fixes only, no replay)
 
 Upstream merged in `8b14712a8` (2 commits, `52a292d29..cfe97c605`).
