@@ -161,14 +161,62 @@ failover_run() {
     local attempt=1
     local rc
 
+    # If the command is `ezpz launch ...`, inject explicit topology args so
+    # ezpz launch doesn't re-derive nhosts/ngpus from the original PBS aux
+    # file (which still has 260/522 nodes — the spares we excluded). Without
+    # this, _infer_topology computes ngpus=N_full*12 then trips
+    # "ngpus must be > 0 and <= N_active*12, got N_full*12".
+    #
+    # IMPORTANT: ezpz launch's argparse uses UNDERSCORE forms for the long
+    # flags (--nproc_per_node, --nnodes), not dash forms. Passing the dash
+    # variant (--nproc-per-node) silently leaks the arg into cmd_to_launch
+    # where mpiexec then rejects it with "unrecognized option". Use the
+    # short flags (-n, -ppn) and the registered long forms to avoid that.
+    local cmd=("$@")
+    if [[ "${cmd[0]}" == "ezpz" && "${cmd[1]}" == "launch" ]]; then
+        local ppn="${NGPU_PER_HOST:-12}"
+        local nproc=$(( NHOSTS * ppn ))
+        cmd=(
+            "${cmd[@]:0:2}"
+            "--hostfile=$FAILOVER_ACTIVE"
+            "--nnodes=$NHOSTS"
+            "-ppn" "$ppn"
+            "-n" "$nproc"
+            "${cmd[@]:2}"
+        )
+    fi
+
     while (( attempt <= max + 1 )); do
         local logf="$FAILOVER_LOG_DIR/attempt-${attempt}.log"
         _failover_log "attempt ${attempt}/${max} — active=$(wc -l < "$FAILOVER_ACTIVE") nodes, spare=$(wc -l < "$FAILOVER_SPARE") nodes"
         _failover_log "logging to $logf"
 
         # Use stdbuf to keep tee'd output unbuffered, redirect both stderr and stdout.
-        "$@" 2>&1 | tee "$logf"
+        "${cmd[@]}" 2>&1 | tee "$logf"
         rc=${PIPESTATUS[0]}
+
+        # ezpz launch's outer python wrapper sometimes exits 0 even when the
+        # mpiexec child crashed (e.g. mpiexec --help dump, walltime SIGTERM).
+        # When that happens we lose the bad-node signal. Always cross-check
+        # the log for known crash patterns + the explicit "Execution finished
+        # with N" trailer, and override rc accordingly.
+        local inner_rc
+        inner_rc=$(grep -oE "Execution finished with \[?[0-9]+\]?" "$logf" 2>/dev/null | tail -1 | grep -oE "[0-9]+$" | head -1)
+        if [[ -n "$inner_rc" && "$inner_rc" != "0" ]]; then
+            if (( rc == 0 )); then
+                _failover_log "WARNING: shell exit 0 but log shows 'Execution finished with $inner_rc'; treating as failure"
+                rc=$inner_rc
+            fi
+        elif (( rc == 0 )); then
+            # Even without the trailer, mass-traceback / Connection-closed
+            # patterns mean training crashed. Catch them.
+            local crash_lines
+            crash_lines=$(grep -cE "RuntimeError: \[.*gloo.*\] Connection closed by peer|RuntimeError: \[.*gloo.*\] Timed out waiting|OutOfMemoryError|UR_RESULT_ERROR_OUT_OF_RESOURCES|died from signal" "$logf" 2>/dev/null || echo 0)
+            if (( crash_lines > 5 )); then
+                _failover_log "WARNING: shell exit 0 but log has $crash_lines crash-pattern lines; treating as failure (rc=1)"
+                rc=1
+            fi
+        fi
 
         if (( rc == 0 )); then
             _failover_log "attempt ${attempt} succeeded (exit 0)"
@@ -177,9 +225,17 @@ failover_run() {
 
         # Walltime kills are NOT bad-node failures — exit -29 means walltime hit.
         # PBS reports exit -29 as bash exit 143 (128+15). Don't retry on those.
+        # BUT: if we also found bad-node crash patterns, prefer the bad-node
+        # path (don't bail on a true bad-node case just because the wallclock
+        # signal also fired).
         if (( rc == 143 )); then
-            _failover_log "attempt ${attempt} exited 143 (walltime / SIGTERM) — not a bad-node failure, no retry"
-            return $rc
+            local bad_crash_lines
+            bad_crash_lines=$(grep -cE "RuntimeError: \[.*gloo.*\] Connection closed by peer|died from signal (9|11)" "$logf" 2>/dev/null || echo 0)
+            if (( bad_crash_lines == 0 )); then
+                _failover_log "attempt ${attempt} exited 143 (walltime / SIGTERM) — not a bad-node failure, no retry"
+                return $rc
+            fi
+            _failover_log "attempt ${attempt} exited 143 but log has $bad_crash_lines bad-node lines — proceeding with retry"
         fi
 
         _failover_log "attempt ${attempt} failed (exit $rc) — scraping for bad nodes"
