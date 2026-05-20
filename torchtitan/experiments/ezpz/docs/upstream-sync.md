@@ -24,6 +24,91 @@ tests and checking against the saved baselines — see
 
 ---
 
+## 2026-05-19 (35th sync — Full DTensor for Llama3 + graph_trainer churn + RL observability)
+
+Upstream merged in `a14987132` (22 commits, `ee4e91a13..52a292d29`).
+
+**Upstream commits touching ezpz-relevant core paths (2):**
+
+- **`d64eabcce` — [Full DTensor] Config-based Full DTensor for Llama3
+  (#3159).** Large refactor of the config-based sharding API.
+  - **Breaking signature change:** `Module.parallelize(mesh)` →
+    `Module.parallelize(parallel_dims)`. Each Module now self-resolves
+    its SPMD submesh via `parallel_dims.get_module_mesh(axes)` from the
+    axes referenced by its `NamedPlacement`s, instead of receiving a
+    bare `tp_mesh` from the caller. Required for the new
+    `--training.full_dtensor` mode where DP/CP/TP all participate in the
+    Module's mesh.
+  - `ShardingConfig` got new optional fields (`out_src_shardings`,
+    `local_input_grad_placements`, `local_output_grad_placements`) —
+    all default `None`, so existing callsites still construct the same
+    shape.
+  - `set_gqa_inner_attention_local_map` (which ezpz/agpt calls) is
+    unaffected at the call site: arg-name changes (`xq/xk/xv` → `q/k/v`,
+    `in_placements/out_placements` → `in_dst_shardings/out_src_shardings`)
+    are internal to the helper.
+  - `trainer.py` gained a `full_dtensor`-gated `parallelize_inputs` call
+    and a `pred.to_local()` fallback for the `disable_loss_parallel`
+    path. ezpz's `FaultTolerantTrainer` overrides `train_step` /
+    checkpoint plumbing but does not override `_get_batch` or
+    `forward_backward`, so it picks up both changes for free.
+  - `apply_fsdp` gained an optional `dp_mesh_dims: DataParallelMeshDims`
+    kwarg, only used under `full_dtensor`. ezpz/agpt's local `apply_fsdp`
+    does not take the kwarg; that's fine since `full_dtensor=False` is
+    the default and we don't enable it.
+- **`a2a0d99e3` — RL: observability spans across trainer/generator/
+  controller (#3234).** Adds `@sl.log_trace_span` decorators around RL
+  actor methods. ezpz/rl uses its own `GRPOTask` registry and doesn't
+  subclass the upstream RL actors, so this is a no-op for ezpz.
+
+**Replayed onto ezpz:**
+
+`experiments/ezpz/agpt/parallelize.py`:
+
+- `model.parallelize(tp_mesh)` → `model.parallelize(parallel_dims)`.
+  Async-TP plumbing still takes `parallel_dims.get_mesh("tp")` at the
+  callsite. Module docstring updated.
+
+`experiments/ezpz/moe/parallelize.py`:
+
+- Same `model.parallelize(tp_mesh)` → `model.parallelize(parallel_dims)`
+  swap on the dense-path TP application. `apply_moe_ep_tp` still takes
+  the per-axis meshes directly (it doesn't go through
+  `Module.parallelize`). Module docstring updated.
+
+`experiments/ezpz/moe/model.py`: docstring reference to
+`Module.parallelize(tp_mesh)` updated to `(parallel_dims)`.
+
+**Other upstream commits in this batch (no ezpz impact):**
+
+- `52a292d29` — [graph_trainer] Gate overlap_fsdp_ag_rs_pass behind a config flag (#3241).
+- `8aa96acb2` — [graph_trainer] Fix eager SAC policy mm counter to reset at layer boundaries (#3397).
+- `cf3c4312e` — [graph_trainer] Re-enable FlexAttention tests after upstream fix (#3394).
+- `ebfceebe1` — [rl] Add TITO generator and gen metrics (#3391).
+- `4238c3575` — Re-enable compile for gpt-oss integration tests (#3373).
+- `6a1b334e8` — Fix optimizer state and module state coupling (#3356).
+- `013890bf9` — [graph_trainer] Defer cudagraph compatibility check (#3355).
+- `c9126af8a` — [graph_trainer] Add bucketing ops to precompile serialization filter (#3354).
+- `9f9ae4d81` — [graph_trainer] Fix H100 CI failure from DeepEP compilation break (#3390).
+- `a866d04a0` — Fix memory snapshot pickle protocol for memory visualizer compat (#3375).
+- `cb7bf09ab` — ci: declare workflow-level `contents: read` on 2 workflows (#3367).
+- `a670699ca` — [graph_trainer] Skip dense numerics tests due to upstream DTensor regression (#3372).
+- `b64292ba1` — [graph_trainer] Remove fsdp_reshard_after_fwd_pass (#3370).
+- `f0795f0d5` — [RL] - Enable experiment metrics (#3237).
+- `8cdfdc236` — [rl] Better initial weight loading (#3318).
+- `3781d1d2d` — Back out [graph_trainer] SAC remat fresh FakeTensor storage (#3358).
+- `4614e3022` — [graph_trainer] Support multiple FSDP PGs in overlap_fsdp_ag_rs_pass (#3351).
+- `d4a3c6349` — [graph_trainer] Generalize minimal_fx_tracer to module + optimizer roots (#3164).
+- `cee49826b` — [graph_trainer] Fix SAC remat to produce fresh FakeTensor storage (#3343).
+- `1690e0aea` — [cpu-offloading] Encode last consumer as dep arg in ao.wait (#3333).
+
+**Verification:** `agpt/parallelize.py` and `moe/parallelize.py` import
+cleanly via `.venv/bin/python -c "import ...parallelize"` post-replay;
+both files round-trip the new `Module.parallelize(parallel_dims)`
+signature. A real smoke run is pending (next compute allocation).
+
+---
+
 ## 2026-05-13 (34th sync — RL vLLM v2 + repeat_interleave revert + graph_trainer AOT removal)
 
 **Upstream commits (3 in batch):**

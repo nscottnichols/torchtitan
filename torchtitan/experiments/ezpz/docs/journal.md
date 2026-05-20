@@ -4,6 +4,47 @@ Running log of what's happening, session by session. Most recent first.
 
 ---
 
+## 2026-05-19 — Upstream resync (35th, Full DTensor #3159)
+
+Pulled 22 upstream commits (`ee4e91a13..52a292d29`, merge `a14987132`).
+The headline is [pytorch/torchtitan#3159](https://github.com/pytorch/torchtitan/pull/3159)
+"Config-based Full DTensor for Llama3" — a substantial refactor of the
+config-based sharding API that lays the foundation for
+`--training.full_dtensor` (all params/buffers/inputs become DTensors on
+a multi-dim SPMD mesh).
+
+**Breaking signature change for ezpz:** `Module.parallelize(mesh)` →
+`Module.parallelize(parallel_dims)`. Each Module now self-resolves its
+SPMD submesh from the axes referenced in its `NamedPlacement`s, instead
+of being handed a bare `tp_mesh`. Two ezpz callsites hit:
+`experiments/ezpz/agpt/parallelize.py` and
+`experiments/ezpz/moe/parallelize.py`. Both replayed: pass
+`parallel_dims` to `model.parallelize`, keep the explicit
+`parallel_dims.get_mesh("tp")` for the async-TP plumbing on the next
+line. `apply_moe_ep_tp` still takes per-axis meshes directly (it doesn't
+route through `Module.parallelize`), so it's untouched.
+
+`ShardingConfig` got three new optional fields (`out_src_shardings`,
+`local_input_grad_placements`, `local_output_grad_placements`); all
+default `None` so ezpz's existing `set_agpt_sharding_config` /
+`set_moe_sharding_config` construct unchanged shapes. The
+`set_gqa_inner_attention_local_map` helper that ezpz/agpt calls had
+internal arg renames (`xq/xk/xv` → `q/k/v`) but the public call site is
+identical.
+
+`trainer.py` gained a `full_dtensor`-gated `parallelize_inputs` call and
+a `pred.to_local()` fallback under `disable_loss_parallel`. ezpz's
+`FaultTolerantTrainer` doesn't override `_get_batch` or
+`forward_backward`, so both inherit cleanly. `full_dtensor` defaults
+`False`, so no behavior change for current production.
+
+Verification: `.venv/bin/python -c "import
+torchtitan.experiments.ezpz.{agpt,moe}.parallelize"` succeeds on both
+post-replay. A real compute-node smoke (`agpt_2b`/`moe_500m`) is
+pending the next allocation. Doc: `docs/upstream-sync.md` 35th entry.
+
+---
+
 ## 2026-05-12 — Upstream resync (#3308) + `for_loop` backend smoke
 
 ### Resync PR #13
