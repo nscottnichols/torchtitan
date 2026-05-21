@@ -181,12 +181,17 @@ def moe_2b_ep() -> FaultTolerantTrainer.Config:
 
 Not landed yet — flagging here for a follow-up commit.
 
-### 2. EP=2 hang at debugmodel scale needs investigation
+### 2. ~~EP=2 hang at debugmodel scale needs investigation~~ — Reclassified transient on retry
 
-The hang at step 41 is suspicious but data-dependent (step 41/50 ≈
-80% through training, no obvious schedule boundary). Worth re-running
-with `TORCH_DIST_DDP_NCCL_DEBUG=INFO` and a backtrace dump on
-`SIGUSR1` next time the alloc is free.
+**2026-05-21 update**: re-ran the same config + stack on a sibling
+2N alloc, completed 50 steps cleanly in 139 s (exit 0). Original
+step-41 stall did **not reproduce** — reclassifying as a transient
+(likely a single-rank CCL/driver stall that didn't propagate as an
+error). No code change recommended. Full retry writeup, plus three
+adjacent findings (`comm.train_timeout_seconds` not wiring through,
+`TORCH_DISTRIBUTED_DEBUG=DETAIL` crashing on XPU,
+`--debug.deterministic` incompatible with MoE `_histc_xpu`):
+[`docs/upstream-issues/moe_ep_step41_hang.md`](../../../upstream-issues/moe_ep_step41_hang.md).
 
 ### 3. The PR #3386 EP wiring works at production scale
 
