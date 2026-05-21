@@ -183,7 +183,15 @@ def moe_debugmodel_hf() -> FaultTolerantTrainer.Config:
 
 
 def moe_debugmodel_ep() -> FaultTolerantTrainer.Config:
-    cfg = moe_debugmodel()
+    """EP=2 variant of moe_debugmodel.
+
+    LBS pinned to 2 (the EP=1 base uses LBS=8): at LBS=8 with EP=2 on
+    24 XPU ranks (2N Sunspot), the bf16 vocab-projection logits
+    ``(LBS * seq_len, vocab_size) = (8 * 8192, 256128) * 2 B`` request
+    ~33 GiB on a single tile and OOM at init. Validated 2026-05-20
+    (see docs/experiments/moe/sunspot/20260520-smoke-n2-pr3386-ep-followup.md).
+    """
+    cfg = moe("debugmodel", local_batch_size=2)
     cfg.model_spec = model_registry("debugmodel", moe_comm_backend="standard")
     cfg.parallelism.expert_parallel_degree = 2
     return cfg
@@ -269,6 +277,12 @@ def moe_10b_2b_sdpa_ep() -> FaultTolerantTrainer.Config:
 
 
 def moe_2b_ep() -> FaultTolerantTrainer.Config:
+    """EP=2 variant of moe_2b.
+
+    LBS=16 matches the EP=1 base; validated clean on 2N Sunspot
+    (peak 15.03 GiB vs 14.97 GiB EP=1, ~1% TPS hit). See
+    docs/experiments/moe/sunspot/20260520-smoke-n2-pr3386-ep-followup.md.
+    """
     cfg = moe("2B", local_batch_size=16)
     cfg.model_spec = model_registry("2B", moe_comm_backend="standard")
     cfg.parallelism.expert_parallel_degree = 2
