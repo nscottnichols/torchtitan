@@ -4,6 +4,57 @@ Running log of what's happening, session by session. Most recent first.
 
 ---
 
+## 2026-05-21 — Step-41 EP hang retry + registry fix + TPC26 talk prep
+
+### `moe_debugmodel_ep` LBS=2 hang did not reproduce — reclassified transient
+
+Retried yesterday's hung config on a sibling 2N alloc (12467180).
+Full 50 steps clean, exit 0, 139 s wall. **The original 16-min stall
+at step 41 was a transient**, not a systemic EP/AC/compile bug.
+Reclassified in
+[`docs/upstream-issues/moe_ep_step41_hang.md`](upstream-issues/moe_ep_step41_hang.md)
+with three adjacent findings worth keeping
+visible:
+
+- `comm.train_timeout_seconds=100` did not fire on the original
+  985 s silence — timeout may not be wired into the CCL/XCCL
+  collective path on XPU. Worth a separate writeup.
+- `TORCH_DISTRIBUTED_DEBUG=DETAIL` crashes on XPU with
+  `Backend fake does not yet support sequence numbers`. The error
+  doesn't mention XPU — easy footgun on next attempt.
+- `--debug.deterministic` is incompatible with MoE on XPU:
+  `_histc_xpu does not have a deterministic implementation`. So
+  bit-exact regression gates for MoE on Intel are blocked on an
+  upstream PyTorch deterministic `_histc_xpu` kernel.
+
+Also a curious throughput band: retry ran at ~11.8k TPS, original at
+~6.8k TPS — same code, same nodes-of-the-same-class. ~1.7× spread,
+plausibly correlated with whatever caused the original hang.
+
+### Registry fix for `_ep` configs
+
+Pinned `moe_debugmodel_ep` to LBS=2 (was inheriting LBS=8 from
+`moe_debugmodel()`, OOM'ing at ~33 GiB on the vocab projection).
+Annotated `moe_2b_ep` with a docstring confirming its LBS=16 default
+is the validated peak. Commit `f2cbc0327`.
+
+### TPC26 MAPE talk
+
+Got invited to speak at the TPC26 MAPE track (Baltimore / Munich,
+May 31 - Jun 3) by Rio Yokota. Drafted title, abstract, and 11-section
+outline at
+[`docs/notes/slides-2026-05-21.md`](notes/slides-2026-05-21.md).
+The fork-tax-as-first-class-workflow angle (§4) and the silent-numerics
+section (§6) are the most differentiated bits. Folded today's
+engineer-hours/week estimate into §9: **~8-15 hr/wk recurring
+operational triage** across 4 weeks of journal entries (~25-35% of
+one engineer), with episodic spikes to 30-40 hr when a silent bug
+surfaces or a bisect goes wide. The unbounded-cost punchline lives in
+the silent class: bf16-freeze alone burned ~450B tokens of v1
+compute.
+
+---
+
 ## 2026-05-20 (late) — PR #3386 EP follow-up + agpt merge sanity smoke
 
 Followed up the 37th-sync replay with two parallel smoke campaigns at 2N on
