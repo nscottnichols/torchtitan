@@ -32,6 +32,58 @@ from torchtitan.tools.profiler import Profiler
 from torchtitan.trainer import Trainer
 
 
+def _set_pg_timeouts_xpu_aware(
+    timeout: timedelta,
+    parallel_dims: ParallelDims,
+) -> None:
+    """Apply ``timeout`` to every PG in the mesh, with explicit XPU support.
+
+    Upstream ``dist_utils.set_pg_timeouts`` delegates to
+    ``torch.distributed.distributed_c10d._set_pg_timeout``, whose device
+    dispatch only knows about cpu (gloo) and cuda (nccl / gloo /
+    torchcomms). On XPU the loop adds no backends, emits the warning
+    ``"Set timeout is now only supported for either nccl or gloo."``,
+    and never calls ``_set_default_timeout``. Result: ``train_timeout_seconds``
+    silently no-ops and a hung collective burns the full PBS walltime
+    instead of aborting (see
+    ``docs/upstream-issues/train_timeout_xpu_silent_noop.md``).
+
+    Workaround: invoke the upstream helper first (covers cpu/cuda
+    backends + the safety barrier), then walk each PG ourselves and
+    call ``ProcessGroupXCCL.set_timeout`` on any xccl-backed groups.
+    Remove once PyTorch's ``_set_pg_timeout`` learns about XPU.
+    """
+    dist_utils.set_pg_timeouts(timeout=timeout, parallel_dims=parallel_dims)
+
+    xpu_device = torch.device("xpu")
+    if not (
+        torch.distributed.is_xccl_available() and torch.xpu.is_available()
+    ):
+        return
+
+    from torch._C._distributed_c10d import ProcessGroupXCCL
+
+    groups: list[torch.distributed.ProcessGroup | None] = [
+        mesh.get_group()
+        for mesh in parallel_dims.get_all_one_dimensional_meshes().values()
+    ] + [None]
+    patched = 0
+    for group in groups:
+        if group is None:
+            group = torch.distributed.distributed_c10d._get_default_group()
+        if xpu_device not in group._device_types:
+            continue
+        backend = group._get_backend(xpu_device)
+        if isinstance(backend, ProcessGroupXCCL):
+            backend.set_timeout(timeout)
+            patched += 1
+    if patched:
+        logger.info(
+            f"Applied train timeout {timeout} to {patched} xccl ProcessGroup(s) "
+            "(upstream _set_pg_timeout has no xpu branch)."
+        )
+
+
 class FaultTolerantTrainer(Trainer):
     @dataclass(kw_only=True, slots=True)
     class Config(Trainer.Config):
@@ -621,7 +673,7 @@ class FaultTolerantTrainer(Trainer):
                 # reduce timeout after first train step for faster signal
                 # (assuming lazy init and compilation are finished)
                 if self.step == 1:
-                    dist_utils.set_pg_timeouts(
+                    _set_pg_timeouts_xpu_aware(
                         timeout=timedelta(seconds=config.comm.train_timeout_seconds),
                         parallel_dims=self.parallel_dims,
                     )
