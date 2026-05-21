@@ -25,6 +25,7 @@ MoE training benchmarks using DeepSeek-style MLA + MoE architecture across ALCF 
 | 2026-05-12 | [`for_loop` backend smoke (n8)](sunspot/20260512-for-loop-smoke-n8.md) | moe_500m | 8 | PR #13 validated: for_loop fallback fires on XPU; loss 12.90→6.66 over 50 steps; 8,694 TPS / 13% MFU |
 | 2026-05-20 | [Post-resync smoke (n2)](sunspot/20260520-smoke-n2-postresync.md) | debugmodel, 2b (LBS=1) | 2 | PR #3159 replay verified: debugmodel 12.96→7.01, moe_2b 12.91→6.16 in 50 steps each |
 | 2026-05-20 | [PR #3386 replay smoke (n2)](sunspot/20260520-smoke-n2-pr3386-replay.md) | debugmodel, 2b (LBS=1) | 2 | PR #3386 (MoE clean DTensor boundaries) replay verified: debugmodel 12.92→7.00 (Δ-0.01), moe_2b 12.95→6.11 (Δ-0.05) vs baselines |
+| 2026-05-20 | [PR #3386 EP follow-up smoke (n2)](sunspot/20260520-smoke-n2-pr3386-ep-followup.md) | debugmodel_ep, 2b_ep | 2 | EP=2 wiring validated at 2B scale (12.94→6.07 in 50 steps, +0.06 GiB vs EP=1); `_ep` registry configs need LBS override (OOM at defaults); LBS=2 debugmodel_ep hung at step 41/50 (uninvestigated) |
 
 ### Polaris
 

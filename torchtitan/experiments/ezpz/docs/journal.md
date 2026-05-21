@@ -4,6 +4,55 @@ Running log of what's happening, session by session. Most recent first.
 
 ---
 
+## 2026-05-20 (late) — PR #3386 EP follow-up + agpt merge sanity smoke
+
+Followed up the 37th-sync replay with two parallel smoke campaigns at 2N on
+Sunspot (commit `1d4115d3f`, jobs 12467180/12467181):
+
+### moe `_ep` follow-up — EP=2 path validated, but registry configs need LBS override
+
+Reports: [`moe/sunspot/20260520-smoke-n2-pr3386-ep-followup.md`](experiments/moe/sunspot/20260520-smoke-n2-pr3386-ep-followup.md)
+
+- **`moe_2b_ep` (LBS=16 from registry)** — clean 50 steps,
+  12.94 → 6.07, 2,860 TPS/GPU, peak **15.03 GiB** vs `moe_2b` EP=1's
+  14.97 GiB. Token-dispatch overhead at 2B scale is essentially free
+  (+0.06 GiB, ~1% TPS hit). PR #3386's `wire_meshes` plumbing works.
+- **`moe_debugmodel_ep` (LBS=8 from registry)** — **OOM at init** in vocab
+  projection (`(LBS*8192, 256128) bf16` = 31.27 GiB requested). The default
+  LBS the registry inherits from `moe_debugmodel()` is too aggressive for
+  the EP variant at 2N. Override needed.
+- **`moe_debugmodel_ep` re-run at LBS=2** — clean steps 1-41 then **hung
+  16 min at step 41/50** and got SIGTERM (exit 143). New finding,
+  uninvestigated — possibly EP all-to-all backend stall under the
+  `standard` `moe_comm_backend`. Not blocking but worth a follow-up.
+
+### agpt merge sanity — clean, plus DeviceMesh regression re-confirmed
+
+Reports: [`agpt/sunspot/20260520-smoke-n2-pr3386-merge-followup.md`](experiments/agpt/sunspot/20260520-smoke-n2-pr3386-merge-followup.md)
+
+- **`agpt_2b`** — clean 50 steps, 12.97 → 6.58, peak **24.34 GiB
+  (38.04%)** — *byte-identical* to the prior post-resync baseline.
+  Confirms PR #3346 (`graph_trainer` regional_inductor refactor, bundled
+  in the same merge) is a no-op for the agpt path. Throughput within the
+  expected 2-3% noise band.
+- **`agpt_50b_wide`** — re-confirms the torch-2.13
+  `DeviceMesh`-in-saved-tensors `AssertionError` in AOT autograd's
+  `save_from_forward`. Crash in ~121s on 2N, all 24 ranks identical
+  signature. 37th sync did **not** fix it (didn't expect it to — bug is
+  in PyTorch, not torchtitan). Standing workaround (compile=OFF for
+  80B-family on torch 2.13, or stay on torch 2.10) still the only
+  option. See [`project_80b_devmesh_bisect`](../../../../../home/foremans/.claude/projects/-lus-tegu-projects-datascience-foremans-projects-saforem2-torchtitan/memory/project_80b_devmesh_bisect.md).
+
+### Action items dropped on the floor
+
+- `moe_debugmodel_ep` / `moe_2b_ep` config registry: either pin a sane
+  LBS in the `_ep` variants or document the OOM in the registry.
+- Investigate the LBS=2 debugmodel_ep step-41 hang (EP all-to-all
+  backend? token-dispatch deadlock?). Not reproducing automatically until
+  someone re-runs.
+
+---
+
 ## 2026-05-20 — 37th upstream sync (MoE clean DTensor boundaries) + replay smoke
 
 Second sync of the day. Merged `89987072b` (2 commits beyond the 36th sync):
