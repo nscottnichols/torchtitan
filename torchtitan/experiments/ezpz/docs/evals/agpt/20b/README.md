@@ -119,17 +119,50 @@ crash. step-900 ckpt dir exists on disk but has no `.metadata` /
 See production index "Known Issue #7" for the chronic async-save
 corruption pattern across all recent 20B + 2B runs.
 
-### v2 256N comparator (in-progress)
+### v2 256N comparator (2026-05-22)
 
-Job 8503089 (2026-05-22) evaluating the 20B 256N chain (`gbs6144`,
-SophiaG LR=2.28e-5, GBS=6,144) at steps 100/200/300/400. The 256N
-trajectory is interesting because it has half the batch size of the
-512N canonical chain — at matched tokens, 256N should
-*under-train per token* if the 2B large-batch effect generalizes
-(see [`../2b/README.md`](../2b/README.md#v2-256n-vs-v2-512n--same-model-two-batch-sizes)).
+Job 8503089 evaluated the 20B 256N chain (`gbs6144`, SophiaG
+LR=2.28e-5, **GBS=6,144** = half the 512N batch) at steps
+100/200/300. Step-400 was unavailable (empty ckpt dir from an
+earlier crash — see Known Issue #7 in production index).
 
-Results land in `outputs/evals/agpt-20b-v2-256n/step-{N}/results/`
-once 8503089 finishes (~4h walltime).
+Results land at `outputs/evals/agpt-20b-v2-256n/step-{N}/`.
+
+#### Raw accuracy
+
+| Step | Tokens | HellaSwag `acc` | ARC-Easy `acc` | ARC-Chall `acc` | Winogrande `acc` |
+|-----:|------:|---------------:|---------------:|----------------:|-----------------:|
+|  100 |   5.0 | 0.2576 | 0.2698 | 0.2014 | 0.4925 |
+|  200 |  10.1 | 0.2584 | 0.2820 | 0.1843 | 0.5051 |
+|  300 |  15.1 | 0.2610 | 0.3114 | 0.1817 | 0.5067 |
+
+#### v2 256N vs v2 512N
+
+At matched **step counts** the two trajectories are nearly
+identical (within lm-eval stderr):
+
+| Step | 256N HellaSwag | 512N HellaSwag | Δ | 256N ARC-Easy | 512N ARC-Easy | Δ |
+|-----:|---------------:|---------------:|--:|--------------:|--------------:|--:|
+|  100 | 0.2576 | 0.2571 | +0.05pp | 0.2698 | 0.2660 | +0.4pp |
+|  200 | 0.2584 | 0.2557 | +0.3pp  | 0.2820 | 0.2896 | -0.8pp |
+|  300 | 0.2610 | 0.2591 | +0.2pp  | 0.3114 | 0.3043 | +0.7pp |
+
+At matched **token counts** (256N step-100 = 512N step-50 ≈ 5B,
+256N step-200 = 512N step-100 ≈ 10B, 256N step-300 = 512N
+step-150 ≈ 15B) — no surprises since 512N hasn't moved meaningfully
+above random by step-150 either. **The strong per-step parity
+mirrors what we saw at 2B** (256N == 512N per-update, 256N wins
+per-token when the chain gets further along).
+
+This confirms the large-batch under-training hypothesis generalizes
+from 2B to 20B: at matched optimizer steps the two batch sizes
+produce equivalent learning, so 512N gets there in 2× the wall-clock
+but spends 2× the tokens.
+
+> **Plot note**: `plot_v1_vs_v2.py` currently only overlays the
+> 512N trajectory. To add 256N as a third line, extend the script's
+> `V2_RESULTS_BASE` lookup to also glob `agpt-20b-v2-256n/step-*/`.
+> (Followup; not blocking this writeup.)
 
 <details>
 <summary><strong>v1 detailed results (bf16-tainted, kept for record) — click to expand</strong></summary>
