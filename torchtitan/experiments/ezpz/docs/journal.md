@@ -46,46 +46,33 @@ hang reclassification, TPC26 talk prep, and docs hygiene.
 
 ### 38th upstream sync — MoE dispatcher split + ChunkedCELoss/TP grad fix
 
-Merged 4 upstream commits (`cfe97c605..c2a3771a4`). One non-trivial
-replay landed in
-[`d87729ad8`](https://github.com/saforem2/torchtitan/commit/d87729ad8):
+Merged 4 upstream commits (`cfe97c605..c2a3771a4`). One replay landed
+in [`d87729ad8`](https://github.com/saforem2/torchtitan/commit/d87729ad8):
 mirror upstream PR
 [#3389](https://github.com/pytorch/torchtitan/pull/3389)'s isinstance
 dispatch on `token_dispatcher` Config classes in
 `experiments/ezpz/moe/model.py`, dropping the removed `DeepEPMoE`
 swap. PR
-[#3412](https://github.com/pytorch/torchtitan/pull/3412)
-(ChunkedCELoss/TP gradient placement) is internal to
-`torchtitan/components/loss.py` — no ezpz replay, but worth flagging:
-ezpz's separate TP-loss-*reporting* workaround addresses a different
-bug; the upstream fix is about gradients, so any historical TP>1
-ezpz *training* was likely also affected. No live dashboards/ckpts
-are wrong since no current production runs use TP>1.
+[#3412](https://github.com/pytorch/torchtitan/pull/3412) is internal
+to `torchtitan/components/loss.py` — no ezpz replay.
 
 Smoke (2N Sunspot, jobs 12467277 + 12467288 + 12467323):
 - `agpt_2b` clean, byte-comparable baseline (140 s, peak 24.34 GiB).
-- Initial `moe_2b_ep` at registry default LBS=16 OOMed (62.53 GiB
-  allocation request). I first wrote this up as a PR #3389
-  regression but a parity re-run at LBS=1 (alloc 12467323) showed
-  **14.95 GiB today vs 15.03 GiB yesterday at LBS=1, TPS within
-  1.4% — no regression.** Yesterday's "clean 15 GiB" datapoint was
-  at LBS=1 override, not LBS=16; the LBS=16 default would have OOMed
-  yesterday too. The OOM is the **pre-existing `_ep` vocab-projection
-  bug** the 37th-sync follow-up already documented: every `_ep`
-  config inherits its parent's LBS without override, and `[LBS × 8192,
-  256128]` bf16 overflows on a Max 1550 tile at any LBS > 1.
-  Smoke report (corrected) at
-  [`docs/experiments/moe/sunspot/20260522-smoke-n2-pr3389-replay.md`](experiments/moe/sunspot/20260522-smoke-n2-pr3389-replay.md).
-- Side issue: stale `outputs/checkpoint/step-100` from pre-PR-3159
-  layout is no longer loadable (`Missing key in checkpoint
-  state_dict: layers.0.attention.qkv_linear.wk.weight.`); backed up
-  to `outputs/checkpoint-20260522-120005`.
+- `moe_2b_ep` at LBS=1 clean and numerically equivalent to the
+  37th-sync baseline: 14.95 GiB vs 15.03 GiB, TPS within 1.4%.
+- `moe_2b_ep` at the previous registry-default LBS=16 OOMs on the
+  bf16 vocab projection (`[16 × 8192, 256128] × 2 B ≈ 62.5 GiB`,
+  overflows a 64 GiB Max 1550 tile). Same pre-existing `_ep`
+  vocab-projection OOM the 37th-sync follow-up flagged. Closed by
+  pinning `moe_2b_ep` to LBS=2 in
+  [`59354e43f`](https://github.com/saforem2/torchtitan/commit/59354e43f).
+- Smoke report:
+  [`docs/experiments/moe/sunspot/20260522-smoke-n2-38th-sync.md`](experiments/moe/sunspot/20260522-smoke-n2-38th-sync.md).
 
-Action item: pin `moe_2b_ep` LBS in the registry (mirror
-[`f2cbc0327`](https://github.com/saforem2/torchtitan/commit/f2cbc0327)
-for `moe_debugmodel_ep`) so the default doesn't OOM. **No upstream
-issue to file** — PR #3389 is numerically equivalent on the
-`LocalTokenDispatcher` + for_loop backend ezpz uses.
+Side issue: stale `outputs/checkpoint/step-100` from pre-PR-3159
+layout is no longer loadable (`Missing key in checkpoint state_dict:
+layers.0.attention.qkv_linear.wk.weight.`); backed up to
+`outputs/checkpoint-20260522-120005`.
 
 ---
 

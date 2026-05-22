@@ -26,7 +26,7 @@ MoE training benchmarks using DeepSeek-style MLA + MoE architecture across ALCF 
 | 2026-05-20 | [Post-resync smoke (n2)](sunspot/20260520-smoke-n2-postresync.md) | debugmodel, 2b (LBS=1) | 2 | PR #3159 replay verified: debugmodel 12.96→7.01, moe_2b 12.91→6.16 in 50 steps each |
 | 2026-05-20 | [PR #3386 replay smoke (n2)](sunspot/20260520-smoke-n2-pr3386-replay.md) | debugmodel, 2b (LBS=1) | 2 | PR #3386 (MoE clean DTensor boundaries) replay verified: debugmodel 12.92→7.00 (Δ-0.01), moe_2b 12.95→6.11 (Δ-0.05) vs baselines |
 | 2026-05-20 | [PR #3386 EP follow-up smoke (n2)](sunspot/20260520-smoke-n2-pr3386-ep-followup.md) | debugmodel_ep, 2b_ep | 2 | EP=2 wiring validated at 2B scale (12.94→6.07 in 50 steps, +0.06 GiB vs EP=1); `_ep` registry configs need LBS override (OOM at defaults); LBS=2 debugmodel_ep hung at step 41/50 (uninvestigated) |
-| 2026-05-22 | [PR #3389 replay smoke (n2)](sunspot/20260522-smoke-n2-pr3389-replay.md) | agpt_2b sanity + moe_2b_ep (LBS=1, 2, 16) | 2 | agpt_2b clean (24.34 GiB, baseline-matched); moe_2b_ep at LBS=1 parity-checked vs yesterday's `1d4115d3f` (14.95 GiB vs 15.03 GiB, TPS within 1.4% — **no PR #3389 regression**); LBS=2 also clean (27.08 GiB); LBS=16 (registry default) OOMs on the pre-existing `_ep` vocab-projection bug. Action item: pin `_ep` LBS in registry. |
+| 2026-05-22 | [38th upstream-sync smoke (n2)](sunspot/20260522-smoke-n2-38th-sync.md) | agpt_2b sanity + moe_2b_ep (LBS=1, 2, 16) | 2 | agpt_2b clean (24.34 GiB, baseline-matched). moe_2b_ep LBS=1 numerically equivalent to 37th-sync baseline (14.95 vs 15.03 GiB, TPS within 1.4%). LBS=2 clean (27.08 GiB). LBS=16 OOMs on the pre-existing `_ep` vocab-projection bug; registry pinned to LBS=2 in `59354e43f`. |
 
 ### Polaris
 

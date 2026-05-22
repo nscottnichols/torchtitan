@@ -49,22 +49,11 @@ Upstream merged in 4 commits (`cfe97c605..c2a3771a4`).
 
 - **[`c2a3771a4` — \[loss\] Fix ChunkedCELoss + TP gradient placement
   mismatch (#3412)](https://github.com/pytorch/torchtitan/pull/3412).**
-  Purely internal to `torchtitan/components/loss.py`. `GradAccumulator`
-  used to wrap its buffer with the reference activation's placement
-  (Replicate), but the buffer held chunk gradients which can be
-  `Partial(sum)` under TP/ColwiseParallel lm_head. The Replicate label
-  made downstream autograd treat Partial values as already-summed,
-  poisoning decoder backward and lifting TP-loss above single-GPU
-  baseline. Fix: capture `_placements` from the first added chunk
-  instead of from the reference activation.
-  - **No ezpz replay needed.** Fix is fully internal.
-  - **Worth noting**: ezpz's separate TP-loss-reporting workaround in
-    `experiments/ezpz/trainer.py` + `validator.py` addresses a
-    different bug (the reported scalar, not gradients). The two are
-    independent. This upstream fix means any historical TP>1 ezpz
-    *training* (not just reporting) was likely also affected — but no
-    current production runs use TP>1, so no live dashboards/checkpoints
-    are wrong.
+  Internal to `torchtitan/components/loss.py`. `GradAccumulator` used
+  to wrap its buffer with the reference activation's placement
+  (Replicate), but the buffer holds chunk gradients which can be
+  `Partial(sum)` under TP/ColwiseParallel lm_head. Fix: capture
+  `_placements` from the first added chunk. No ezpz replay needed.
 
 - **[`b5852826b` — Fix imports for latest DeepEP (#3414)](https://github.com/pytorch/torchtitan/pull/3414).**
   Two-line change in `torchtitan/distributed/deepep/deepep.py`. XPU
@@ -95,29 +84,22 @@ semantics as upstream `deepseek_v3`.
 
 ### Smoke test results
 
-Reports:
-[`docs/experiments/moe/sunspot/20260522-smoke-n2-pr3389-replay.md`](experiments/moe/sunspot/20260522-smoke-n2-pr3389-replay.md).
+Report:
+[`docs/experiments/moe/sunspot/20260522-smoke-n2-38th-sync.md`](experiments/moe/sunspot/20260522-smoke-n2-38th-sync.md).
 
-- **`agpt_2b` (2N, LBS=1, GBS=24)** — clean, 50 steps in 140 s, peak
+- `agpt_2b` (2N, LBS=1, GBS=24) — clean, 50 steps in 140 s, peak
   24.34 GiB, byte-comparable to the prior post-resync baseline.
-  W&B: https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/c6vff0te.
-- **`moe_2b_ep` at LBS=1 (parity check vs yesterday's `1d4115d3f`)** —
-  clean, peak **14.95 GiB** vs yesterday's 15.03 GiB; TPS within
-  1.4%. **No regression from PR #3389.** W&B:
-  https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/__lbs1__
-  (alloc 12467323, log
-  `logs/smoke-38th-sync/moe_2b_ep-lbs1-parity-20260522-142430.log`).
-- **`moe_2b_ep` at LBS=2 (GBS=48, EP=2)** — clean, 50 steps in 427 s,
-  peak 27.08 GiB, loss 12.93 → 6.15.
-  W&B: https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/re576w5b.
-- **`moe_2b_ep` at registry default LBS=16** — OOM at first forward
-  (62.53 GiB single allocation = `[16 × 8192, 256128]` bf16 vocab
-  projection). **This is the pre-existing `_ep` vocab-projection OOM**
-  that the 37th-sync follow-up already flagged as an action item;
-  every `_ep` config inherits its parent's LBS without an override
-  and any LBS > 1 overflows on the Gemma vocab. **Not a PR #3389
-  bug.** W&B:
-  https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/2x0435bc.
+- `moe_2b_ep` at LBS=1 — clean, peak 14.95 GiB vs the 37th-sync
+  baseline of 15.03 GiB; TPS within 1.4%. Numerically equivalent.
+- `moe_2b_ep` at LBS=2 — clean, peak 27.08 GiB, ~3,200 TPS, 9.4% MFU.
+- `moe_2b_ep` at the previous registry-default LBS=16 OOMs on the
+  bf16 vocab projection (`[16 × 8192, 256128] × 2 B ≈ 62.5 GiB`).
+  Same pre-existing `_ep` vocab-projection OOM the 37th-sync
+  follow-up flagged. Closed by pinning `moe_2b_ep` to LBS=2 in
+  [`59354e43f`](https://github.com/saforem2/torchtitan/commit/59354e43f),
+  mirroring
+  [`f2cbc0327`](https://github.com/saforem2/torchtitan/commit/f2cbc0327)
+  for `moe_debugmodel_ep`.
 
 ### Side issue surfaced
 
@@ -126,18 +108,6 @@ revision is no longer loadable post-merge (`Missing key in
 checkpoint state_dict: layers.0.attention.qkv_linear.wk.weight.` —
 Llama3 `qkv_linear` weight layout changed in PR #3159). Old checkpoint
 backed up to `outputs/checkpoint-20260522-120005`; safe to delete.
-
-### Action items
-
-1. **Pin `moe_2b_ep` LBS in the registry** to a safe default,
-   mirroring the
-   [`f2cbc0327`](https://github.com/saforem2/torchtitan/commit/f2cbc0327)
-   pattern for `moe_debugmodel_ep`. So fresh users don't OOM on
-   defaults.
-2. ~~File upstream issue on `pytorch/torchtitan`~~ — **not needed**;
-   the LBS=1 parity check (14.95 GiB today vs 15.03 GiB yesterday)
-   shows PR #3389 introduced no regression. The OOM was a
-   pre-existing condition I initially misattributed.
 
 ---
 
