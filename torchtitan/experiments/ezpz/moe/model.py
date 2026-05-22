@@ -21,6 +21,10 @@ from torchtitan.models.common.decoder import Decoder, TransformerBlock
 from torchtitan.models.common.linear import Linear
 from torchtitan.models.common.rmsnorm import RMSNorm
 from torchtitan.models.common.rope import apply_rotary_emb_single_complex
+from torchtitan.models.common.token_dispatcher import (
+    DeepEPTokenDispatcher,
+    HybridEPTokenDispatcher,
+)
 from torchtitan.models.utils import get_moe_model_nparams_and_flops
 from torchtitan.protocols.module import Module
 from torchtitan.tools.logging import logger
@@ -243,27 +247,29 @@ class moeModel(Decoder):  # noqa: N801
                     layer_cfg.moe.router._debug_force_load_balance = (
                         debug.moe_force_load_balance
                     )
-                    # ETP was deprecated upstream (#3167); the comm_backend now
-                    # lives on the token_dispatcher, not on parallelism config.
-                    comm_backend = getattr(
-                        layer_cfg.moe.experts.token_dispatcher,
-                        "comm_backend",
-                        "standard",
-                    )
-                    if comm_backend in ("deepep", "hybridep"):
+                    # ETP was deprecated upstream (#3167); the comm_backend
+                    # now lives on the token_dispatcher, not on parallelism
+                    # config. Upstream PR #3389 (38th sync) replaced the
+                    # ``comm_backend`` string dispatch with isinstance checks
+                    # on the dispatcher Config classes; mirror that here.
+                    # Note: ezpz does not exercise the deepep/hybridep paths
+                    # on XPU (no DeepEP kernels), but we keep the guard so
+                    # any user who flips a CUDA-side ezpz config to deepep
+                    # gets the same error semantics as upstream deepseek_v3.
+                    token_dispatcher_cfg = layer_cfg.moe.experts.token_dispatcher
+                    if isinstance(
+                        token_dispatcher_cfg,
+                        (
+                            DeepEPTokenDispatcher.Config,
+                            HybridEPTokenDispatcher.Config,
+                        ),
+                    ):
                         if parallelism.expert_parallel_degree == 1:
                             raise ValueError(
-                                f"{comm_backend.upper()} requires expert "
-                                "parallelism (expert_parallel_degree > 1)."
+                                f"{type(token_dispatcher_cfg).__qualname__} "
+                                "requires expert parallelism "
+                                "(expert_parallel_degree > 1)."
                             )
-                        from torchtitan.models.common.moe_deepep import DeepEPMoE
-
-                        init_kwargs = {
-                            f.name: getattr(layer_cfg.moe, f.name)
-                            for f in dataclasses.fields(layer_cfg.moe)
-                            if f.init
-                        }
-                        layer_cfg.moe = DeepEPMoE.Config(**init_kwargs)
 
             if parallelism.context_parallel_degree > 1 and not isinstance(
                 self.layers[0].attention.inner_attention,
