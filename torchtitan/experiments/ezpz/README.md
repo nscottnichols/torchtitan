@@ -1,268 +1,136 @@
 # TorchTitan + 🍋 `ezpz`
 
+Pre-training AuroraGPT (dense + MoE) on ALCF systems
+(Aurora / Sunspot / Polaris) with PyTorch ≥ 2.10. This folder is
+an opinionated experiment harness on top of upstream `torchtitan`
+that adds:
+
+- Fault-tolerant training (bad-node failover wrapper)
+- Per-machine launch scripts + venv broadcast (`ezpz yeet-env`)
+- Custom optimizers (Mano, SPAM, Muon, SophiaG, ADOPT)
+- A `BlendCorpusDataLoader` for olmo-mix-1124 + arbitrary HF datasets
+- Eval pipeline (DCP → HF safetensors → lm-eval)
+- Detailed production / eval / scaling tracking under [`docs/`](docs/)
+
+This file is the **landing page** — quickstart + an index of where
+everything lives. For day-to-day work, jump straight to the more
+specific pages linked below.
+
 > [!NOTE]
-> These instructions assume we are using the fork `saforem2/torchtitan`, on
-> the branch `ezpz`, i.e.:
-> [saforem2/torchtitan@ezpz](https://github.com/saforem2/torchtitan/tree/ezpz)
+> This is the [`saforem2/torchtitan@ezpz`](https://github.com/saforem2/torchtitan/tree/ezpz)
+> fork. Upstream is [`pytorch/torchtitan`](https://github.com/pytorch/torchtitan)
+> and we [resync against it regularly](docs/upstream-sync.md).
 
-1. Submit job:
-   - Aurora:
+## Quickstart (2B dense training, 2 nodes)
 
-     ```bash
-     qsub -q prod -A <project> -l walltime=06:00:00,filesystems=flare:home -l select=2 -I
-     ```
+Full setup details — module loads, venv install, large-scale yeet-env
+broadcast — are in
+[`docs/guides/running-with-newer-pytorch.md`](docs/guides/running-with-newer-pytorch.md).
+Minimum viable path on Aurora:
 
-   - Polaris (using ALCF's pre-empt-able queue):
+```bash
+# 1. Allocate two nodes
+qsub -q prod -A AuroraGPT -l walltime=06:00:00,filesystems=flare:home -l select=2 -I
 
-     ```bash
-     qsub -q preempt"able" -A <project> -l walltime=06:00:00,filesystems=eagle:home -l select=2 -I
-     ```
+# 2. Clone + enter
+git clone https://github.com/saforem2/torchtitan --branch ezpz
+cd torchtitan
 
-1. Clone TorchTitan from [saforem2/torchtitan@ezpz](https://github.com/saforem2/torchtitan/blob/ezpz):
+# 3. Setup environment (loads modules + ezpz helper functions)
+source <(curl -fsSL https://bit.ly/ezpz-utils) && ezpz_setup_env
 
-   ```bash
-   git clone https://github.com/saforem2/torchtitan --branch ezpz
-   cd torchtitan
-   ```
+# 4. Launch 2B training
+MODEL=2b bash torchtitan/experiments/ezpz/run_train.sh
+```
 
-1. Setup environment:
-
-   ```bash
-   source <(curl -fsSL https://bit.ly/ezpz-utils) && ezpz_setup_env
-   ```
-
-1. Install Dependencies
-
-   ```bash
-   uv pip install "git+https://github.com/saforem2/ezpz"
-   uv pip install "git+https://github.com/zhenghh04/blendcorpus"
-   uv pip install tensorboard tyro
-   ```
-
-   - Polaris:
-
-     ```bash
-     uv pip install tf-keras
-     # flash-attn
-     CC=$(which gcc) CXX=$(which g++) uv pip install --upgrade flash-attn --no-build-isolation --no-cache --link-mode=copy
-     ```
-
-1. Download tokenizers:
-
-   ```bash
-   # 2B model
-   python3 scripts/download_hf_assets.py --repo_id google/gemma-7b --assets tokenizer
-   # 7B model
-   python3 scripts/download_hf_assets.py --repo_id meta-llama/llama-2-7b-hf --assets tokenizer
-   ```
-
-1. Launch Training
-   - AuroraGPT-2B:
-
-     ```bash
-     MODEL=2b
-     DFL=torchtitan/experiments/ezpz/data-lists/$(ezpz_get_machine_name)/books.txt
-     ezpz launch python3 -m torchtitan.experiments.ezpz.train \
-         --module ezpz.agpt \
-         --config "ezpz_agpt_${MODEL}" \
-         --training.dataset_path "${DFL}" \
-         --debug.print_config
-     ```
-
-   - AuroraGPT-7B:
-
-     ```bash
-     MODEL=7b
-     DFL=torchtitan/experiments/ezpz/data-lists/$(ezpz_get_machine_name)/books.txt
-     ezpz launch python3 -m torchtitan.experiments.ezpz.train \
-         --module ezpz.agpt \
-         --config "ezpz_agpt_${MODEL}" \
-         --training.dataset_path "${DFL}" \
-         --debug.print_config
-     ```
+For other models / machines / data files, see
+[`run_train.sh`](run_train.sh) and the detailed setup guide above.
 
 > [!TIP]
->
-> - To suppress the `UserWarning: Torchinductor` error seen when using
->   `--compile.enable` on Aurora, you can export:
->
->   ```bash
->   export SYCL_DISABLE_FSYCL_SYCLHPP_WARNING=1
->   ```
+> To suppress the `UserWarning: Torchinductor` error seen when using
+> `--compile.enable` on Aurora:
+> ```bash
+> export SYCL_DISABLE_FSYCL_SYCLHPP_WARNING=1
+> ```
 
-## Launching with `run_train.sh`
+## Documentation index
 
-- [run_train.sh](run_train.sh)
+The full prioritized landing page (with last-modified dates and a
+sentence per entry) is at [`docs/README.md`](docs/README.md). For a
+structural map of every file under `docs/`, see
+[`docs/TREE.md`](docs/TREE.md). The headline pages by topic:
 
-  ```bash
-  # AuroraGPT-2B model:
-  MODEL=2b bash torchtitan/experiments/ezpz/run_train.sh
-  # or, AuroraGPT-7B model:
-  MODEL=7b bash torchtitan/experiments/ezpz/run_train.sh
-  # or, to specify the data-file-list:
-  MODEL=7b \
-      DFL=torchtitan/experiments/ezpz/data-lists/$(ezpz_get_machine_name)/books.txt \
-      bash torchtitan/experiments/ezpz/run_train.sh
-  ```
+### Live status
 
-## MoE Training with JSON Override Configs
+| Page | What's there |
+|------|--------------|
+| [Production index](docs/production/README.md) | Snapshot of every active training trajectory — 2B / 20B / 80B at 256N / 512N / 1024N+ |
+| [Eval index](docs/evals/README.md) | lm-eval scores per model with v1-vs-v2 plots (the bf16-master fix is decisively validated) |
+| [Journal](docs/journal.md) | Day-by-day session log |
 
-The JSON override config system lets you separate model architecture from training
-hyperparameters.
-Set `TT_CONFIG_JSON` to a JSON file, then use a `_from_json` config:
+### Setup + running
 
-```bash
-TT_CONFIG_JSON=<path/to/config.json> \
-  ezpz launch python3 -m torchtitan.experiments.ezpz.train \
-    --module ezpz.moe --config moe_10b_2b_from_json
-```
+| Page | What's there |
+|------|--------------|
+| [Running with newer PyTorch](docs/guides/running-with-newer-pytorch.md) | Module loads, venv install, tokenizer download, large-scale (>512 nodes) workflow |
+| [`scripts/submit_agpt_{2b,20b,80b}_aurora_venv*.sh`](scripts/) | Current (torch 2.13 venv) PBS production submitters |
+| [`submit/README.md`](submit/README.md) | Legacy torch-2.10-conda submit scripts (kept for v1 reproduction only) |
 
-Available `--config` values for MoE:
+### Big findings + workarounds
 
-| Config           | Model                                    | Description                   |
-| ---------------- | ---------------------------------------- | ----------------------------- |
-| `moe_debugmodel` | debugmodel (256d, 6L, 8 experts)         | Tiny model for fast iteration |
-| `moe_small`      | small (2048d, 24L, 64 experts)           | Small model                   |
-| `moe_10b_2b`     | 10B/2B (2048d, 27L, 36 experts, top_k=3) | 10B total / 2B active         |
-| `moe_16b`        | 16B (2048d, 27L, 64 experts)             | Full 16B                      |
-| `moe_671b`       | 671B (7168d, 61L, 256 experts)           | Full 671B                     |
+| Page | What's there |
+|------|--------------|
+| [Known issues](docs/guides/known-issues.md) | Operational notes + workarounds for active bugs |
+| [bf16 RMSNorm freeze](docs/guides/training-dtype-bf16-norm-freeze.md) | The headline v1 bug — why we restarted as v2 with `dtype=float32` |
+| [Bad-node failover wrapper](docs/guides/bad-node-failover.md) | How the `failover_lib.sh` wrapper detects + swaps bad nodes mid-training |
+| [TP loss-reporting bug](docs/guides/loss-reporting-tp-dist-reduce.md) | Why TP > 1 loss is off by `dp_world_size` and how `EzpzValidator` fixes it |
+| [XPU attention issues](docs/guides/xpu-attention-issues.md) | No flash-attn, selective AC quirks, SDPA fallback |
 
-Each has a `_from_json` variant (e.g. `moe_10b_2b_from_json`) that applies
-overrides from `TT_CONFIG_JSON`.
+### Per-feature subdirectories
 
-### Aurora (2 nodes, 24 XPUs, EP=12)
+| Folder | Contents |
+|--------|----------|
+| [`agpt/`](agpt/) | AuroraGPT dense model configs (2B / 20B / 80B) + parallelism |
+| [`moe/`](moe/) | DeepSeek-style MoE model + custom `EzpzGroupedExperts` |
+| [`moe_runs/`](moe_runs/) | JSON override configs + launcher for MoE experiments |
+| [`optimizer/`](optimizer/) | Mano, SPAM, Muon, SophiaG, ADOPT |
+| [`blendcorpus/`](blendcorpus/) | olmo-mix-1124 dataloader with train/validation splits |
+| [`eval/`](eval/) | DCP → HF converter + lm-eval pipeline |
+| [`rl/`](rl/) | GRPO experimental task registry |
+| [`scripts/`](scripts/) | Production submission scripts + interactive launchers + benchmarks |
+| [`competition/`](competition/) | Loss-speedrun harness for the optimizer competitions |
+| [`tests/`](tests/) | CPU/XPU unit tests (run with `python3 -m unittest`) |
 
-Pre-configured JSON overrides: `moe_runs/`
+### Long-form documentation
 
-```bash
-# 1. Smoke test (40 steps, seq_len=1024)
-TT_CONFIG_JSON=torchtitan/experiments/ezpz/moe_runs/deepseek_v3_10b2b_ep12_2nodes_smoke.json \
-  ezpz launch python3 -m torchtitan.experiments.ezpz.train \
-    --module ezpz.moe --config moe_10b_2b_from_json --checkpoint.no_enable
+| Folder | Contents |
+|--------|----------|
+| [`docs/production/`](docs/production/) | Live per-model / per-node-count training trackers |
+| [`docs/evals/`](docs/evals/) | Per-model eval results + plots |
+| [`docs/guides/`](docs/guides/) | Big-finding writeups, operational notes, how-tos |
+| [`docs/experiments/`](docs/experiments/) | Per-machine smoke / benchmark / LR-finder reports |
+| [`docs/scaling/`](docs/scaling/) | Per-model scaling-study results (TPS / MFU vs N) |
+| [`docs/competitions/`](docs/competitions/) | Optimizer speedrun leaderboards |
+| [`docs/meeting-notes/`](docs/meeting-notes/) | AuroraGPT sync agendas + action items |
+| [`docs/summaries/`](docs/summaries/) | 2-week / monthly retrospectives |
+| [`docs/upstream-issues/`](docs/upstream-issues/) | Repros + drafts for PRs we're filing back to `pytorch/torchtitan` |
+| [`docs/configs/`](docs/configs/) | Model config docs (architecture, registered names) |
+| [`docs/baselines/`](docs/baselines/) | Reference training curves + benchmarks |
 
-# 2. Baseline (1000 steps, seq_len=4096)
-TT_CONFIG_JSON=torchtitan/experiments/ezpz/moe_runs/deepseek_v3_10b2b_ep12_2nodes.json \
-  ezpz launch python3 -m torchtitan.experiments.ezpz.train \
-    --module ezpz.moe --config moe_10b_2b_from_json --checkpoint.no_enable
+## MoE training
 
-# 3. Throughput test (seq_len=4096, gc_freq=200)
-TT_CONFIG_JSON=torchtitan/experiments/ezpz/moe_runs/deepseek_v3_10b2b_ep12_2nodes_4096_perf.json \
-  ezpz launch python3 -m torchtitan.experiments.ezpz.train \
-    --module ezpz.moe --config moe_10b_2b_from_json --checkpoint.no_enable
-
-# 4. Prod sim — no AC (local_batch=2)
-TT_CONFIG_JSON=torchtitan/experiments/ezpz/moe_runs/deepseek_v3_10b2b_ep12_2nodes_4096_prod_sim.json \
-  ezpz launch python3 -m torchtitan.experiments.ezpz.train \
-    --module ezpz.moe --config moe_10b_2b_from_json --checkpoint.no_enable
-
-# 5. Prod sim + selective AC op-level (local_batch=2)
-TT_CONFIG_JSON=torchtitan/experiments/ezpz/moe_runs/deepseek_v3_10b2b_ep12_2nodes_4096_prod_sim_ac.json \
-  ezpz launch python3 -m torchtitan.experiments.ezpz.train \
-    --module ezpz.moe --config moe_10b_2b_from_json --checkpoint.no_enable
-
-# 6. Selective AC op-level, higher batch (local_batch=3)
-TT_CONFIG_JSON=torchtitan/experiments/ezpz/moe_runs/deepseek_v3_10b2b_ep12_2nodes_4096_prod_sim_ac_lb3.json \
-  ezpz launch python3 -m torchtitan.experiments.ezpz.train \
-    --module ezpz.moe --config moe_10b_2b_from_json --checkpoint.no_enable
-
-# 7. Full AC, higher batch (local_batch=3)
-TT_CONFIG_JSON=torchtitan/experiments/ezpz/moe_runs/deepseek_v3_10b2b_ep12_2nodes_4096_prod_sim_ac_full_lb3.json \
-  ezpz launch python3 -m torchtitan.experiments.ezpz.train \
-    --module ezpz.moe --config moe_10b_2b_from_json --checkpoint.no_enable
-
-# 8. Layer-1 only AC, higher batch (local_batch=3)
-TT_CONFIG_JSON=torchtitan/experiments/ezpz/moe_runs/deepseek_v3_10b2b_ep12_2nodes_4096_prod_sim_ac_layer1_lb3.json \
-  ezpz launch python3 -m torchtitan.experiments.ezpz.train \
-    --module ezpz.moe --config moe_10b_2b_from_json --checkpoint.no_enable
-
-# 9. Selective AC + compile FFN+loss (local_batch=2)
-TT_CONFIG_JSON=torchtitan/experiments/ezpz/moe_runs/deepseek_v3_10b2b_ep12_2nodes_4096_prod_sim_ac_lb2_compile_ffn.json \
-  ezpz launch python3 -m torchtitan.experiments.ezpz.train \
-    --module ezpz.moe --config moe_10b_2b_from_json --checkpoint.no_enable
-
-# 10. 128-node scale run (1536 XPUs)
-TT_CONFIG_JSON=torchtitan/experiments/ezpz/moe_runs/deepseek_v3_10b2b_ep12_128nodes_4096_prod_sim_ac_lb2_compile_ffn.json \
-  ezpz launch python3 -m torchtitan.experiments.ezpz.train \
-    --module ezpz.moe --config moe_10b_2b_from_json --checkpoint.no_enable
-```
-
-### Polaris (2 nodes, 8 GPUs)
-
-Pre-configured JSON overrides: `moe_runs/polaris/`
-
-```bash
-# 1. Smoke test (40 steps, seq_len=1024)
-TT_CONFIG_JSON=torchtitan/experiments/ezpz/moe_runs/polaris/deepseek_v3_10b2b_polaris_2nodes_smoke.json \
-  ezpz launch python3 -m torchtitan.experiments.ezpz.train \
-    --module ezpz.moe --config moe_10b_2b_from_json --checkpoint.no_enable
-
-# 2. Baseline (1000 steps, seq_len=4096)
-TT_CONFIG_JSON=torchtitan/experiments/ezpz/moe_runs/polaris/deepseek_v3_10b2b_polaris_2nodes.json \
-  ezpz launch python3 -m torchtitan.experiments.ezpz.train \
-    --module ezpz.moe --config moe_10b_2b_from_json --checkpoint.no_enable
-
-# 3. Throughput test (seq_len=4096, gc_freq=200)
-TT_CONFIG_JSON=torchtitan/experiments/ezpz/moe_runs/polaris/deepseek_v3_10b2b_polaris_2nodes_4096_perf.json \
-  ezpz launch python3 -m torchtitan.experiments.ezpz.train \
-    --module ezpz.moe --config moe_10b_2b_from_json --checkpoint.no_enable
-
-# 4. Prod sim — no AC (local_batch=2)
-TT_CONFIG_JSON=torchtitan/experiments/ezpz/moe_runs/polaris/deepseek_v3_10b2b_polaris_2nodes_4096_prod_sim.json \
-  ezpz launch python3 -m torchtitan.experiments.ezpz.train \
-    --module ezpz.moe --config moe_10b_2b_from_json --checkpoint.no_enable
-
-# 5. Prod sim + selective AC op-level (local_batch=2)
-TT_CONFIG_JSON=torchtitan/experiments/ezpz/moe_runs/polaris/deepseek_v3_10b2b_polaris_2nodes_4096_prod_sim_ac.json \
-  ezpz launch python3 -m torchtitan.experiments.ezpz.train \
-    --module ezpz.moe --config moe_10b_2b_from_json --checkpoint.no_enable
-
-# 6. Selective AC op-level, higher batch (local_batch=3)
-TT_CONFIG_JSON=torchtitan/experiments/ezpz/moe_runs/polaris/deepseek_v3_10b2b_polaris_2nodes_4096_prod_sim_ac_lb3.json \
-  ezpz launch python3 -m torchtitan.experiments.ezpz.train \
-    --module ezpz.moe --config moe_10b_2b_from_json --checkpoint.no_enable
-
-# 7. Full AC, higher batch (local_batch=3)
-TT_CONFIG_JSON=torchtitan/experiments/ezpz/moe_runs/polaris/deepseek_v3_10b2b_polaris_2nodes_4096_prod_sim_ac_full_lb3.json \
-  ezpz launch python3 -m torchtitan.experiments.ezpz.train \
-    --module ezpz.moe --config moe_10b_2b_from_json --checkpoint.no_enable
-
-# 8. Layer-1 only AC, higher batch (local_batch=3)
-TT_CONFIG_JSON=torchtitan/experiments/ezpz/moe_runs/polaris/deepseek_v3_10b2b_polaris_2nodes_4096_prod_sim_ac_layer1_lb3.json \
-  ezpz launch python3 -m torchtitan.experiments.ezpz.train \
-    --module ezpz.moe --config moe_10b_2b_from_json --checkpoint.no_enable
-
-# 9. Selective AC + compile FFN+loss (local_batch=2)
-TT_CONFIG_JSON=torchtitan/experiments/ezpz/moe_runs/polaris/deepseek_v3_10b2b_polaris_2nodes_4096_prod_sim_ac_lb2_compile_ffn.json \
-  ezpz launch python3 -m torchtitan.experiments.ezpz.train \
-    --module ezpz.moe --config moe_10b_2b_from_json --checkpoint.no_enable
-```
-
-### Writing Custom JSON Overrides
-
-Any trainer config field can be overridden. Nest by config section:
-
-```json
-{
-  "training": {
-    "local_batch_size": 4,
-    "seq_len": 2048,
-    "steps": 500
-  },
-  "parallelism": {
-    "data_parallel_replicate_degree": 4,
-    "data_parallel_shard_degree": -1
-  },
-  "activation_checkpoint": {
-    "mode": "selective",
-    "selective_ac_option": "op"
-  }
-}
-```
-
-Unknown fields raise `KeyError`, type mismatches raise `TypeError`.
+The MoE harness is documented at [`moe_runs/README.md`](moe_runs/README.md)
+(JSON override configs, launchers, per-machine smoke + perf + prod-sim
+recipes for Aurora and Polaris). The MoE model + the
+`EzpzGroupedExperts` compute-backend selector live in
+[`moe/`](moe/).
 
 ## References
 
 - 🍋 `ezpz`:
   - Documentation: [ezpz.cool](https://ezpz.cool)
   - GitHub: [saforem2/ezpz](https://github.com/saforem2/ezpz)
+- Upstream torchtitan: [pytorch/torchtitan](https://github.com/pytorch/torchtitan)
+- Datasets:
+  - [olmo-mix-1124](https://huggingface.co/datasets/allenai/olmo-mix-1124) (production training)
+  - [google/gemma-7b](https://huggingface.co/google/gemma-7b) (tokenizer, vocab_size=256128)
