@@ -86,8 +86,9 @@ PRODUCTION_RUNS: dict[str, dict] = {
     "2b_v2_256": {
         # lytjeegk = 8459818 (6h initial, step 0->2070)
         # 0t4h0kuw = 8470100 (12h chain1, resumed step 2000)
-        # j7bz39tj = 8470101 (12h chain2, currently running)
-        "run_ids": ["lytjeegk", "0t4h0kuw", "j7bz39tj"],
+        # j7bz39tj = 8470101 (12h chain2)
+        # 0qpf3hnc = 8481320 (failover wrapper, 2026-05-22)
+        "run_ids": ["lytjeegk", "0t4h0kuw", "j7bz39tj", "0qpf3hnc"],
         "num_nodes": 256,
         "model": "2b",
     },
@@ -95,8 +96,12 @@ PRODUCTION_RUNS: dict[str, dict] = {
         # i252kps9 = 8460301 (initial 6h, step 0->1387)
         # d4hlr8qe = 8463626 (12h chain1, resumed step 1300, ended step 5073)
         # 1va7zfki = 8463627 (12h chain2, resumed step 5000, ended step 6955)
-        # 6op7ozfh = 8466847 (12h chain3, currently running)
-        "run_ids": ["i252kps9", "d4hlr8qe", "1va7zfki", "6op7ozfh"],
+        # 6op7ozfh = 8466847 (12h chain3)
+        # y70rh76h = 8479989 (12h chain5, advanced step 13282 -> 13400)
+        # logai2xn = 8485509 (1h19m chain6, pinned at step-13400)
+        # 2qqhpcrm = 8485511 (1h23m chain7, also pinned at step-13400)
+        "run_ids": ["i252kps9", "d4hlr8qe", "1va7zfki", "6op7ozfh",
+                    "y70rh76h", "logai2xn", "2qqhpcrm"],
         "num_nodes": 512,
         "model": "2b",
     },
@@ -104,8 +109,11 @@ PRODUCTION_RUNS: dict[str, dict] = {
         # 9tsyx5us = 8460302 (initial 6h, step 0->300)
         # ej3zy5cq = 8463628 (12h chain1, resumed step 200, ended step 863)
         # 8466848 (chain2 resubmit) crashed at startup with std::bad_alloc, no wandb run
-        # s6b159xk = 8479579 (12h chain2 retry, currently running, resumed step 800)
-        "run_ids": ["9tsyx5us", "ej3zy5cq", "s6b159xk"],
+        # s6b159xk = 8479579 (12h chain2 retry, silent hang killed by qdel @ 5h56m)
+        # gkzl19dg = 8481645 (failover wrapper, 200 fresh steps; step-900 ckpt
+        #            never persisted — log shows step 800->1000 in-memory)
+        # 10vf1mqr = 8481647 (failover continuation, 2026-05-22, currently running)
+        "run_ids": ["9tsyx5us", "ej3zy5cq", "s6b159xk", "gkzl19dg", "10vf1mqr"],
         "num_nodes": 512,
         "model": "20b",
     },
@@ -113,8 +121,12 @@ PRODUCTION_RUNS: dict[str, dict] = {
         # r1yyxbmt = 8463659 (12h initial, step 0->363, NODE_FAIL)
         # 72airpph = 8470102 (3h, resumed step 300, gloo TCP timeout @ ~3h)
         # m9c5wx2e = 8470103 (3h, chain2, also gloo TCP timeout @ ~3h)
-        # 6eocrnxs = 8479581 (12h chain3 retry, currently running, resumed step 400)
-        "run_ids": ["r1yyxbmt", "72airpph", "m9c5wx2e", "6eocrnxs"],
+        # 6eocrnxs = 8479581 (12h chain3 retry, resumed step 400, gloo TCP @ 3h39m)
+        # 5481v99b = 8479582 (chain4 continuation, 2h40m)
+        # yrq1s1ac = 8481646 (failover wrapper validated, swap+retry; no new ckpt persisted)
+        # xt03uvp6 = 8481648 (failover continuation, 2026-05-22, currently running)
+        "run_ids": ["r1yyxbmt", "72airpph", "m9c5wx2e", "6eocrnxs",
+                    "5481v99b", "yrq1s1ac", "xt03uvp6"],
         "num_nodes": 256,
         "model": "20b",
     },
