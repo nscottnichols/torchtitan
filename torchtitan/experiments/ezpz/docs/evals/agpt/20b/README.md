@@ -45,7 +45,7 @@ ckpts as they become available:
 python3 torchtitan/experiments/ezpz/docs/evals/agpt/20b/plot_v1_vs_v2.py
 ```
 
-![v1 vs v2 — 20B benchmark accuracy](figures/v1_vs_v2.png)
+![v1 vs v2 — 20B benchmark accuracy](figures/v1_vs_v2.svg)
 
 ### v1 vs v2 — by training step
 

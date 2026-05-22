@@ -188,7 +188,7 @@ def print_table(
 def main() -> None:
     v2 = load_v2()
     print(f"loaded v1: {len(V1_RESULTS)} steps, v2: {len(v2)} steps")
-    plot_per_task(V1_RESULTS, v2, FIG_DIR / "v1_vs_v2.png")
+    plot_per_task(V1_RESULTS, v2, FIG_DIR / "v1_vs_v2.svg")
     print_table(V1_RESULTS, v2)
 
 

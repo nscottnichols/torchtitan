@@ -6,13 +6,18 @@ since PBS log files only exist for jobs that have already exited and
 the active runs span multiple resumes. Generates three figures per
 model size:
 
-  - ``production_<model>_<num_nodes>n.png``: loss / tps-per-gpu / mfu
-    vs step (overwrites the same filename produced by the legacy
-    ``plot_production.py``).
-  - ``training_diagnostics_<model>_<num_nodes>n.png``: grad_norm, lr,
+  - ``production_<model>_<num_nodes>n.svg``: loss / tps-per-gpu / mfu
+    vs step.
+  - ``training_diagnostics_<model>_<num_nodes>n.svg``: grad_norm, lr,
     and max_loss vs step.
-  - ``tokens_vs_time_<model>_<num_nodes>n.png``: cumulative
+  - ``tokens_vs_time_<model>_<num_nodes>n.svg``: cumulative
     ``n_tokens_seen`` vs wall-clock datetime.
+
+The dense raw per-step traces (13K+ points) use ``rasterized=True`` so
+matplotlib embeds them as a small PNG inside the otherwise-vector SVG.
+Axes, labels, ticks, smoothed curves, and the legend all stay vector;
+``savefig(..., dpi=200)`` controls the resolution of the rasterized
+region. Net file size: ~50-150 KB SVG vs ~300-500 KB PNG.
 
 Run from the repo root:
 
@@ -52,7 +57,7 @@ PROJECT = "aurora_gpt/torchtitan.ezpz.train"
 # Production runs identified by step ranges (cross-checked with PBS logs).
 # Listed oldest first so concatenation matches resume order.
 # Each key here drives the figure filename + output dir:
-#   docs/production/agpt/<model>/n<num_nodes>/figures/<scope>_<key>n.png
+#   docs/production/agpt/<model>/n<num_nodes>/figures/<scope>_<key>n.svg
 # So the key MUST encode model + version + node count, e.g. "2b_v1_256",
 # "20b_v2_512". Don't include the trailing "n" — the template adds it.
 #
@@ -249,15 +254,19 @@ def plot_dashboard(
         fontweight="bold",
     )
 
+    # rasterized=True on the dense raw lines keeps them as a small embedded
+    # PNG inside the SVG (13K+ points would otherwise be 13K SVG path nodes).
+    # Smoothed lines + axes + legend stay vector.
     ax = axes[0]
-    ax.plot(steps, loss, color=color, alpha=0.25, linewidth=0.5)
+    ax.plot(steps, loss, color=color, alpha=0.25, linewidth=0.5, rasterized=True)
     ax.plot(steps, smooth(loss), color=color, linewidth=1.8, label="Loss (smoothed)")
     ax.set_ylabel("Loss")
     ax.set_title("Training Loss")
     ax.legend()
 
     ax = axes[1]
-    ax.plot(steps, tps_per_gpu, color="#43A047", alpha=0.25, linewidth=0.5)
+    ax.plot(steps, tps_per_gpu, color="#43A047", alpha=0.25, linewidth=0.5,
+            rasterized=True)
     ax.plot(
         steps,
         smooth(tps_per_gpu),
@@ -270,7 +279,8 @@ def plot_dashboard(
     ax.legend()
 
     ax = axes[2]
-    ax.plot(steps, mfu, color="#FF9800", alpha=0.25, linewidth=0.5)
+    ax.plot(steps, mfu, color="#FF9800", alpha=0.25, linewidth=0.5,
+            rasterized=True)
     ax.plot(steps, smooth(mfu), color="#FF9800", linewidth=1.8, label="MFU (smoothed)")
     ax.set_ylabel("MFU (%)")
     ax.set_xlabel("Training Step")
@@ -279,6 +289,7 @@ def plot_dashboard(
 
     fig.tight_layout(rect=(0, 0, 1, 0.95))
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    # dpi here sets resolution of the rasterized region in the SVG.
     fig.savefig(output_path, dpi=200, bbox_inches="tight")
     plt.close(fig)
     print(f"Saved: {output_path}")
@@ -315,7 +326,8 @@ def plot_diagnostics(
     )
 
     ax = axes[0]
-    ax.plot(steps, grad_norm, color=color, alpha=0.25, linewidth=0.5)
+    ax.plot(steps, grad_norm, color=color, alpha=0.25, linewidth=0.5,
+            rasterized=True)
     ax.plot(steps, smooth(grad_norm), color=color, linewidth=1.8, label="grad_norm (smoothed)")
     ax.set_ylabel("grad_norm")
     ax.set_title("Gradient Norm")
@@ -329,7 +341,8 @@ def plot_diagnostics(
     ax.legend()
 
     ax = axes[2]
-    ax.plot(steps, max_loss, color="#7B1FA2", alpha=0.25, linewidth=0.5)
+    ax.plot(steps, max_loss, color="#7B1FA2", alpha=0.25, linewidth=0.5,
+            rasterized=True)
     ax.plot(steps, smooth(max_loss), color="#7B1FA2", linewidth=1.8, label="max_loss (smoothed)")
     ax.set_ylabel("global_max_loss")
     ax.set_xlabel("Training Step")
@@ -451,13 +464,16 @@ def plot_overlay(
         alpha = s["alpha"]
         label = s["key"]
 
-        axes[0].plot(steps, loss, color=color, alpha=0.4 * alpha, linewidth=0.5)
+        axes[0].plot(steps, loss, color=color, alpha=0.4 * alpha, linewidth=0.5,
+                     rasterized=True)
         axes[0].plot(steps, smooth(loss), color=color, alpha=alpha, linewidth=1.8, label=label)
 
-        axes[1].plot(steps, tps, color=color, alpha=0.4 * alpha, linewidth=0.5)
+        axes[1].plot(steps, tps, color=color, alpha=0.4 * alpha, linewidth=0.5,
+                     rasterized=True)
         axes[1].plot(steps, smooth(tps), color=color, alpha=alpha, linewidth=1.8, label=label)
 
-        axes[2].plot(steps, mfu, color=color, alpha=0.4 * alpha, linewidth=0.5)
+        axes[2].plot(steps, mfu, color=color, alpha=0.4 * alpha, linewidth=0.5,
+                     rasterized=True)
         axes[2].plot(steps, smooth(mfu), color=color, alpha=alpha, linewidth=1.8, label=label)
 
     axes[0].set_ylabel("Loss")
@@ -511,7 +527,7 @@ def main() -> None:
             "Generate a v1-vs-v2 overlay dashboard for the given model, "
             "instead of (or in addition to) per-run dashboards. The "
             "figure goes to docs/production/agpt/<model>/figures/"
-            "overlay_<model>_v1_vs_v2.png."
+            "overlay_<model>_v1_vs_v2.svg."
         ),
     )
     parser.add_argument(
@@ -551,7 +567,7 @@ def main() -> None:
         plot_overlay(
             series,
             args.overlay,
-            out_dir / f"overlay_{args.overlay}_v1_vs_v2.png",
+            out_dir / f"overlay_{args.overlay}_v1_vs_v2.svg",
         )
         return
 
@@ -584,19 +600,19 @@ def main() -> None:
             data,
             model_name,
             cfg["num_nodes"],
-            out_dir / f"production_{key}n.png",
+            out_dir / f"production_{key}n.svg",
         )
         plot_diagnostics(
             data,
             model_name,
             cfg["num_nodes"],
-            out_dir / f"training_diagnostics_{key}n.png",
+            out_dir / f"training_diagnostics_{key}n.svg",
         )
         plot_tokens_vs_time(
             data,
             model_name,
             cfg["num_nodes"],
-            out_dir / f"tokens_vs_time_{key}n.png",
+            out_dir / f"tokens_vs_time_{key}n.svg",
         )
 
 

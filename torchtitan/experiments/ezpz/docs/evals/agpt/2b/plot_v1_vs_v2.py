@@ -224,7 +224,7 @@ def main() -> None:
         v2_gbs[nodes] = gbs
         print(f"loaded v2 {nodes}N: {len(traj)} steps from {path}")
     print(f"loaded v1: {len(V1_RESULTS)} steps")
-    plot_per_task(V1_RESULTS, v2_by_nodes, v2_gbs, FIG_DIR / "v1_vs_v2.png")
+    plot_per_task(V1_RESULTS, v2_by_nodes, v2_gbs, FIG_DIR / "v1_vs_v2.svg")
     print_table(V1_RESULTS, v2_by_nodes, v2_gbs)
 
 

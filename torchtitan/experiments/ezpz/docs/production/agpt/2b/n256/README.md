@@ -32,15 +32,15 @@
 
 ### Loss / Throughput / MFU
 
-![2B v2 256N Training](figures/production_2b_v2_256n.png)
+![2B v2 256N Training](figures/production_2b_v2_256n.svg)
 
 ### Diagnostics
 
-![2B v2 256N Diagnostics](figures/training_diagnostics_2b_v2_256n.png)
+![2B v2 256N Diagnostics](figures/training_diagnostics_2b_v2_256n.svg)
 
 ### Tokens vs Wall Clock
 
-![2B v2 256N Tokens vs Time](figures/tokens_vs_time_2b_v2_256n.png)
+![2B v2 256N Tokens vs Time](figures/tokens_vs_time_2b_v2_256n.svg)
 
 ### Progress
 

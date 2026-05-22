@@ -38,7 +38,7 @@ Re-render with new v2 ckpts as they become available:
 python3 torchtitan/experiments/ezpz/docs/evals/agpt/2b/plot_v1_vs_v2.py
 ```
 
-![v1 vs v2 — 2B benchmark accuracy](figures/v1_vs_v2.png)
+![v1 vs v2 — 2B benchmark accuracy](figures/v1_vs_v2.svg)
 
 ## v2 256N vs v2 512N — same model, two batch sizes
 
@@ -180,7 +180,7 @@ performance on these.
 
 ```bash
 python3 torchtitan/experiments/ezpz/docs/evals/agpt/2b/plot_v1_vs_v2.py
-# writes figures/v1_vs_v2.png with the new data points
+# writes figures/v1_vs_v2.svg with the new data points
 ```
 
 <details>
