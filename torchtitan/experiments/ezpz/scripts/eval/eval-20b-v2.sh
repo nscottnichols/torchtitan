@@ -45,15 +45,20 @@ cd "${PBS_O_WORKDIR:-/lus/flare/projects/AuroraGPT/foremans/projects/saforem2/to
 # so source the v2 venv for the conversion, then deactivate before
 # the lm-eval step.
 V2_REPO="/flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz"
-V2_CKPT_NAME="agpt-20b-sophiag-olmo-mix-1124-n512-gbs12288"
+# Default to the canonical 512N chain (gbs12288); override CKPT_NAME +
+# LABEL to evaluate other trajectories (e.g. the 256N comparator).
+V2_CKPT_NAME="${CKPT_NAME:-agpt-20b-sophiag-olmo-mix-1124-n512-gbs12288}"
+# LABEL is appended to the output dir so 256N + 512N evals can
+# coexist under outputs/evals/agpt-20b-v2-<LABEL>/.
+LABEL="${LABEL:-512n}"
 
 STEPS="${STEPS:-100 200 300}"
 TASKS="${TASKS:-hellaswag,arc_easy,arc_challenge,winogrande}"
 
 for step in $STEPS; do
     DCP_DIR="${V2_REPO}/outputs/checkpoints/${V2_CKPT_NAME}/step-${step}"
-    HF_DIR="outputs/evals/agpt-20b-v2/step-${step}/hf"
-    RESULTS_DIR="outputs/evals/agpt-20b-v2/step-${step}/results"
+    HF_DIR="outputs/evals/agpt-20b-v2-${LABEL}/step-${step}/hf"
+    RESULTS_DIR="outputs/evals/agpt-20b-v2-${LABEL}/step-${step}/results"
 
     if [[ ! -d "$DCP_DIR" ]]; then
         echo "[SKIP] 20b-v2 step-${step}: no DCP at ${DCP_DIR}"

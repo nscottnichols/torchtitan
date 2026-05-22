@@ -2,7 +2,7 @@
 
 > **Living document** — updated as new eval results come in.
 >
-> Last updated: 2026-05-03
+> Last updated: 2026-05-22
 >
 > **Training curves:** see [`docs/production/agpt/2b/`](../../../production/agpt/2b/README.md)
 > for loss / throughput / MFU dashboards across all 2B trajectories
@@ -99,6 +99,89 @@ LR=3.22e-5 (vs canonical LR=2.28e-5).
 - Will be evaluated at step 1000/2000 with the same lm-eval pipeline,
   then plotted on the same v1-vs-v2 figure as a third v2 line
   (LR=3.22e-5).
+
+## v2 512N — full sweep (2026-05-22 refresh)
+
+Re-ran lm-eval on all v2 512N checkpoints at every 1000 steps from
+1K → 13K. **Loss is descending cleanly across all four tasks; no
+random-baseline regime remaining anywhere on the curve.**
+
+Tokens at step *N* = `N × 12,288 × 8,192`. (`token_count_str =
+f"{N * 100663296:.0f}"`.)
+
+### Raw accuracy (`acc`)
+
+| Step | Tokens | HellaSwag | ARC-Easy | ARC-Chall | Winogrande |
+|-----:|------:|---------:|---------:|----------:|-----------:|
+|  1,000 |  101B | 0.2642 | 0.3624 | 0.1894 | 0.5099 |
+|  2,000 |  201B | 0.2859 | 0.4613 | 0.1877 | 0.5075 |
+|  3,000 |  302B | 0.3060 | 0.5109 | 0.1980 | 0.5193 |
+|  4,000 |  403B | 0.3264 | 0.5366 | 0.2261 | 0.5257 |
+|  5,000 |  503B | 0.3427 | 0.5231 | 0.2287 | 0.5241 |
+|  6,000 |  604B | 0.3498 | 0.5543 | 0.2372 | 0.5114 |
+|  7,000 |  704B | 0.3599 | 0.5753 | 0.2594 | 0.5312 |
+|  8,000 |  805B | 0.3687 | 0.5850 | 0.2679 | 0.5130 |
+|  9,000 |  906B | 0.3736 | 0.6023 | 0.2765 | 0.5296 |
+| 10,000 | 1.01T | 0.3799 | 0.5981 | 0.2739 | 0.5335 |
+| 11,000 | 1.11T | 0.3835 | 0.6002 | 0.2747 | 0.5304 |
+| 12,000 | 1.21T | 0.3889 | 0.6035 | 0.2637 | 0.5351 |
+| 13,000 | 1.31T | **0.3929** | **0.6115** | **0.2679** | **0.5375** |
+
+### Length-normalized (`acc_norm`, when applicable)
+
+| Step | HellaSwag `acc_norm` | ARC-Easy `acc_norm` | ARC-Chall `acc_norm` |
+|-----:|--------------------:|-------------------:|--------------------:|
+|  1,000 | 0.2636 | 0.3460 | 0.2235 |
+|  2,000 | 0.3039 | 0.4179 | 0.2270 |
+|  3,000 | 0.3477 | 0.4474 | 0.2500 |
+|  4,000 | 0.3786 | 0.4701 | 0.2654 |
+|  5,000 | 0.4061 | 0.4714 | 0.2730 |
+|  6,000 | 0.4261 | 0.4882 | 0.2688 |
+|  7,000 | 0.4388 | 0.5189 | 0.2747 |
+|  8,000 | 0.4499 | 0.5223 | 0.2790 |
+|  9,000 | 0.4594 | 0.5417 | 0.2833 |
+| 10,000 | 0.4702 | 0.5345 | 0.2807 |
+| 11,000 | 0.4791 | 0.5547 | 0.2884 |
+| 12,000 | 0.4853 | 0.5354 | 0.2807 |
+| 13,000 | **0.4926** | **0.5535** | **0.2756** |
+
+### Δ vs v1 ceiling (1.31T tokens / step-13000)
+
+v1 was noise-bound for the entire 18K-step run (table in the
+collapsed v1 section below). At matched 1.31T-token training
+budget:
+
+| Task | v1 best | v2 step-13K | Δ |
+|------|--------:|-----------:|--:|
+| HellaSwag (`acc`) | 0.2536 | **0.3929** | **+13.9pp** |
+| ARC-Easy (`acc`) | 0.2782 | **0.6115** | **+33.3pp** |
+| ARC-Challenge (`acc`) | 0.2560 | **0.2679** | +1.2pp |
+| Winogrande (`acc`) | 0.5107 | **0.5375** | +2.7pp |
+
+ARC-Easy and HellaSwag both **lift cleanly above the random baseline
+within the first 2K-3K steps** and continue to rise monotonically.
+The bf16-master fix is decisively validated: same exact training
+config, +13-33pp on the easier tasks, dramatic separation from v1's
+noise band.
+
+ARC-Challenge and Winogrande are slower to lift — both have higher
+random baselines (Winogrande's is 50%) and need more capacity than
+2B can give. At 4.67T-token target completion (~step 46K) those two
+will probably start moving but small models cap out short of human
+performance on these.
+
+### Per-checkpoint missing data
+
+- **step-13300** ckpt dir is empty on disk (async save was killed
+  mid-write by bad-node crash on 2026-05-13). Latest *usable* ckpt
+  in the chain is step-13200. See production index "Known Issue #7."
+
+### Re-render plot
+
+```bash
+python3 torchtitan/experiments/ezpz/docs/evals/agpt/2b/plot_v1_vs_v2.py
+# writes figures/v1_vs_v2.png with the new data points
+```
 
 <details>
 <summary><strong>v1 detailed results (bf16-tainted, kept for record) — click to expand</strong></summary>

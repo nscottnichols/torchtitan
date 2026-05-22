@@ -40,8 +40,11 @@
 
 | Job ID | Path |
 |--------|------|
-| <a id="log-8480361"></a>`8480361` | queued — log will land in `/flare/AuroraGPT/foremans/runs/agpt-80b-v2/torchtitan-ezpz/` on start |
-| <a id="log-8480362"></a>`8480362` | held (`afterany:8480361`) |
+| <a id="log-8480361"></a>`8480361` | `/flare/AuroraGPT/foremans/runs/agpt-80b-v2/torchtitan-ezpz/agpt-80b-n512-v2-failover-chain1.o8480361` (DOA — `failover_lib.sh` path bug, fixed in `e8379fd6f`) |
+| <a id="log-8481301"></a>`8481301` | `/flare/AuroraGPT/foremans/runs/agpt-80b-v2/torchtitan-ezpz/agpt-80b-failover.o8481301` (DOA — flag-spelling bug, fixed in `603eee961`) |
+| <a id="log-8481319"></a>`8481319` | `/flare/AuroraGPT/foremans/runs/agpt-80b-v2/torchtitan-ezpz/agpt-80b-failover.o8481319` (8 min, walltime — pre-`e216a2523` zombie-success wrapper) |
+| <a id="log-8485512"></a>`8485512` | `/flare/AuroraGPT/foremans/runs/agpt-80b-v2/torchtitan-ezpz/agpt-80b-n512-v2-failover-chain1.o8485512` (7 min, walltime — pre-fix wrapper) |
+| <a id="log-8503077"></a>`8503077` | queued — 2058N (2048 active + 10 spare) stress test of fully-fixed wrapper; log will land in `/flare/AuroraGPT/foremans/runs/agpt-80b-v2/torchtitan-ezpz/` |
 
 ## Why no v1 here
 

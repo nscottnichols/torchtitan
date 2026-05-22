@@ -210,10 +210,20 @@ failover_run() {
         elif (( rc == 0 )); then
             # Even without the trailer, mass-traceback / Connection-closed
             # patterns mean training crashed. Catch them.
+            #
+            # Threshold history:
+            # - 8503077 (80B 2058N) only emitted 2 crash-pattern lines
+            #   before SIGTERM cascaded, so the previous `> 5` threshold
+            #   missed it. At very large rank counts, one bad node may
+            #   only take a handful of ranks down before the wrapper
+            #   tears everything down. Drop to `>= 1` — any of these
+            #   patterns appearing means training crashed.
+            # - Added EOFError (blendcorpus shuffle_idx mmap of a
+            #   zero-length file) — fired in 8485515 80B 522N.
             local crash_lines
-            crash_lines=$(grep -cE "RuntimeError: \[.*gloo.*\] Connection closed by peer|RuntimeError: \[.*gloo.*\] Timed out waiting|OutOfMemoryError|UR_RESULT_ERROR_OUT_OF_RESOURCES|died from signal" "$logf" 2>/dev/null || echo 0)
-            if (( crash_lines > 5 )); then
-                _failover_log "WARNING: shell exit 0 but log has $crash_lines crash-pattern lines; treating as failure (rc=1)"
+            crash_lines=$(grep -cE "RuntimeError: \[.*gloo.*\] Connection closed by peer|RuntimeError: \[.*gloo.*\] Timed out waiting|OutOfMemoryError|UR_RESULT_ERROR_OUT_OF_RESOURCES|died from signal|EOFError: No data left in file" "$logf" 2>/dev/null || echo 0)
+            if (( crash_lines >= 1 )); then
+                _failover_log "WARNING: shell exit 0 but log has $crash_lines crash-pattern line(s); treating as failure (rc=1)"
                 rc=1
             fi
         fi
