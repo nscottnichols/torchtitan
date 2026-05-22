@@ -247,15 +247,6 @@ class moeModel(Decoder):  # noqa: N801
                     layer_cfg.moe.router._debug_force_load_balance = (
                         debug.moe_force_load_balance
                     )
-                    # ETP was deprecated upstream (#3167); the comm_backend
-                    # now lives on the token_dispatcher, not on parallelism
-                    # config. Upstream PR #3389 (38th sync) replaced the
-                    # ``comm_backend`` string dispatch with isinstance checks
-                    # on the dispatcher Config classes; mirror that here.
-                    # Note: ezpz does not exercise the deepep/hybridep paths
-                    # on XPU (no DeepEP kernels), but we keep the guard so
-                    # any user who flips a CUDA-side ezpz config to deepep
-                    # gets the same error semantics as upstream deepseek_v3.
                     token_dispatcher_cfg = layer_cfg.moe.experts.token_dispatcher
                     if isinstance(
                         token_dispatcher_cfg,

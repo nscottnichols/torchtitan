@@ -284,15 +284,10 @@ def moe_2b_ep() -> FaultTolerantTrainer.Config:
     logits ``(LBS * seq_len, vocab_size) * 2 B`` request
     ``LBS * ~3.9 GiB`` on a single tile *before* any expert/dispatch
     memory. At LBS=16 that's ~62.5 GiB — overflows a Max 1550 tile's
-    64 GiB budget at first forward (reproduced 2026-05-22, alloc
-    12467277). Earlier docstring (and 2026-05-20 report row) claiming
-    "LBS=16 validated clean at 15.03 GiB peak" was incorrect: that
-    datapoint was actually at LBS=1 override, not LBS=16. Re-verified
-    2026-05-22 on alloc 12467323: LBS=1 → 14.95 GiB (24%); LBS=2 →
-    27.08 GiB (42%); LBS=16 → OOM. LBS=2 leaves headroom for
-    activations + dispatch buffers while keeping the global batch
-    reasonable. See
-    docs/experiments/moe/sunspot/20260522-smoke-n2-pr3389-replay.md.
+    64 GiB budget at first forward. Measured peaks on 2N Sunspot:
+    LBS=1 → 14.95 GiB (24%), LBS=2 → 27.08 GiB (42%), LBS=16 → OOM.
+    LBS=2 leaves headroom for activations + dispatch buffers while
+    keeping the global batch reasonable.
     """
     cfg = moe("2B", local_batch_size=2)
     cfg.model_spec = model_registry("2B", moe_comm_backend="standard")
