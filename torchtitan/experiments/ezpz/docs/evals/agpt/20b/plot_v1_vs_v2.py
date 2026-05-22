@@ -4,7 +4,7 @@ eval scores on a single figure per task.
 
 The v1 scores are hardcoded from the eval table in this directory's
 README (frozen-RMSNorm regime, all hover near random). The v2 scores
-are loaded fresh from outputs/evals/agpt-20b-v2/step-{N}/results/results.json
+are loaded fresh from outputs/evals/agpt-20b-v2-512n/step-{N}/results/results.json
 each run, so this script can be re-run as new v2 ckpts get evaluated.
 
 If v2 even moves a few percentage points above v1's flat line, the
@@ -35,7 +35,7 @@ except ImportError:
 plt.rcParams["font.family"] = "monospace"
 
 REPO_ROOT = Path(__file__).resolve().parents[7]
-V2_RESULTS_BASE = REPO_ROOT / "outputs" / "evals" / "agpt-20b-v2"
+V2_RESULTS_BASE = REPO_ROOT / "outputs" / "evals" / "agpt-20b-v2-512n"
 FIG_DIR = Path(__file__).parent / "figures"
 FIG_DIR.mkdir(parents=True, exist_ok=True)
 
