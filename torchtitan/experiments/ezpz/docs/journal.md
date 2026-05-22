@@ -4,6 +4,48 @@ Running log of what's happening, session by session. Most recent first.
 
 ---
 
+## 2026-05-22 — First upstream PyTorch PR filed; 2-week summary
+
+### Upstream PyTorch PR for xccl `_set_pg_timeout` dispatch
+
+Filed https://github.com/pytorch/pytorch/pull/184767 — adds the
+missing xpu branch in `torch.distributed.distributed_c10d._set_pg_timeout`
+so xccl PGs route through `ProcessGroupXCCL.set_timeout` instead of
+silently no-op'ing with the `"Set timeout is now only supported for
+either nccl or gloo."` warning. Initial commit
+[37af153](https://github.com/saforem2/pytorch/commit/37af153); review
+fixes (Backend type annotation, simpler single-binding form, updated
+warning text, `find_free_port` + `@retry_on_connect_failures` for the
+test) in [8ceedc7](https://github.com/saforem2/pytorch/commit/8ceedc7).
+All 7 inline review threads from copilot + codex addressed and
+resolved. Pinged `@kwen2501` (c10d CODEOWNER) + `@guangyey` +
+`@frost-intel` for review; CI gated on first-time-contributor workflow
+approval.
+
+Empirically verified the diff on Sunspot 1N × 12 ranks against the
+in-repo `.venv` torch 2.13 (allocs 12467214 + 12467219 + 12467231,
+all released). Side finding: xccl's C++ `set_timeout` **does** mutate
+`backend.options._timeout` — contradicts the pessimistic line in
+[`PLAN_xccl_timeout_upstream_pr.md`](upstream-issues/PLAN_xccl_timeout_upstream_pr.md)
+PR 2 that "xccl stores the value but does nothing." Storage works;
+only **enforcement** (watchdog + abort) is still missing. PR 2 scope
+unchanged. Local pytest port at
+[`tests/distributed/test_c10d_xccl.py`](../tests/distributed/test_c10d_xccl.py)
+verifies the patched-vs-unpatched contract on either side.
+
+### Two-week summary
+
+Wrote up the 2026-05-08 → 2026-05-22 retrospective at
+[`docs/summaries/2026-05-08_to_2026-05-22.md`](summaries/2026-05-08_to_2026-05-22.md).
+51 commits across 8 themes: upstream xccl PR, 4 upstream syncs (one
+no-op, one no-replay, two with replays), 80B bad-node failover
+infrastructure (the silent-hang detection bug fix in
+[e216a2523](https://github.com/saforem2/torchtitan/commit/e216a2523)
+closes the 8479579 incident class), Sunspot smoke campaigns, MoE EP=2
+hang reclassification, TPC26 talk prep, and docs hygiene.
+
+---
+
 ## 2026-05-21 — Step-41 EP hang retry + registry fix + TPC26 talk prep
 
 ### `moe_debugmodel_ep` LBS=2 hang did not reproduce — reclassified transient
