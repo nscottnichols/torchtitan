@@ -44,6 +44,41 @@ infrastructure (the silent-hang detection bug fix in
 closes the 8479579 incident class), Sunspot smoke campaigns, MoE EP=2
 hang reclassification, TPC26 talk prep, and docs hygiene.
 
+### 38th upstream sync — MoE dispatcher split + ChunkedCELoss/TP grad fix
+
+Merged 4 upstream commits (`cfe97c605..c2a3771a4`). One non-trivial
+replay landed in
+[`d87729ad8`](https://github.com/saforem2/torchtitan/commit/d87729ad8):
+mirror upstream PR
+[#3389](https://github.com/pytorch/torchtitan/pull/3389)'s isinstance
+dispatch on `token_dispatcher` Config classes in
+`experiments/ezpz/moe/model.py`, dropping the removed `DeepEPMoE`
+swap. PR
+[#3412](https://github.com/pytorch/torchtitan/pull/3412)
+(ChunkedCELoss/TP gradient placement) is internal to
+`torchtitan/components/loss.py` — no ezpz replay, but worth flagging:
+ezpz's separate TP-loss-*reporting* workaround addresses a different
+bug; the upstream fix is about gradients, so any historical TP>1
+ezpz *training* was likely also affected. No live dashboards/ckpts
+are wrong since no current production runs use TP>1.
+
+Smoke (2N Sunspot, jobs 12467277 + 12467288):
+- `agpt_2b` clean, byte-comparable baseline (140 s, peak 24.34 GiB).
+- **`moe_2b_ep` regressed at LBS=16**: 62.53 GiB OOM vs yesterday's
+  15.03 GiB peak with identical config. The merge between yesterday
+  and today is the only delta — almost certainly PR #3389's
+  token-dispatcher restructure. LBS=2 workaround clean (427 s, peak
+  27.08 GiB, 9.4% MFU, loss 12.93 → 6.15). Report at
+  [`docs/experiments/moe/sunspot/20260522-smoke-n2-pr3389-replay.md`](experiments/moe/sunspot/20260522-smoke-n2-pr3389-replay.md).
+- Side issue: stale `outputs/checkpoint/step-100` from pre-PR-3159
+  layout is no longer loadable (`Missing key in checkpoint
+  state_dict: layers.0.attention.qkv_linear.wk.weight.`); backed up
+  to `outputs/checkpoint-20260522-120005`.
+
+Action items: file upstream issue on `pytorch/torchtitan` for the
+LBS=16 OOM regression with the LBS=16 vs LBS=2 datapoints; pin
+`moe_2b_ep` to LBS=2 in the registry as a workaround.
+
 ---
 
 ## 2026-05-21 — Step-41 EP hang retry + registry fix + TPC26 talk prep

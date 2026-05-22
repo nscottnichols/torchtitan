@@ -24,6 +24,113 @@ tests and checking against the saved baselines — see
 
 ---
 
+## 2026-05-22 (38th sync — MoE [6/n] dispatcher split + ChunkedCELoss/TP grad fix)
+
+Upstream merged in 4 commits (`cfe97c605..c2a3771a4`).
+
+**Upstream commits (4):**
+
+- **[`da38566d3` — \[MoE\]\[6/n\] Extract local_reorder, split DeepEP/HybridEP
+  dispatchers (#3389)](https://github.com/pytorch/torchtitan/pull/3389).**
+  Direct continuation of PR #3386 (37th sync).
+  - **Extract `local_reorder` helper** on `LocalTokenDispatcher` —
+    deduplicates the histc/argsort/score-weighting block shared between
+    `LocalTokenDispatcher.dispatch()` and
+    `AllToAllTokenDispatcher.dispatch()`.
+  - **Split `DeepEPTokenDispatcher` into `DeepEPTokenDispatcher` +
+    `HybridEPTokenDispatcher`** — eliminates `comm_backend` string
+    branching; config fields (`non_blocking_capacity_factor`,
+    `pad_multiple`) are now class-specific. Callsites use `isinstance`
+    instead of `getattr(..., "comm_backend", ...)`. The old `DeepEPMoE`
+    wrapper class is gone entirely; the dispatcher classes now own that
+    logic.
+  - **Bundled DeepEP CUDA stream race fix** (#3413) — `torch.cuda.synchronize()`
+    before `get_dispatch_layout`; XPU-irrelevant.
+
+- **[`c2a3771a4` — \[loss\] Fix ChunkedCELoss + TP gradient placement
+  mismatch (#3412)](https://github.com/pytorch/torchtitan/pull/3412).**
+  Purely internal to `torchtitan/components/loss.py`. `GradAccumulator`
+  used to wrap its buffer with the reference activation's placement
+  (Replicate), but the buffer held chunk gradients which can be
+  `Partial(sum)` under TP/ColwiseParallel lm_head. The Replicate label
+  made downstream autograd treat Partial values as already-summed,
+  poisoning decoder backward and lifting TP-loss above single-GPU
+  baseline. Fix: capture `_placements` from the first added chunk
+  instead of from the reference activation.
+  - **No ezpz replay needed.** Fix is fully internal.
+  - **Worth noting**: ezpz's separate TP-loss-reporting workaround in
+    `experiments/ezpz/trainer.py` + `validator.py` addresses a
+    different bug (the reported scalar, not gradients). The two are
+    independent. This upstream fix means any historical TP>1 ezpz
+    *training* (not just reporting) was likely also affected — but no
+    current production runs use TP>1, so no live dashboards/checkpoints
+    are wrong.
+
+- **[`b5852826b` — Fix imports for latest DeepEP (#3414)](https://github.com/pytorch/torchtitan/pull/3414).**
+  Two-line change in `torchtitan/distributed/deepep/deepep.py`. XPU
+  doesn't use DeepEP. **No-op for ezpz.**
+
+- **[`3f721b4b5` — \[graph_trainer\] Fix fsdp_passes compat with
+  BitsetAncestors from pytorch passes (#3416)](https://github.com/pytorch/torchtitan/pull/3416).**
+  graph_trainer is a Meta-internal experiment that ezpz doesn't use.
+  **No-op for ezpz.**
+
+### Replays in ezpz
+
+[**`d87729ad8` — fix(ezpz/moe): replay PR #3389 — isinstance dispatch on
+token_dispatcher Config**](https://github.com/saforem2/torchtitan/commit/d87729ad8).
+Mirror upstream's pattern in `experiments/ezpz/moe/model.py`:
+- Import `DeepEPTokenDispatcher` and `HybridEPTokenDispatcher` from
+  `torchtitan.models.common.token_dispatcher`.
+- Replace `getattr(..., "comm_backend", "standard") in ("deepep", "hybridep")`
+  with `isinstance(token_dispatcher_cfg, (DeepEPTokenDispatcher.Config,
+  HybridEPTokenDispatcher.Config))`.
+- Drop the dead `MoE → DeepEPMoE.Config` swap; `DeepEPMoE` no longer
+  exists upstream.
+
+ezpz doesn't actually exercise the deepep/hybridep paths on XPU (no
+DeepEP kernels), but we keep the EP=1 guard so any CUDA-side ezpz
+user who flips the dispatcher config to deepep gets the same error
+semantics as upstream `deepseek_v3`.
+
+### Smoke test results
+
+Reports:
+[`docs/experiments/moe/sunspot/20260522-smoke-n2-pr3389-replay.md`](experiments/moe/sunspot/20260522-smoke-n2-pr3389-replay.md).
+
+- **`agpt_2b` (2N, LBS=1, GBS=24)** — clean, 50 steps in 140 s, peak
+  24.34 GiB, byte-comparable to the prior post-resync baseline.
+  W&B: https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/c6vff0te.
+- **`moe_2b_ep` at registry default (LBS=16, GBS=384, EP=2)** — **OOM
+  regression**: 62.53 GiB allocation request inside first forward,
+  vs yesterday's 15.03 GiB peak with identical config. New finding,
+  almost certainly upstream PR #3389's responsibility (buffer sizing
+  in the new `local_reorder` helper or token-dispatcher restructure).
+  W&B: https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/2x0435bc.
+- **`moe_2b_ep` at LBS=2 (GBS=48, EP=2)** — clean, 50 steps in 427 s,
+  peak 27.08 GiB, loss 12.93 → 6.15. Workaround validated.
+  W&B: https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/re576w5b.
+
+### Side issue surfaced
+
+Stale `outputs/checkpoint/step-100` from a pre-PR-3159 (35th sync)
+revision is no longer loadable post-merge (`Missing key in
+checkpoint state_dict: layers.0.attention.qkv_linear.wk.weight.` —
+Llama3 `qkv_linear` weight layout changed in PR #3159). Old checkpoint
+backed up to `outputs/checkpoint-20260522-120005`; safe to delete.
+
+### Action items
+
+1. **File upstream issue** on `pytorch/torchtitan` referencing the
+   `moe_2b_ep` LBS=16 → 62 GiB regression (yesterday 15 GiB clean,
+   today 62 GiB OOM, LBS=2 still clean).
+2. **Pin `moe_2b_ep` to LBS=2 in the registry** as a workaround
+   until the upstream fix lands (mirroring the
+   [`f2cbc0327`](https://github.com/saforem2/torchtitan/commit/f2cbc0327)
+   pattern for `moe_debugmodel_ep` after the 37th sync).
+
+---
+
 ## 2026-05-20 (37th sync — MoE clean DTensor boundaries + graph_trainer regional_inductor)
 
 Upstream merged in `89987072b` (2 commits, `cfe97c605..963c20cba`).
