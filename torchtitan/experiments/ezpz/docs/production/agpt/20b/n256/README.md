@@ -52,18 +52,20 @@
 | [`8470103`](#log-8470103) | 2026-05-08 | 12h | 300–~500 | (resumed but) | — | — | **Crashed** @ 2h59m (also gloo TCP timeout). |
 | [`8479581`](#log-8479581) | 2026-05-11 | 12h | 400–500 | (resumed) → 4.08 | 31-419 (variable) | 1.6-20.9% (variable) | **Crashed** @ 3h39m (also gloo TCP timeout, peer 10.115.83.2; exit 0). step-500 ckpt saved. |
 | [`8479582`](#log-8479582) | 2026-05-11 | 12h | 500+ | — | — | — | Released, Q to resume from step-500 |
-| [`8481646`](#log-8481646) | 2026-05-21 | 12h | 301-500 | 4.95 → 4.12 | ~405 (steady) | **~20%** | **Failover wrapper validated end-to-end**: attempt 1 ran 2h33m, hit gloo crash from `x4110c3s3b0n0`, wrapper auto-swapped in spare `x4114c7s4b0n0`. step-400 + step-500 ckpts saved. Attempt 2 only had 98s of parent walltime left so retry was a no-op. See [failover writeup](../../../../experiments/agpt/aurora/20260521-failover-validated-8481646.md). |
+| [`8481646`](#log-8481646) | 2026-05-21 | 12h | 301-500 (logged) | 4.95 → 4.12 | ~405 (steady) | **~20%** | **Failover wrapper validated end-to-end**: attempt 1 ran 2h33m, hit gloo crash from `x4110c3s3b0n0`, wrapper auto-swapped in spare `x4114c7s4b0n0`. **No new ckpts persisted** — `step-400` ckpt dir is empty (May 8 stale from `8470102`) and `step-500` was never written (async save killed by walltime). Attempt 2 only had 98s of parent walltime left. The wrapper's swap+retry path is proven; the training-progress contribution is zero. See [failover writeup](../../../../experiments/agpt/aurora/20260521-failover-validated-8481646.md). |
 
-**Latest checkpoint:** step-500 (8481646 saved before walltime hit)
+**Latest *complete* checkpoint:** step-300 (8463659 era; `step-400` dir is empty, `step-500` doesn't exist)
 
-**Cumulative steps:** 500
+**Cumulative *persisted* steps:** 300
 
-**Tokens consumed:** 500 × 6,144 × 8,192 = **25B tokens** (0.54% of 4.67T target)
+**Tokens consumed (persisted):** 300 × 6,144 × 8,192 = **15B tokens** (0.32% of 4.67T target)
 
-> Step count unchanged from 8479581 because 8481646 happened to land on
-> the same 301→500 window after a stale-ckpt resume sequence. The
-> failover success itself is the headline — see linked writeup for the
-> swap evidence and per-attempt logs.
+> 8479581 + 8470102 + 8481646 all *logged* steps past 300 (up to ~500
+> across the runs), but **no async ckpt save past step-300 has
+> successfully finalized on disk** — every crash has been mid-save.
+> The continuation chain has been retracing the same 200-step
+> window for three weeks. Track the persisted-vs-logged gap in
+> the writeup.
 
 ### Logs
 

@@ -95,12 +95,16 @@ with `x4110c3s3b0n0` still in it):
 (~17.8%) for the same model+nodecount. The `cos_sin` RoPE / fp32-master
 combination is winning real throughput here.
 
-`step-400` and `step-500` checkpoints saved cleanly:
-
-```
-outputs/checkpoints/agpt-20b-sophiag-olmo-mix-1124-n256-gbs6144/step-400/
-outputs/checkpoints/agpt-20b-sophiag-olmo-mix-1124-n256-gbs6144/step-500/
-```
+**Important caveat (discovered 2026-05-22 during eval refresh):** the
+200 logged training steps did **not** persist to disk. Both
+`step-400/` (empty dir from a prior 8470102-era stale save) and
+`step-500/` (never written — async save killed by the wrapper's
+walltime exit mid-write) are unloadable. The latest *complete* ckpt
+remains `step-300` from the 8463659 era. This is now tracked as
+Known Issue #7 in the [production index](../../../production/README.md).
+The failover wrapper itself worked perfectly — the persistence
+failure is a separate async-ckpt-save robustness issue, not a
+wrapper bug.
 
 ### Active hostfile diff
 
@@ -156,11 +160,14 @@ dispatched and exposed the next bug:
 
 ## Net production progress
 
-Despite all 4 bugs above being live across this cycle, **the chain
-still advanced**:
+Despite all 4 bugs above being live across this cycle, **400 training
+steps were *logged* across the two failover-wrapped 20B trajectories** —
+loss progressed, MFU was healthy. But (per the caveat above) **none of
+those steps were persisted to disk** because async checkpoint saves
+were killed mid-write by the bad-node crashes:
 
-- **20B 512N** (`8481645`): step 800 → 1000 (200 steps, loss 3.53 → 3.34, MFU 17.5%)
-- **20B 256N** (`8481646`): step 301 → 500 (200 steps, loss 4.95 → 4.12, MFU 20%)
+- **20B 512N** (`8481645`): step 800 → 1000 logged (loss 3.53 → 3.34, MFU 17.5%); **step-900 ckpt dir empty on disk**, latest usable is `step-800`
+- **20B 256N** (`8481646`): step 301 → 500 logged (loss 4.95 → 4.12, MFU 20%); **no new ckpts persisted**, latest usable is `step-300`
 
 The wrapper now reliably:
 

@@ -31,8 +31,8 @@ for the diagnosis.
 
 | Model | Nodes | Cumulative steps | Loss | Tokens | Latest job | Status |
 |-------|------:|-----------------:|-----:|-------:|------------|--------|
-| 2B  | 512 | **13,400** | **2.79** | **1.35T** (28.9%) | [`8485509`](agpt/2b/n512/README.md#log-8485509) + [`8485511`](agpt/2b/n512/README.md#log-8485511) | Both walltime-finished after ~1h20m each; chain pinned at step-13400 across both runs (possible ckpt-save loop — investigate). |
-| 20B | 512 | **1,000**  | **3.34** | **101B** (2.2%)   | [`8481645`](agpt/20b/n512/README.md#log-8481645) | **+200 fresh steps** (failover wrapper, 522 nodes). Killed by bad node `10.115.76.36` @ 3h26m; step-1000 ckpt saved. 8481647 Q to resume. |
+| 2B  | 512 | **13,200** (persisted) / 13,400 (logged) | **2.79** | **1.33T** (28.4%) | [`8485509`](agpt/2b/n512/README.md#log-8485509) + [`8485511`](agpt/2b/n512/README.md#log-8485511) | Both walltime-finished after ~1h20m each; both stuck retracing the same step-13201→13400 window because step-13300 ckpt is incomplete on disk. Latest usable ckpt: step-13200. |
+| 20B | 512 | **800** (persisted) / 1,000 (logged)    | **3.34** | **81B** (1.7%)    | [`8481645`](agpt/20b/n512/README.md#log-8481645) | **+200 logged training steps** (failover wrapper, 522 nodes); killed by bad node `10.115.76.36` @ 3h26m. **No new ckpt persisted** — step-900 async save was killed mid-write. Continuation will retrace from step-800. |
 | 80B | 512 | — | — | — | [`8485512`](agpt/80b/n512/README.md#log-8485512) | **Q** — fresh 80B with all 4 failover fixes live; **`8503077` Q at 2058N stress test** (2048 active + 10 spare). |
 
 > **Failover wrapper validated 2026-05-21**: [`8481646`](agpt/20b/n256/README.md#log-8481646) (20B 256N) hit a real Aurora gloo crash, the wrapper auto-detected the bad node, swapped in a spare, and retried — **first end-to-end production proof of the swap-and-retry path**. See [failover writeup](../experiments/agpt/aurora/20260521-failover-validated-8481646.md).
@@ -41,8 +41,8 @@ for the diagnosis.
 
 | Model | Nodes | Cumulative steps | Loss | Tokens | Latest job | Status |
 |-------|------:|-----------------:|-----:|-------:|------------|--------|
-| 2B  | 256 | **12,889** | **2.81** | **650B** (13.9%) | [`8470101`](agpt/2b/n256/README.md#log-8470101) | Done (walltime, 12h00m20s; cleanly walltime-finished) — caught up to canonical 512N per-step |
-| 20B | 256 | **500** | **4.08** | 25B (0.54%) | [`8479581`](agpt/20b/n256/README.md#log-8479581) | **Crashed** (gloo TCP timeout @ 3h39m); 8479582 Q to resume from step-500 |
+| 2B  | 256 | **13,000** (persisted) | **2.81** | **655B** (14.0%) | [`8470101`](agpt/2b/n256/README.md#log-8470101) | Done; latest complete ckpt step-13000 (130/130 ckpts complete) |
+| 20B | 256 | **300** (persisted) / 500 (logged) | **4.12** | **15B** (0.32%) | [`8481646`](agpt/20b/n256/README.md#log-8481646) | **Failover wrapper validated end-to-end** (see writeup) but no new ckpt persisted — same async-save-killed-mid-write problem. Three weeks of dispatches all retracing step 301→500 with no on-disk progress past step-300. |
 
 ### Other jobs
 
@@ -88,3 +88,16 @@ See per-model READMEs (`agpt/2b/`, `agpt/20b/`, `agpt/80b/`).
    tarball mode (`ezpz yeet-env --src .venv.tar.gz`, default in v2
    submit scripts) does the same broadcast in 70-420 seconds at
    8-2048N. See [yeet_env scaling](../scaling/yeet_env/README.md).
+7. **Async checkpoint save is being killed mid-write by bad-node
+   crashes** (discovered 2026-05-22 during eval refresh). Every recent
+   20B run *logs* progress past the latest persisted ckpt (e.g. 8481645
+   logged step 1000 but step-900 ckpt dir is empty; 8481646 logged
+   step 500 but no ckpt past step-300 has finalized in 3 weeks). The
+   `--checkpoint.async-mode=async` flag lets training continue while
+   the save streams to flare in the background; if the bad-node crash
+   fires during that window, the partially-written `step-N00/` dir
+   stays in place but lacks `.metadata` and `__*_0.distcp` shards,
+   making it unloadable. **Mitigation:** consider switching to
+   `--checkpoint.async-mode=sync` for at least one save per chain
+   continuation, OR detect and `mv` the orphaned ckpt dir before next
+   training start (the resume code falls back to the previous step).
