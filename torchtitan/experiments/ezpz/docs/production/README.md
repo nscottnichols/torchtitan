@@ -2,7 +2,7 @@
 
 > **Living document** — updated as jobs complete and new runs are submitted.
 >
-> Last updated: 2026-05-11
+> Last updated: 2026-05-22
 
 ## Scaling Performance
 
@@ -31,9 +31,11 @@ for the diagnosis.
 
 | Model | Nodes | Cumulative steps | Loss | Tokens | Latest job | Status |
 |-------|------:|-----------------:|-----:|-------:|------------|--------|
-| 2B  | 512 | **13,279** | **2.79** | **1.34T** (28.7%) | [`8466847`](agpt/2b/n512/README.md#log-8466847) → [`8479988`](agpt/2b/n512/README.md#log-8479988) | 8466847 walltime-finished; **8479988 Q** (resubmit, resumes from step-13200) |
-| 20B | 512 | **803**    | **3.53** | **81B** (1.7%)    | [`8479580`](agpt/20b/n512/README.md#log-8479580) | **Killed by qdel** — 8479579 silently hung after step 803 (no exit, W&B heartbeat alive but training metrics dead for 5h). 8479580 (held) auto-released, Q to resume from step-800. See [hang report](../experiments/agpt/aurora/20260511-20b-n512-hang-8479579.md). |
-| 80B | 512 | — | — | — | [`8480361`](agpt/80b/n512/README.md#log-8480361) | **Q** — first v2 production attempt (failover wrapper, 522 nodes = 512 active + 10 spare; AdamW LR=1e-6, TP=2, AC=full, compile=OFF — proven config from 4N smoke 12466025) |
+| 2B  | 512 | **13,400** | **2.79** | **1.35T** (28.9%) | [`8485509`](agpt/2b/n512/README.md#log-8485509) + [`8485511`](agpt/2b/n512/README.md#log-8485511) | Both walltime-finished after ~1h20m each; chain pinned at step-13400 across both runs (possible ckpt-save loop — investigate). |
+| 20B | 512 | **1,000**  | **3.34** | **101B** (2.2%)   | [`8481645`](agpt/20b/n512/README.md#log-8481645) | **+200 fresh steps** (failover wrapper, 522 nodes). Killed by bad node `10.115.76.36` @ 3h26m; step-1000 ckpt saved. 8481647 Q to resume. |
+| 80B | 512 | — | — | — | [`8485512`](agpt/80b/n512/README.md#log-8485512) | **Q** — fresh 80B with all 4 failover fixes live; **`8503077` Q at 2058N stress test** (2048 active + 10 spare). |
+
+> **Failover wrapper validated 2026-05-21**: [`8481646`](agpt/20b/n256/README.md#log-8481646) (20B 256N) hit a real Aurora gloo crash, the wrapper auto-detected the bad node, swapped in a spare, and retried — **first end-to-end production proof of the swap-and-retry path**. See [failover writeup](../experiments/agpt/aurora/20260521-failover-validated-8481646.md).
 
 ### Active 256N trajectories
 

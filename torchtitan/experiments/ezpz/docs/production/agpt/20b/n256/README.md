@@ -52,12 +52,18 @@
 | [`8470103`](#log-8470103) | 2026-05-08 | 12h | 300–~500 | (resumed but) | — | — | **Crashed** @ 2h59m (also gloo TCP timeout). |
 | [`8479581`](#log-8479581) | 2026-05-11 | 12h | 400–500 | (resumed) → 4.08 | 31-419 (variable) | 1.6-20.9% (variable) | **Crashed** @ 3h39m (also gloo TCP timeout, peer 10.115.83.2; exit 0). step-500 ckpt saved. |
 | [`8479582`](#log-8479582) | 2026-05-11 | 12h | 500+ | — | — | — | Released, Q to resume from step-500 |
+| [`8481646`](#log-8481646) | 2026-05-21 | 12h | 301-500 | 4.95 → 4.12 | ~405 (steady) | **~20%** | **Failover wrapper validated end-to-end**: attempt 1 ran 2h33m, hit gloo crash from `x4110c3s3b0n0`, wrapper auto-swapped in spare `x4114c7s4b0n0`. step-400 + step-500 ckpts saved. Attempt 2 only had 98s of parent walltime left so retry was a no-op. See [failover writeup](../../../../experiments/agpt/aurora/20260521-failover-validated-8481646.md). |
 
-**Latest checkpoint:** step-500 (8479581 saved before crash)
+**Latest checkpoint:** step-500 (8481646 saved before walltime hit)
 
 **Cumulative steps:** 500
 
 **Tokens consumed:** 500 × 6,144 × 8,192 = **25B tokens** (0.54% of 4.67T target)
+
+> Step count unchanged from 8479581 because 8481646 happened to land on
+> the same 301→500 window after a stale-ckpt resume sequence. The
+> failover success itself is the headline — see linked writeup for the
+> swap evidence and per-attempt logs.
 
 ### Logs
 
@@ -66,8 +72,9 @@
 | <a id="log-8463659"></a>`8463659` | `/flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/agpt-20b-n256-v2.o8463659` |
 | <a id="log-8470102"></a>`8470102` | `/flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/agpt-20b-n256-v2-chain1.o8470102` |
 | <a id="log-8470103"></a>`8470103` | `/flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/agpt-20b-n256-v2-chain2.o8470103` |
-| <a id="log-8479581"></a>`8479581` | `/flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/agpt-20b-n256-v2-chain3.o8479581` (running) |
-| <a id="log-8479582"></a>`8479582` | held (`afterany:8479581`) |
+| <a id="log-8479581"></a>`8479581` | `/flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/agpt-20b-n256-v2-chain3.o8479581` |
+| <a id="log-8479582"></a>`8479582` | `/flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/agpt-20b-n256-v2-chain4.o8479582` |
+| <a id="log-8481646"></a>`8481646` | `/flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/agpt-20b-n256-v2-failover-chain1.o8481646` + `logs/failover-8481646/{attempt-1,attempt-2}.log` |
 
 ---
 
