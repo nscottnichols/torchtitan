@@ -2,7 +2,7 @@
 
 > **Living document** — updated as new eval results come in.
 >
-> Last updated: 2026-05-05
+> Last updated: 2026-05-22
 >
 > **Training curves:** see [`docs/production/agpt/20b/`](../../../production/agpt/20b/README.md)
 > for loss / throughput / MFU dashboards (v1 256N + v2 512N).
@@ -66,7 +66,70 @@ python3 torchtitan/experiments/ezpz/docs/evals/agpt/20b/plot_v1_vs_v2.py
 | **v2 512N** | **700** | ** 70.5** | **0.2814** | **0.3914** | **0.2133** | **0.5012** |
 | **v2 512N** | **800** | ** 80.5** | **0.2844** | **0.4061** | **0.2184** | **0.4988** |
 
-All 8 v2 ckpts (steps 100-800) now evaluated. Steps 700/800 ran on 8469257 (capacity, 3h walltime) after 8467370 hit walltime mid-step-700 yesterday.
+> **Note on metric**: the table above reports `acc_norm` for HellaSwag
+> and ARC tasks (length-normalized) and `acc` for Winogrande (which
+> doesn't have `acc_norm`). Numbers in the parallel `acc` (raw) view
+> are typically 1-4pp higher for ARC-Easy and 1-2pp lower for HellaSwag
+> at this checkpoint range. The raw-`acc` table is below.
+
+### v2 512N — raw accuracy view (added 2026-05-22)
+
+Same 8 ckpts as above, now showing raw `acc,none` instead of
+length-normalized. ARC-Easy in particular lifts much faster on the
+raw metric — by step 800 it's at **0.4444**, +17pp above v1's flat
+0.27 ceiling.
+
+| Step | Tokens | HellaSwag `acc` | ARC-Easy `acc` | ARC-Chall `acc` | Winogrande `acc` |
+|-----:|------:|---------------:|---------------:|----------------:|-----------------:|
+|   100 |  10.1 | 0.2571 | 0.2660 | 0.1954 | 0.4917 |
+|   200 |  20.1 | 0.2557 | 0.2896 | 0.1937 | 0.5114 |
+|   300 |  30.2 | 0.2591 | 0.3043 | 0.1860 | 0.4917 |
+|   400 |  40.3 | 0.2645 | 0.3375 | 0.2022 | 0.5067 |
+|   500 |  50.3 | 0.2662 | 0.3594 | 0.1869 | 0.4949 |
+|   600 |  60.4 | 0.2687 | 0.3931 | 0.1800 | 0.5012 |
+|   700 |  70.5 | 0.2761 | 0.4356 | 0.1732 | 0.5012 |
+|   800 |  80.5 | **0.2767** | **0.4444** | 0.1920 | 0.4988 |
+
+### Δ vs v1 ceiling (matched 50-80B token band)
+
+v1's flat noise band across 100-2500 steps establishes the
+counterfactual: with the bf16 RMSNorm freeze, this model never learns
+beyond random regardless of training tokens. Matched-budget Δs:
+
+| Task | v1 best (any step) | v2 step-800 | Δ |
+|------|--------:|-----------:|--:|
+| HellaSwag (`acc`) | 0.2650 | 0.2767 | +1.2pp |
+| ARC-Easy (`acc`) | 0.2740 | **0.4444** | **+17.0pp** |
+| ARC-Challenge (`acc`) | 0.2560 | 0.1920 | -6.4pp (still in noise) |
+| Winogrande (`acc`) | 0.5193 | 0.4988 | -2.0pp (still in noise) |
+
+The +17pp ARC-Easy ascent is the headline. HellaSwag is also
+breaking out on the length-normalized metric (acc_norm 0.254 → 0.284,
++3pp above v1). The other two tasks need more capacity / more tokens
+than 80B can give.
+
+### Step-900 unavailable
+
+8481645 (failover wrapper, 20B 512N) logged step 1000 on 2026-05-14
+but the async checkpoint save was killed mid-write by a bad-node
+crash. step-900 ckpt dir exists on disk but has no `.metadata` /
+`__*_0.distcp` shards, so the eval pipeline can't load it. Latest
+*persisted* ckpt remains step-800.
+
+See production index "Known Issue #7" for the chronic async-save
+corruption pattern across all recent 20B + 2B runs.
+
+### v2 256N comparator (in-progress)
+
+Job 8503089 (2026-05-22) evaluating the 20B 256N chain (`gbs6144`,
+SophiaG LR=2.28e-5, GBS=6,144) at steps 100/200/300/400. The 256N
+trajectory is interesting because it has half the batch size of the
+512N canonical chain — at matched tokens, 256N should
+*under-train per token* if the 2B large-batch effect generalizes
+(see [`../2b/README.md`](../2b/README.md#v2-256n-vs-v2-512n--same-model-two-batch-sizes)).
+
+Results land in `outputs/evals/agpt-20b-v2-256n/step-{N}/results/`
+once 8503089 finishes (~4h walltime).
 
 <details>
 <summary><strong>v1 detailed results (bf16-tainted, kept for record) — click to expand</strong></summary>
