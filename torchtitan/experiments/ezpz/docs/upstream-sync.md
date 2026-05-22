@@ -101,15 +101,23 @@ Reports:
 - **`agpt_2b` (2N, LBS=1, GBS=24)** — clean, 50 steps in 140 s, peak
   24.34 GiB, byte-comparable to the prior post-resync baseline.
   W&B: https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/c6vff0te.
-- **`moe_2b_ep` at registry default (LBS=16, GBS=384, EP=2)** — **OOM
-  regression**: 62.53 GiB allocation request inside first forward,
-  vs yesterday's 15.03 GiB peak with identical config. New finding,
-  almost certainly upstream PR #3389's responsibility (buffer sizing
-  in the new `local_reorder` helper or token-dispatcher restructure).
-  W&B: https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/2x0435bc.
+- **`moe_2b_ep` at LBS=1 (parity check vs yesterday's `1d4115d3f`)** —
+  clean, peak **14.95 GiB** vs yesterday's 15.03 GiB; TPS within
+  1.4%. **No regression from PR #3389.** W&B:
+  https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/__lbs1__
+  (alloc 12467323, log
+  `logs/smoke-38th-sync/moe_2b_ep-lbs1-parity-20260522-142430.log`).
 - **`moe_2b_ep` at LBS=2 (GBS=48, EP=2)** — clean, 50 steps in 427 s,
-  peak 27.08 GiB, loss 12.93 → 6.15. Workaround validated.
+  peak 27.08 GiB, loss 12.93 → 6.15.
   W&B: https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/re576w5b.
+- **`moe_2b_ep` at registry default LBS=16** — OOM at first forward
+  (62.53 GiB single allocation = `[16 × 8192, 256128]` bf16 vocab
+  projection). **This is the pre-existing `_ep` vocab-projection OOM**
+  that the 37th-sync follow-up already flagged as an action item;
+  every `_ep` config inherits its parent's LBS without an override
+  and any LBS > 1 overflows on the Gemma vocab. **Not a PR #3389
+  bug.** W&B:
+  https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/2x0435bc.
 
 ### Side issue surfaced
 
@@ -121,13 +129,15 @@ backed up to `outputs/checkpoint-20260522-120005`; safe to delete.
 
 ### Action items
 
-1. **File upstream issue** on `pytorch/torchtitan` referencing the
-   `moe_2b_ep` LBS=16 → 62 GiB regression (yesterday 15 GiB clean,
-   today 62 GiB OOM, LBS=2 still clean).
-2. **Pin `moe_2b_ep` to LBS=2 in the registry** as a workaround
-   until the upstream fix lands (mirroring the
+1. **Pin `moe_2b_ep` LBS in the registry** to a safe default,
+   mirroring the
    [`f2cbc0327`](https://github.com/saforem2/torchtitan/commit/f2cbc0327)
-   pattern for `moe_debugmodel_ep` after the 37th sync).
+   pattern for `moe_debugmodel_ep`. So fresh users don't OOM on
+   defaults.
+2. ~~File upstream issue on `pytorch/torchtitan`~~ — **not needed**;
+   the LBS=1 parity check (14.95 GiB today vs 15.03 GiB yesterday)
+   shows PR #3389 introduced no regression. The OOM was a
+   pre-existing condition I initially misattributed.
 
 ---
 

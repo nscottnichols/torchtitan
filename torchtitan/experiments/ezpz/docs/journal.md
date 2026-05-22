@@ -62,22 +62,30 @@ bug; the upstream fix is about gradients, so any historical TP>1
 ezpz *training* was likely also affected. No live dashboards/ckpts
 are wrong since no current production runs use TP>1.
 
-Smoke (2N Sunspot, jobs 12467277 + 12467288):
+Smoke (2N Sunspot, jobs 12467277 + 12467288 + 12467323):
 - `agpt_2b` clean, byte-comparable baseline (140 s, peak 24.34 GiB).
-- **`moe_2b_ep` regressed at LBS=16**: 62.53 GiB OOM vs yesterday's
-  15.03 GiB peak with identical config. The merge between yesterday
-  and today is the only delta — almost certainly PR #3389's
-  token-dispatcher restructure. LBS=2 workaround clean (427 s, peak
-  27.08 GiB, 9.4% MFU, loss 12.93 → 6.15). Report at
+- Initial `moe_2b_ep` at registry default LBS=16 OOMed (62.53 GiB
+  allocation request). I first wrote this up as a PR #3389
+  regression but a parity re-run at LBS=1 (alloc 12467323) showed
+  **14.95 GiB today vs 15.03 GiB yesterday at LBS=1, TPS within
+  1.4% — no regression.** Yesterday's "clean 15 GiB" datapoint was
+  at LBS=1 override, not LBS=16; the LBS=16 default would have OOMed
+  yesterday too. The OOM is the **pre-existing `_ep` vocab-projection
+  bug** the 37th-sync follow-up already documented: every `_ep`
+  config inherits its parent's LBS without override, and `[LBS × 8192,
+  256128]` bf16 overflows on a Max 1550 tile at any LBS > 1.
+  Smoke report (corrected) at
   [`docs/experiments/moe/sunspot/20260522-smoke-n2-pr3389-replay.md`](experiments/moe/sunspot/20260522-smoke-n2-pr3389-replay.md).
 - Side issue: stale `outputs/checkpoint/step-100` from pre-PR-3159
   layout is no longer loadable (`Missing key in checkpoint
   state_dict: layers.0.attention.qkv_linear.wk.weight.`); backed up
   to `outputs/checkpoint-20260522-120005`.
 
-Action items: file upstream issue on `pytorch/torchtitan` for the
-LBS=16 OOM regression with the LBS=16 vs LBS=2 datapoints; pin
-`moe_2b_ep` to LBS=2 in the registry as a workaround.
+Action item: pin `moe_2b_ep` LBS in the registry (mirror
+[`f2cbc0327`](https://github.com/saforem2/torchtitan/commit/f2cbc0327)
+for `moe_debugmodel_ep`) so the default doesn't OOM. **No upstream
+issue to file** — PR #3389 is numerically equivalent on the
+`LocalTokenDispatcher` + for_loop backend ezpz uses.
 
 ---
 
