@@ -176,12 +176,19 @@ failover_run() {
     if [[ "${cmd[0]}" == "ezpz" && "${cmd[1]}" == "launch" ]]; then
         local ppn="${NGPU_PER_HOST:-12}"
         local nproc=$(( NHOSTS * ppn ))
+        # FAILOVER_IDLE_TIMEOUT (default 1800s = 30min): if the launched
+        # process emits no output for this long, ezpz launch sends SIGTERM
+        # and exits 124. Catches silent collective hangs (e.g. the
+        # 8479579 incident: 5h of W&B-heartbeat-alive-but-no-training-
+        # metrics-output). Requires ezpz >= 0.15.1.
+        local idle_timeout="${FAILOVER_IDLE_TIMEOUT:-1800}"
         cmd=(
             "${cmd[@]:0:2}"
             "--hostfile=$FAILOVER_ACTIVE"
             "--nnodes=$NHOSTS"
             "-ppn" "$ppn"
             "-n" "$nproc"
+            "--timeout=$idle_timeout"
             "${cmd[@]:2}"
         )
     fi
@@ -246,6 +253,17 @@ failover_run() {
                 return $rc
             fi
             _failover_log "attempt ${attempt} exited 143 but log has $bad_crash_lines bad-node lines — proceeding with retry"
+        fi
+
+        # exit 124 = ezpz launch idle-output watchdog (--timeout) fired.
+        # The launched process emitted no output for FAILOVER_IDLE_TIMEOUT
+        # seconds → ezpz sent SIGTERM. This catches silent hangs like
+        # 8479579 (W&B alive but training metrics dead for 5h). Treat as
+        # a bad-node failure: scrape, swap, retry. scrape_bad_nodes.py
+        # likely won't find a specific hostname (the hang IS the silence)
+        # so failover_swap_one_blind will rotate a spare.
+        if (( rc == 124 )); then
+            _failover_log "attempt ${attempt} exited 124 (ezpz idle-output watchdog tripped after ${FAILOVER_IDLE_TIMEOUT:-1800}s) — treating as silent-hang bad-node failure"
         fi
 
         _failover_log "attempt ${attempt} failed (exit $rc) — scraping for bad nodes"
