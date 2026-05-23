@@ -94,7 +94,10 @@ PRODUCTION_RUNS: dict[str, dict] = {
         # j7bz39tj = 8470101 (12h chain2)
         # 0qpf3hnc = 8481320 (failover wrapper, 2026-05-22, step 13K->18K)
         # iekiq5rq = 8503506 (failover continuation, 2026-05-22→23, step 18.8K->23.5K+)
-        "run_ids": ["lytjeegk", "0t4h0kuw", "j7bz39tj", "0qpf3hnc", "iekiq5rq"],
+        # ni0etxx7 = 8505118 (post-fix dispatch, exhausted retries cleanly)
+        # 0fk1bvtt = 8505119 (post-fix continuation, advanced to step-25,100+)
+        "run_ids": ["lytjeegk", "0t4h0kuw", "j7bz39tj", "0qpf3hnc", "iekiq5rq",
+                    "ni0etxx7", "0fk1bvtt"],
         "num_nodes": 256,
         "model": "2b",
     },
@@ -118,8 +121,10 @@ PRODUCTION_RUNS: dict[str, dict] = {
         # s6b159xk = 8479579 (12h chain2 retry, silent hang killed by qdel @ 5h56m)
         # gkzl19dg = 8481645 (failover wrapper, 200 fresh steps; step-900 ckpt
         #            never persisted — log shows step 800->1000 in-memory)
-        # 10vf1mqr = 8481647 (failover continuation, 2026-05-22, currently running)
-        "run_ids": ["9tsyx5us", "ej3zy5cq", "s6b159xk", "gkzl19dg", "10vf1mqr"],
+        # 10vf1mqr = 8481647 (failover continuation, 2026-05-22)
+        # qttj3l3p = 8505124 (post-fix dispatch 2026-05-23, exhausted retries)
+        "run_ids": ["9tsyx5us", "ej3zy5cq", "s6b159xk", "gkzl19dg", "10vf1mqr",
+                    "qttj3l3p"],
         "num_nodes": 512,
         "model": "20b",
     },
@@ -130,9 +135,12 @@ PRODUCTION_RUNS: dict[str, dict] = {
         # 6eocrnxs = 8479581 (12h chain3 retry, resumed step 400, gloo TCP @ 3h39m)
         # 5481v99b = 8479582 (chain4 continuation, 2h40m)
         # yrq1s1ac = 8481646 (failover wrapper validated, swap+retry; no new ckpt persisted)
-        # xt03uvp6 = 8481648 (failover continuation, 2026-05-22, currently running)
+        # xt03uvp6 = 8481648 (failover continuation, 2026-05-22)
+        # f1p8nyxh = 8505122 (post-fix dispatch 2026-05-23, exhausted retries)
+        # g6ekeu4j = 8505123 (post-fix continuation, currently running)
         "run_ids": ["r1yyxbmt", "72airpph", "m9c5wx2e", "6eocrnxs",
-                    "5481v99b", "yrq1s1ac", "xt03uvp6"],
+                    "5481v99b", "yrq1s1ac", "xt03uvp6",
+                    "f1p8nyxh", "g6ekeu4j"],
         "num_nodes": 256,
         "model": "20b",
     },
