@@ -207,8 +207,12 @@ failover_run() {
         # When that happens we lose the bad-node signal. Always cross-check
         # the log for known crash patterns + the explicit "Execution finished
         # with N" trailer, and override rc accordingly.
+        # Strip ANSI escape codes first — ezpz launch logs the trailer with
+        # color codes baked in (`Execution finished with \x1b[1;36m127\x1b[0m`),
+        # and a naive regex extracts '1' from the [1;36m prefix instead of
+        # the real exit code (127). Pre-filter with sed.
         local inner_rc
-        inner_rc=$(grep -oE "Execution finished with \[?[0-9]+\]?" "$logf" 2>/dev/null | tail -1 | grep -oE "[0-9]+$" | head -1)
+        inner_rc=$(sed -r 's/\x1b\[[0-9;]*m//g' "$logf" 2>/dev/null | grep -oE "Execution finished with [0-9]+" | tail -1 | grep -oE "[0-9]+$")
         if [[ -n "$inner_rc" && "$inner_rc" != "0" ]]; then
             if (( rc == 0 )); then
                 _failover_log "WARNING: shell exit 0 but log shows 'Execution finished with $inner_rc'; treating as failure"
