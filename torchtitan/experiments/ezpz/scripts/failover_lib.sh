@@ -232,7 +232,7 @@ failover_run() {
             # - Added EOFError (blendcorpus shuffle_idx mmap of a
             #   zero-length file) — fired in 8485515 80B 522N.
             local crash_lines
-            crash_lines=$(grep -cE "RuntimeError: \[.*gloo.*\] Connection closed by peer|RuntimeError: \[.*gloo.*\] Timed out waiting|OutOfMemoryError|UR_RESULT_ERROR_OUT_OF_RESOURCES|died from signal|EOFError: No data left in file" "$logf" 2>/dev/null || echo 0)
+            crash_lines=$(grep -cE "RuntimeError: \[.*gloo.*\] Connection closed by peer|RuntimeError: \[.*gloo.*\] Timed out waiting|OutOfMemoryError|UR_RESULT_ERROR_OUT_OF_RESOURCES|died from signal|EOFError: No data left in file" "$logf" 2>/dev/null)
             if (( crash_lines >= 1 )); then
                 _failover_log "WARNING: shell exit 0 but log has $crash_lines crash-pattern line(s); treating as failure (rc=1)"
                 rc=1
@@ -249,9 +249,14 @@ failover_run() {
         # BUT: if we also found bad-node crash patterns, prefer the bad-node
         # path (don't bail on a true bad-node case just because the wallclock
         # signal also fired).
+        # Walltime guard. Use the SAME crash-pattern set as the rc=0 case
+        # above — otherwise a real bad-node failure that surfaced as
+        # shell exit 143 (mpiexec SIGTERM'd after EOFError or
+        # OutOfMemoryError) gets misclassified as a clean walltime kill
+        # and the wrapper bails without retrying.
         if (( rc == 143 )); then
             local bad_crash_lines
-            bad_crash_lines=$(grep -cE "RuntimeError: \[.*gloo.*\] Connection closed by peer|died from signal (9|11)" "$logf" 2>/dev/null || echo 0)
+            bad_crash_lines=$(grep -cE "RuntimeError: \[.*gloo.*\] Connection closed by peer|RuntimeError: \[.*gloo.*\] Timed out waiting|OutOfMemoryError|UR_RESULT_ERROR_OUT_OF_RESOURCES|died from signal|EOFError: No data left in file" "$logf" 2>/dev/null)
             if (( bad_crash_lines == 0 )); then
                 _failover_log "attempt ${attempt} exited 143 (walltime / SIGTERM) — not a bad-node failure, no retry"
                 return $rc
