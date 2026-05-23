@@ -92,8 +92,9 @@ PRODUCTION_RUNS: dict[str, dict] = {
         # lytjeegk = 8459818 (6h initial, step 0->2070)
         # 0t4h0kuw = 8470100 (12h chain1, resumed step 2000)
         # j7bz39tj = 8470101 (12h chain2)
-        # 0qpf3hnc = 8481320 (failover wrapper, 2026-05-22)
-        "run_ids": ["lytjeegk", "0t4h0kuw", "j7bz39tj", "0qpf3hnc"],
+        # 0qpf3hnc = 8481320 (failover wrapper, 2026-05-22, step 13K->18K)
+        # iekiq5rq = 8503506 (failover continuation, 2026-05-22→23, step 18.8K->23.5K+)
+        "run_ids": ["lytjeegk", "0t4h0kuw", "j7bz39tj", "0qpf3hnc", "iekiq5rq"],
         "num_nodes": 256,
         "model": "2b",
     },
