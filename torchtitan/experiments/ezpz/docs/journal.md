@@ -125,6 +125,28 @@ through swap-and-retry.
   running on capacity; 5/13 done so far. Will refresh plots +
   README tables once all land.
 
+### 39th upstream sync — DebugMode numerics debugger (no-op for ezpz)
+
+Merged 1 upstream commit (`19c567f76`,
+[PR #3323](https://github.com/pytorch/torchtitan/pull/3323)). Pure
+tooling addition: new `torchtitan/tools/numerics_debugging/` module
+(activation tracer + bitwise comparator, ~2 KLOC) plus a
+`numerics_debugging` skill under `.claude/skills/`. No code path
+ezpz exercises changed; no replay needed. The new skill auto-loads
+in this session and could be useful next time we need to bisect a
+silent loss-curve divergence.
+
+### Closing follow-up — PR #184767 closed in favor of upstream #183625
+
+`@frost-intel` flagged that
+[pytorch/pytorch#183625](https://github.com/pytorch/pytorch/pull/183625)
+is a draft already covering the xccl `_set_pg_timeout` dispatch +
+the new `test_c10d_xccl.py` (in pieces). Closed our PR #184767 in
+deference. Local workaround in
+[`22847fcb3`](https://github.com/saforem2/torchtitan/commit/22847fcb3)
+(`_set_pg_timeouts_xpu_aware`) stays load-bearing until #183625
+actually lands.
+
 ---
 
 ## 2026-05-22 — First upstream PyTorch PR filed; 2-week summary

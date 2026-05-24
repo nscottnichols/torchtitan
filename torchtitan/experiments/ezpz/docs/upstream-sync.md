@@ -24,6 +24,17 @@ tests and checking against the saved baselines — see
 
 ---
 
+## 2026-05-23 (39th sync — DebugMode numerics debugger)
+
+Upstream merged in 1 commit (`19c567f76`).
+
+- **[`19c567f76` — Debug Numerics with DebugMode (#3323)](https://github.com/pytorch/torchtitan/pull/3323).**
+  Adds a DebugMode-based numerics debugger as `torchtitan/tools/numerics_debugging/{activation_tracer,compare_numerics}.py` (+~2 KLOC), with a corresponding `.claude/skills/numerics_debugging/` skill and a `make_fx_tracer.py` tweak under `experiments/graph_trainer/`. Captures per-op activations between two runs to spot bitwise/numeric drift (eager vs aot_fx_trace, FSDP vs no-FSDP, before vs after a refactor). **No ezpz replay needed** — pure tooling addition, doesn't change any code path ezpz exercises.
+
+Side benefit: the new `numerics_debugging` skill is automatically picked up in this session and could be useful next time we need to bisect a silent loss-curve divergence (e.g. the kind of bug bf16-master RMSNorm-freeze was).
+
+---
+
 ## 2026-05-22 (38th sync — MoE [6/n] dispatcher split + ChunkedCELoss/TP grad fix)
 
 Upstream merged in 4 commits (`cfe97c605..c2a3771a4`).
