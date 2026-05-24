@@ -75,7 +75,7 @@ docs/
 │       └── 2b-mds/figures/
 │
 ├── guides/                ★ Big findings + operational notes. Check before suggesting work.
-│   ├── bad-node-failover.md       ← Failover wrapper (N+spare nodes, swap on crash, retry)
+│   ├── bad-node-failover.md       ← Failover wrapper v2 (silent-hang watchdog, fixture tests). See ../../tests/failover/
 │   ├── training-dtype-bf16-norm-freeze.md  ← Root cause of v1 → v2 restart
 │   ├── loss-reporting-tp-dist-reduce.md    ← TP > 1 loss off by dp_world_size (PR #3204)
 │   ├── known-issues.md            ← Catch-all live workarounds
@@ -95,7 +95,7 @@ docs/
 │   │   │   ├── 20260413-143800-throughput-20b-n2.md
 │   │   │   ├── 20260414-production-20b-n512.md
 │   │   │   ├── 20260418-80b-tp2-restored.md
-│   │   │   ├── 20260511-20b-n512-hang-8479579.md   ← Silent-hang incident (failover wrapper does NOT cover this yet)
+│   │   │   ├── 20260511-20b-n512-hang-8479579.md   ← Silent-hang incident. Now handled by --timeout watchdog (2026-05-23).
 │   │   │   └── figures/
 │   │   ├── polaris/               ← Polaris (A100) reports
 │   │   │   ├── 20260412-160749-smoke-n2.md
