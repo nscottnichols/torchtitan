@@ -1,7 +1,16 @@
 # Bad-node failover for production training
 
-> Status: **v1 in production** as of 2026-05-11. Covers crash modes
-> only; **does not handle silent hangs** (see [Limitations](#limitations)).
+> Status: **v2 in production** as of 2026-05-23.
+>
+> v2 (2026-05-13 → 2026-05-23) added: silent-hang detection via
+> `ezpz launch --timeout` watchdog (PR `eefccfc9d`), ANSI-aware
+> 'Execution finished with N' parsing (`94a8fda66`), unified
+> walltime + crash regex (`0d93a1e91`), and a fixture-based test
+> harness under [`tests/failover/`](../../tests/failover/) that
+> verifies the rc-determination logic against 9 synthetic log
+> fixtures (one per known failure mode). Before any future edit to
+> `failover_lib.sh`, run `bash tests/failover/run_tests.sh` to
+> verify behavior — all 9 fixtures must pass.
 
 ## Why this exists
 
@@ -159,19 +168,29 @@ so `failover_swap_in` can match against `active.hostfile` cleanly.
 
 ## Limitations
 
-### Silent hangs are not handled
+### Silent hangs — handled by `--timeout` watchdog (2026-05-23)
 
-**Critical gap.** A job can stop making progress without crashing —
-e.g. job [`8479579`](../experiments/agpt/aurora/20260511-20b-n512-hang-8479579.md)
-(2026-05-11): trained 3 steps after resume, then **stopped logging
-for 5 hours** while staying in PBS `R` state and continuing to send
-W&B heartbeats from rank-0. Hypothesis: rank-0 stuck in a
-`dist.barrier()` waiting for a bad-node rank that never checks in.
+The wrapper now injects `--timeout=$FAILOVER_IDLE_TIMEOUT` (default
+1800s = 30min) into `ezpz launch` invocations. If the launched
+process emits no output for that long, `ezpz launch` sends SIGTERM
+to the inner mpiexec and exits 124. The wrapper treats exit 124 as
+a bad-node failure: scrape (typically no specific host since the
+hang IS the silence), `failover_swap_one_blind`, retry.
 
-The current wrapper retries on **non-zero exit only**. A no-progress
-watchdog (poll log mtime every N min, qdel + retry if stale) is
-filed as a v2 follow-up. Until then, **monitor 12h jobs manually**
-and `qdel` if you see no log activity for 30+ min.
+Requires `ezpz >= 0.15.1` in the venv (all 3 v2 production clones
+upgraded 2026-05-23).
+
+Override the timeout via env: `FAILOVER_IDLE_TIMEOUT=0` disables
+the watchdog; bump to e.g. `3600` for longer legitimate quiet
+windows (long ckpt saves, etc.). 1800s was chosen because the
+longest observed legitimate quiet period was a 19-min async ckpt
+save at 20B 512N — 30 min leaves comfortable headroom.
+
+Reference incident:
+[`8479579`](../experiments/agpt/aurora/20260511-20b-n512-hang-8479579.md)
+(2026-05-11) trained 3 steps after resume, then stopped logging
+for 5 hours in PBS `R` state. That kind of failure now exits 124
+within `FAILOVER_IDLE_TIMEOUT` seconds and triggers retry.
 
 ### Walltime hits don't retry
 

@@ -2,7 +2,7 @@
 
 > **Living document** — updated as jobs complete and new runs are submitted.
 >
-> Last updated: 2026-05-22
+> Last updated: 2026-05-23
 
 ## Scaling Performance
 
@@ -31,9 +31,9 @@ for the diagnosis.
 
 | Model | Nodes | Cumulative steps | Loss | Tokens | Latest job | Status |
 |-------|------:|-----------------:|-----:|-------:|------------|--------|
-| 2B  | 512 | **13,200** (persisted) / 13,400 (logged) | **2.79** | **1.33T** (28.4%) | [`8485509`](agpt/2b/n512/README.md#log-8485509) + [`8485511`](agpt/2b/n512/README.md#log-8485511) | Both walltime-finished after ~1h20m each; both stuck retracing the same step-13201→13400 window because step-13300 ckpt is incomplete on disk. Latest usable ckpt: step-13200. |
-| 20B | 512 | **800** (persisted) / 1,000 (logged)    | **3.34** | **81B** (1.7%)    | [`8481645`](agpt/20b/n512/README.md#log-8481645) | **+200 logged training steps** (failover wrapper, 522 nodes); killed by bad node `10.115.76.36` @ 3h26m. **No new ckpt persisted** — step-900 async save was killed mid-write. Continuation will retrace from step-800. |
-| 80B | 512 | — | — | — | [`8485512`](agpt/80b/n512/README.md#log-8485512) | **Q** — fresh 80B with all 4 failover fixes live; **`8503077` Q at 2058N stress test** (2048 active + 10 spare). |
+| 2B  | 512 | **13,200** (persisted) | **2.79** | **1.33T** (28.4%) | [`8505121`](agpt/2b/n512/README.md#log-8505121) R | Async-mode + flare-saturation wall: chain hits step-13400, async save kills cluster, no new persisted ckpt. Affected by the async-mode regression — see [Known Issues](../guides/known-issues.md#--checkpointasync-modeasync-kills-the-cluster-at-20b-512n). |
+| 20B | 512 | **800** (persisted) | **3.34** | **81B** (1.7%)    | [`8505258`](agpt/20b/n512/README.md) Q (sync-mode) | All dispatches since 2026-05-03 lost to async-save cluster cascade. Switching to `CHECKPOINT_ASYNC_MODE=disabled` on 2026-05-23; live test pending. |
+| 80B | 256 | — | — | — | [`8505222`](agpt/80b/n512/README.md) Q (fat-spares cont) | 5 attempts on 2026-05-23 all died in init from bad-node prevalence. `8505221` tried `select=276` (20 spares) + `FAILOVER_MAX_RETRIES=5` — still couldn't get past init. Aurora environmental issue. |
 
 > **Failover wrapper validated 2026-05-21**: [`8481646`](agpt/20b/n256/README.md#log-8481646) (20B 256N) hit a real Aurora gloo crash, the wrapper auto-detected the bad node, swapped in a spare, and retried — **first end-to-end production proof of the swap-and-retry path**. See [failover writeup](../experiments/agpt/aurora/20260521-failover-validated-8481646.md).
 
@@ -41,8 +41,8 @@ for the diagnosis.
 
 | Model | Nodes | Cumulative steps | Loss | Tokens | Latest job | Status |
 |-------|------:|-----------------:|-----:|-------:|------------|--------|
-| 2B  | 256 | **13,000** (persisted) | **2.81** | **655B** (14.0%) | [`8470101`](agpt/2b/n256/README.md#log-8470101) | Done; latest complete ckpt step-13000 (130/130 ckpts complete) |
-| 20B | 256 | **300** (persisted) / 500 (logged) | **4.12** | **15B** (0.32%) | [`8481646`](agpt/20b/n256/README.md#log-8481646) | **Failover wrapper validated end-to-end** (see writeup) but no new ckpt persisted — same async-save-killed-mid-write problem. Three weeks of dispatches all retracing step 301→500 with no on-disk progress past step-300. |
+| 2B  | 256 | **25,500** (persisted) | **2.74** | **1.28T** (27.4%) | [`8505119`](agpt/2b/n256/README.md) → [`8505175`](agpt/2b/n256/README.md) Q | **Only trajectory making consistent on-disk progress.** Async-mode + interval=100 works cleanly at this scale (3,073 files/save). +12,500 fresh persisted steps in the past 30 hours (step-13K → step-25.5K). |
+| 20B | 256 | **300** (persisted) / 326 (in-RAM as of 2026-05-23) | **4.79** | **15B** (0.32%) | [`8505123`](agpt/20b/n256/README.md) R | Same async-save wall. Switching to `CHECKPOINT_ASYNC_MODE=disabled` on 2026-05-23; queued continuations `8505255-57` will be the live test. |
 
 ### Other jobs
 

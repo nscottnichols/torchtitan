@@ -2,6 +2,46 @@
 
 Troubleshooting reference for running ezpz experiments across ALCF machines.
 
+## `--checkpoint.async-mode=async` kills the cluster at 20B 512N+
+
+**Symptoms:** 20B 512N runs reach a `step-N00` boundary, the async
+ckpt save fires, and within ~15-20 min the entire 6,144-rank cluster
+gets a gloo `Connection closed by peer` cascade. The save dir
+(`outputs/checkpoints/.../step-N00/`) is created but never gets a
+`.metadata` file — it's an empty / incomplete partial save. Resume
+falls back to the previous complete ckpt and re-trains those steps.
+
+**Root cause (diagnosed 2026-05-23):** every 20B 512N save on disk
+between step-200 and step-800 happened on 2026-05-01 + 2026-05-03,
+**before** the submit script added `--checkpoint.async-mode=async`.
+After that flag landed (sometime between May 3 and May 11), nothing
+has persisted past step-100 on the chain. The flag streams the 244 GB
+6,144-shard ckpt to flare in the background concurrently with gloo
+training-step heartbeat. At 6,144+ ranks, the concurrent write
+pressure on flare + gloo backs up, a peer times out, cascade.
+
+**Affects:** 20B 512N (confirmed). Likely 80B at any production scale
+(244 GB+ ckpts on flare-shared trees). Does **not** affect 2B at any
+scale (3,073 files / smaller ckpt → flare handles it), nor 20B 256N
+where step-200/300 saved fine before the async switch and may save
+fine again.
+
+**Workaround:** Submit with `CHECKPOINT_ASYNC_MODE=disabled`:
+
+```bash
+qsub -l select=522 \
+    -v NHOSTS_TRAIN=512,FAILOVER_MAX_RETRIES=2,CHECKPOINT_ASYNC_MODE=disabled \
+    scripts/submit_agpt_20b_aurora_venv_failover.sh
+```
+
+Trade-off: sync saves *block* training. At 244 GB / 6,144 shards,
+expect 5-15 min of save time at interval=100. ~10% MFU hit, but
+that beats 0% on-disk persistence.
+
+**Investigation status:** sync-mode submits queued 2026-05-23 evening
+(`8505258` 20B 512N, `8505255-57` 20B 256N). Live test of the
+hypothesis is pending dispatch.
+
 ## `training.dtype = bfloat16` silently freezes RMSNorm weights
 
 **Symptoms:** RMSNorm `weight` parameters stay exactly at their `1.0`

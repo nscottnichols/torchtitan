@@ -4,6 +4,129 @@ Running log of what's happening, session by session. Most recent first.
 
 ---
 
+## 2026-05-23 — Failover wrapper hardening: tests, ANSI fix, async-mode regression diagnosed
+
+### Failover-wrapper test harness + 2 more wrapper bugs
+
+Built `tests/failover/{run_tests.sh, fixtures/*.log}` — 9 synthetic
+log fixtures with byte-identical ANSI escapes, each reproducing one
+of the failure modes we've seen in production. The harness mirrors
+`failover_lib.sh`'s rc-determination block into a standalone
+`evaluate_rc()` function and asserts the expected `(rc, decision)`
+tuple for each fixture. Pattern: edit `failover_lib.sh` → update
+fixtures → run `bash tests/failover/run_tests.sh` here in the main
+repo → THEN push + pull into v2 clones. Stops the
+edit-push-pray-discover-bug-only-in-production loop that ate ~6
+production runs over the past 48h.
+
+Running the new tests immediately surfaced **2 more wrapper bugs**:
+
+1. **`grep -c ... || echo 0` produces `0\n0`** when grep matches
+   nothing → arithmetic eval `syntax error (error token is "0")` →
+   the entire crash-line branch silently skipped. `grep -c` already
+   writes `0` to stdout on no-match; the `|| echo 0` fallback was
+   dead code that produced malformed output. Removed.
+2. **Walltime guard regex was a strict subset of crash-detect regex**
+   — only matched `Connection closed by peer | died from signal (9|11)`,
+   missing `OutOfMemoryError`, `UR_RESULT_ERROR`, `Timed out waiting`,
+   `EOFError`. So a real bad-node failure that surfaced as shell exit
+   143 (mpiexec SIGTERM after EOFError) got misclassified as a clean
+   walltime kill and the wrapper bailed without retry. Made both
+   regexes identical (the broader set).
+
+Both bugs silently active in production yesterday/today before fix.
+Commit `0d93a1e91` adds the harness + fixes; 9/9 tests pass in both
+the main repo and the 20B v2 production clone.
+
+### ANSI codes in 'Execution finished with N' parsing
+
+Earlier in the day, several jobs zombie-succeeded because the
+wrapper's `inner_rc` extraction returned empty on ANSI-coded log
+trailers:
+
+  Logged:  `Execution finished with \x1b[1;36m143\x1b[0m`
+  Regex:   `Execution finished with \[?[0-9]+\]?`
+  Match:   none (the `\[?` matches a literal `[` byte, but the
+           actual byte sequence is ESC + `[`)
+
+Fix `94a8fda66`: strip ANSI codes with `sed -r 's/\x1b\[[0-9;]*m//g'`
+before grepping the trailer.
+
+### Async-mode regression for 20B 512N — the actual root cause of
+"async ckpt save kills the cluster"
+
+Spent hours today investigating why 20B 512N hasn't persisted past
+`step-800` since 2026-05-03 — three weeks of dispatches all dying
+mid-save. Today found the **smoking gun**: every save on disk between
+step-200 and step-800 happened on 2026-05-01 + 2026-05-03 under the
+**default checkpoint mode (sync)**. The submit script switched to
+`--checkpoint.async-mode=async` sometime between May 3 and May 11,
+and nothing has persisted past step-100 on the 20B 512N chain since.
+
+The previous "files-per-save / Lustre saturation" hypothesis was
+half right but missed the actual mechanism: at 6,144 ranks, async
+saves stream the 244 GB ckpt to flare in the background AT THE SAME
+TIME as the gloo training-step heartbeat. Either the writes or the
+gloo traffic backs up, one peer times out, cascade. Sync saves block
+training while writing — no overlap, no cascade.
+
+Submitted `8505258` (20B 512N) + `8505259` (cont) with
+`CHECKPOINT_ASYNC_MODE=disabled` (= true sync). Also queued
+`8505255/56/57` (20B 256N sync variants). 2B chains stay on async
+(those have always saved cleanly at this scale).
+
+### Production chain progress today
+
+**2B 256N**: persisted **step-25,000 → step-25,500** over 2 dispatches
+(8503506 walltime-finished + 8505119 advanced ckpts then exited 127).
++500 fresh steps. Loss 2.74. The only trajectory actually moving.
+
+**20B 256N**: still wall-bound at `step-300`. Six dispatches today,
+each reached in-RAM step 308-326 then died from bad-node mid-training
+before crossing the next 100-step save boundary. Wrapper detection
+working correctly (validated against fixtures); the wall is genuine
+Aurora bad-node prevalence at the per-dispatch survival window.
+
+**20B 512N**: still wall-bound at `step-800`. Four dispatches today,
+all 3-attempt exhausted at init before any training step. Hopes
+pinned on the sync-mode resubmit (`8505258`).
+
+**80B 256N**: 0 persisted, 5 attempts today. Bumped to `select=276`
+(20 spares) + `FAILOVER_MAX_RETRIES=5` for `8505221` — still died.
+Environment too unstable for 80B init right now.
+
+### Wrapper fix chronology (today)
+
+| Commit | Fix |
+|--------|-----|
+| `94a8fda66` | Strip ANSI codes before parsing 'Execution finished with N' |
+| `0d93a1e91` | Test fixtures (force-added .log) |
+| `4310258` | Drop `\|\| echo 0` bug + walltime-guard regex parity |
+
+All 3 commits pulled into all 3 v2 production clones. Tests pass in
+all clones.
+
+### `ezpz` upgraded to 0.15.1 in all v2 clones
+
+Got the `--timeout T` + `--retries N` flags from ezpz PR #136. Wired
+`--timeout=1800` into `failover_lib.sh` (commit `eefccfc9d`,
+yesterday). Catches silent-hang failure mode that previously was
+invisible (the 8479579 incident — 5h of W&B heartbeat alive but
+training metrics dead). Exit 124 from the watchdog now routes
+through swap-and-retry.
+
+### What's next
+
+- Once `8505123` (20B 256N, currently R, in-RAM step 326) either
+  crosses step-400 ckpt save or dies, the sync-mode 20B chains
+  (`8505255` for 256N, `8505258` for 512N) take over. That's the
+  live test of the async→sync regression hypothesis.
+- Eval batch `8505205` (13 fresh 2B 256N ckpts, step 14K → 25.1K)
+  running on capacity; 5/13 done so far. Will refresh plots +
+  README tables once all land.
+
+---
+
 ## 2026-05-22 — First upstream PyTorch PR filed; 2-week summary
 
 ### Upstream PyTorch PR for xccl `_set_pg_timeout` dispatch
