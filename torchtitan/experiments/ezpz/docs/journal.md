@@ -32,11 +32,20 @@ Merged 7 upstream commits (`19c567f76..af33f7638`):
   for ezpz.
 
 Quick imports smoke (`python3 -c "import torchtitan.experiments.ezpz.{agpt,moe.model}"`)
-passes. Live agpt + moe 2N smokes pending the next compute alloc.
+passes. Live 2N smokes (job 12467455) on Sunspot:
 
-Two action items captured in
-[`docs/upstream-sync.md`](upstream-sync.md): smoke-test before next
-production push, and re-try `--debug.deterministic` on MoE+XPU.
+- `agpt_2b` and `moe_2b_ep` clean post-merge, numerically identical
+  to the 2026-05-22 baselines.
+- `--debug.deterministic` on MoE+XPU **still fails**. PR #3146 was
+  supposed to fix the `_histc_xpu` blocker via a `histc → bincount`
+  swap, but the merged diff is missing that change — only the
+  `aten.topk.default` save-list addition landed. Verified via the
+  GitHub API that PR #3146's only file change is
+  `activation_checkpoint.py`. The `histc` call at
+  `common/moe.py:262` is untouched. Smoke report at
+  [`docs/experiments/moe/sunspot/20260527-smoke-n2-40th-sync.md`](experiments/moe/sunspot/20260527-smoke-n2-40th-sync.md).
+
+Action item: file upstream issue for the incomplete PR #3146.
 
 ---
 

@@ -39,14 +39,16 @@ Upstream merged in 7 commits (`19c567f76..af33f7638`).
   fix 3 import paths in `ezpz/agpt/__init__.py` + `ezpz/moe/model.py`.
 
 - **[`7074b056a` — \[MoE\]\[SAC\] Use deterministic ops in MoE routing (#3146)](https://github.com/pytorch/torchtitan/pull/3146).**
-  Replaces `torch.histc` with `torch.bincount` in
-  `TokenChoiceTopKRouter`/`TokenReorderer` and adds `aten.topk.default`
-  to the SAC save list. **This is the upstream fix for the
-  `_histc_xpu does not have a deterministic implementation` blocker
-  we hit on 2026-05-21** (journal entry: "`--debug.deterministic` is
-  incompatible with MoE on XPU"). No ezpz replay needed — we inherit
-  the fix transitively. `--debug.deterministic` on MoE+XPU should
-  now work, unblocking bit-exact regression gates.
+  Commit message advertises `histc → bincount` swap in
+  `TokenChoiceTopKRouter`/`TokenReorderer` plus `aten.topk.default`
+  on the SAC save list — but **the merged diff only contains the
+  save-list change**. Smoke-tested 2026-05-27
+  ([report](experiments/moe/sunspot/20260527-smoke-n2-40th-sync.md)):
+  `--debug.deterministic` on MoE+XPU **still fails** with the same
+  `_histc_xpu` error from 2026-05-21. The `histc` call at
+  `torchtitan/models/common/moe.py:262` is untouched. Verified via
+  GitHub API that PR #3146's only file change is
+  `activation_checkpoint.py`. Action item: file upstream issue.
 
 - **[`7fcd9beac` — \[MoE\]\[7/n\] Keep 3D tensors through MoE, flatten inside GroupedExperts (#3423)](https://github.com/pytorch/torchtitan/pull/3423).**
   Continues the MoE refactor from PR #3386/#3389. Touches
@@ -78,12 +80,22 @@ Upstream merged in 7 commits (`19c567f76..af33f7638`).
 [**`b052f29e4` — fix(ezpz): replay PR #3398 — import Linear/RMSNorm from nn_modules**](https://github.com/saforem2/torchtitan/commit/b052f29e4).
 Pure import-path swap; class API is unchanged.
 
+### Smoke results (2026-05-27)
+
+Job 12467455 on 2N Sunspot. Report:
+[`docs/experiments/moe/sunspot/20260527-smoke-n2-40th-sync.md`](experiments/moe/sunspot/20260527-smoke-n2-40th-sync.md).
+
+- `agpt_2b` clean (24.34 GiB, matches 2026-05-22 baseline).
+- `moe_2b_ep` at new LBS=2 default clean (27.09 GiB, ~3,200 TPS,
+  9.4% MFU — numerically identical to 2026-05-22).
+- `moe_2b_ep` with `--debug.deterministic` **still fails**: PR #3146
+  is incomplete (see PR #3146 note above).
+
 ### Action items
 
-- Smoke-test agpt_2b + moe_2b_ep on 2N Sunspot before next
-  production push.
-- Try `--debug.deterministic` on MoE+XPU again now that PR #3146
-  has landed; confirm it actually unblocks.
+- File upstream issue on `pytorch/torchtitan` for the incomplete
+  PR #3146 (commit message describes a `histc → bincount` swap that
+  isn't in the diff).
 
 ---
 
