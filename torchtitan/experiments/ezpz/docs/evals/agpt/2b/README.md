@@ -249,37 +249,45 @@ The full sweep table has two visible step-range gaps on the 256N row:
 - **step-2,200 → step-13,800** (no evals between step-2,000 and step-14,000)
 - **step-25,200 → step-35,900** (no evals between step-25,100 and step-36,000)
 
-**These gaps are NOT missing data — the underlying ckpts exist in a
-different clone the eval pipeline doesn't currently scan.**
+**Root cause (2026-05-27 forensics):** job **`8505252`** (the 2026-05-25
+12h continuation of the 2B 256N chain) was submitted with
+`-v CKPT_INTERVAL=50,CKPT_KEEP_LATEST_K=10` — a one-off attempt to
+get finer-grained ckpts while bounding disk usage. The
+`keep_latest_k=10` setting triggers torchtitan's
+`_purge_stale_checkpoints()` (`components/checkpoint.py:881`) which
+deleted every prior step-* dir except the latest 10 as soon as 8505252
+started saving. That nuked **~334 ckpts** (step-100..step-35,500 at
+interval-100), plus the early step-2,100..step-12,000 range that
+8470100 / 8470101 had written.
 
-The 2B 256N chain has trained across two physical clone locations:
+Before 8505252:
+- Steps 100..9,500 had been ckpt'd by the original 2026-05-07/08
+  dispatches (8470100, 8470101) into
+  `/flare/AuroraGPT/foremans/projects/saforem2/torchtitan/outputs/checkpoints/`
+- Steps 2,100..30,791 had been ckpt'd by 8470100, 8470101, 8481320,
+  8505175 into
+  `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/outputs/checkpoints/`
 
-| Clone path | Ckpt range on disk | Count |
-|------------|--------------------|------:|
-| `/flare/AuroraGPT/foremans/projects/saforem2/torchtitan/outputs/checkpoints/agpt-2b-sophiag-olmo-mix-1124-n256-gbs6144/` | step **100 → 9,500** | 95 |
-| `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/outputs/checkpoints/agpt-2b-sophiag-olmo-mix-1124-n256-gbs6144/` | step **35,600 → 50,900+** | 154 |
+After 8505252 (May 25 onwards):
+- The **legacy clone** still has step 100..9,500 (95 ckpts) — the
+  purge only ran in the v2 clone, since that's where 8505252 was
+  writing
+- The **v2 clone** now only has step 35,600..50,900+ (154 ckpts and
+  growing — later dispatches went back to keep-latest-k=0, so they
+  accumulate)
 
-The eval script (`scripts/eval/eval-2b-v2.sh`) only points at
-`V2_REPO=/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/`
-so it can't see the older ckpts in the legacy clone. The reason the
-sweep table has rows at step-200..2,000 + step-14,000..25,100 (i.e.
-straddling the two visible gaps) is because earlier eval batches were
-manually run against the old clone before the v2 clone existed, and
-their results.json files live under
-`outputs/evals/agpt-2b-v2-256n/step-{N}/` regardless of where the
-underlying ckpts came from. The newer dispatches (which only write
-to the v2 clone) explain the step-35,600+ contiguous run.
+**The 95 legacy-clone ckpts (step 100..9,500) are still usable** for
+eval — point `eval-2b-v2.sh`'s `V2_REPO` env var at the legacy clone
+path to evaluate them. The other ~26K steps of missing ckpts
+(step 9,600..35,500) were unique to the v2 clone and got purged.
 
-To fill the gaps: re-run eval against the old-clone ckpts. The
-existing `eval-2b-v2.sh` script needs the `V2_REPO` env override or
-a `CKPT_NAME` that explicitly points at the legacy clone — once
-done, the ~10,000 → 25,000 step range would be filled (step
-9,500..14,000 range still has the legitimate gap between when the
-old clone stopped writing and the new clone picked up).
-
-Action item (open): wire the eval-2b-v2.sh script to glob both clone
-paths, or run it once with `V2_REPO=/flare/.../projects/saforem2/torchtitan/`
-to fill in steps 100..9,500.
+Action items:
+- Re-eval the legacy-clone ckpts (`V2_REPO=/flare/.../projects/saforem2/torchtitan/`)
+  to fill in steps 100..9,500
+- Lock down `CKPT_KEEP_LATEST_K=0` (the default) in all submit
+  scripts — don't allow `-v` overrides to silently destroy older
+  ckpts. Possibly add a guard like
+  `[[ $CKPT_KEEP_LATEST_K -gt 0 ]] && warn-loudly-or-bail`.
 
 ### Re-render
 
