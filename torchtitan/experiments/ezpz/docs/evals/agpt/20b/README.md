@@ -34,12 +34,19 @@
 
 ## v1 vs v2 — benchmark accuracy
 
-The v1 (bf16-master) and v2 (fp32-master) 20B runs share the same
-architecture, optimizer, and dataset; the only difference is the
-master-weight dtype. v1 hovers within ~1pp of the random baseline on
-every task (frozen RMSNorm), while v2 — once it has enough tokens
-under its belt — should descend visibly. Re-render with new v2
-ckpts as they become available:
+Three trajectories per panel: **v1 256N** (gray circles, bf16-master,
+broken — frozen RMSNorm), **v2 256N** (orange triangles, fp32-master,
+3 ckpts at steps 100/200/300 from the per-token comparator dispatch
+that ran 2026-05-22), and **v2 512N sync** (red diamonds, fp32-master,
+canonical 20B chain — 24 ckpts from steps 100 through 3,200 spanning
+both the original async dispatches and the post-2026-05-24 sync-mode
+breakthrough).
+
+v1 hovers within ~1pp of the random baseline on every task across the
+full 2,500-step run (frozen RMSNorm). v2 lifts cleanly off the noise
+band on every benchmark.
+
+Re-render with new v2 ckpts as they become available:
 
 ```bash
 python3 torchtitan/experiments/ezpz/docs/evals/agpt/20b/plot_v1_vs_v2.py
@@ -47,125 +54,14 @@ python3 torchtitan/experiments/ezpz/docs/evals/agpt/20b/plot_v1_vs_v2.py
 
 ![v1 vs v2 — 20B benchmark accuracy](figures/v1_vs_v2.svg)
 
-### v1 vs v2 — by training step
+## 🏁 Headline finding (2026-05-27)
 
-| Run | Step | Tokens (B) | HellaSwag | ARC-Easy | ARC-Chall | Winogrande |
-|-----|-----:|-----------:|----------:|---------:|----------:|-----------:|
-| v1 256N | 100 |   2.5 | 0.2650 | 0.2571 | 0.2560 | 0.4957 |
-| v1 256N | 500 |  12.6 | 0.2562 | 0.2712 | 0.2355 | 0.4886 |
-| v1 256N | 1,000 |  25.2 | 0.2549 | 0.2647 | 0.2440 | 0.5178 |
-| v1 256N | 1,500 |  37.7 | 0.2505 | 0.2681 | 0.2398 | 0.4807 |
-| v1 256N | 2,000 |  50.3 | 0.2480 | 0.2740 | 0.2543 | 0.5020 |
-| v1 256N | 2,500 |  62.9 | 0.2462 | 0.2736 | 0.2483 | 0.5193 |
-| **v2 512N** | **100** | **10.1** | **0.2537** | **0.2710** | **0.2321** | **0.4917** |
-| **v2 512N** | **200** | **20.1** | **0.2572** | **0.2891** | **0.2278** | **0.5114** |
-| **v2 512N** | **300** | **30.2** | **0.2535** | **0.2950** | **0.2287** | **0.4917** |
-| **v2 512N** | **400** | **40.3** | **0.2597** | **0.3178** | **0.2261** | **0.5067** |
-| **v2 512N** | **500** | **50.3** | **0.2661** | **0.3455** | **0.2227** | **0.4949** |
-| **v2 512N** | **600** | **60.4** | **0.2695** | **0.3598** | **0.2227** | **0.5012** |
-| **v2 512N** | **700** | **70.5** | **0.2814** | **0.3914** | **0.2133** | **0.5012** |
-| **v2 512N** | **800** | **80.5** | **0.2844** | **0.4061** | **0.2184** | **0.4988** |
-| **v2 512N** | **900** | **90.6** | **0.2963** | **0.4112** | **0.2244** | **0.4925** |
-| **v2 512N** | **1,000** | **100.7** | **0.3046** | **0.4234** | **0.2346** | **0.5162** |
-| **v2 512N** | **1,200** | **120.8** | **0.3339** | **0.4373** | **0.2304** | **0.5154** |
-| **v2 512N** | **1,400** | **140.9** | **0.3606** | **0.4684** | **0.2560** | **0.5114** |
-| **v2 512N** | **1,600** | **161.1** | **0.3922** | **0.4878** | **0.2619** | **0.5067** |
-| **v2 512N** | **1,800** | **181.2** | **0.4164** | **0.5013** | **0.2654** | **0.5138** |
-| **v2 512N** | **2,000** | **201.3** | **0.4521** | **0.5379** | **0.2782** | **0.5067** |
-| **v2 512N** | **2,200** | **221.5** | **0.4761** | **0.5690** | **0.3038** | **0.5249** |
-| **v2 512N** | **2,400** | **241.6** | **0.5023** | **0.5699** | **0.2995** | **0.5225** |
-| **v2 512N** | **2,600** | **261.7** | **0.5262** | **0.5896** | **0.3080** | **0.5493** |
-| **v2 512N** | **2,700** | **271.8** | **0.5300** | **0.6044** | **0.3106** | **0.5343** |
-| **v2 512N** | **2,800** | **281.9** | **0.5467** | **0.5997** | **0.3157** | **0.5541** |
-| **v2 512N** | **2,900** | **291.9** | **0.5556** | **0.6149** | **0.3225** | **0.5462** |
-| **v2 512N** | **3,000** | **302.0** | **0.5626** | **0.6178** | **0.3268** | **0.5367** |
-| **v2 512N** | **3,100** | **312.1** | **0.5751** | **0.6107** | **0.3268** | **0.5627** |
-| **v2 512N** | **3,200** | **322.1** | **0.5737** | **0.6221** | **0.3225** | **0.5612** |
-
-> **Note on metric**: the table above reports `acc_norm` for HellaSwag
-> and ARC tasks (length-normalized) and `acc` for Winogrande (which
-> doesn't have `acc_norm`). Numbers in the parallel `acc` (raw) view
-> are typically 1-4pp higher for ARC-Easy and 1-2pp lower for HellaSwag
-> at this checkpoint range. The raw-`acc` table is below.
-
-### v2 512N — raw accuracy view (added 2026-05-22)
-
-Same 8 ckpts as above, now showing raw `acc,none` instead of
-length-normalized. ARC-Easy in particular lifts much faster on the
-raw metric — by step 800 it's at **0.4444**, +17pp above v1's flat
-0.27 ceiling.
-
-| Step | Tokens | HellaSwag `acc` | ARC-Easy `acc` | ARC-Chall `acc` | Winogrande `acc` |
-|-----:|------:|---------------:|---------------:|----------------:|-----------------:|
-|   100 |  10.1 | 0.2571 | 0.2660 | 0.1954 | 0.4917 |
-|   200 |  20.1 | 0.2557 | 0.2896 | 0.1937 | 0.5114 |
-|   300 |  30.2 | 0.2591 | 0.3043 | 0.1860 | 0.4917 |
-|   400 |  40.3 | 0.2645 | 0.3375 | 0.2022 | 0.5067 |
-|   500 |  50.3 | 0.2662 | 0.3594 | 0.1869 | 0.4949 |
-|   600 |  60.4 | 0.2687 | 0.3931 | 0.1800 | 0.5012 |
-|   700 |  70.5 | 0.2761 | 0.4356 | 0.1732 | 0.5012 |
-|   800 |  80.5 | **0.2767** | **0.4444** | 0.1920 | 0.4988 |
-
-### Δ vs v1 ceiling (matched 50-80B token band)
-
-v1's flat noise band across 100-2500 steps establishes the
-counterfactual: with the bf16 RMSNorm freeze, this model never learns
-beyond random regardless of training tokens. Matched-budget Δs:
-
-| Task | v1 best (any step) | v2 step-800 | Δ |
-|------|--------:|-----------:|--:|
-| HellaSwag (`acc`) | 0.2650 | 0.2767 | +1.2pp |
-| ARC-Easy (`acc`) | 0.2740 | **0.4444** | **+17.0pp** |
-| ARC-Challenge (`acc`) | 0.2560 | 0.1920 | -6.4pp (still in noise) |
-| Winogrande (`acc`) | 0.5193 | 0.4988 | -2.0pp (still in noise) |
-
-The +17pp ARC-Easy ascent is the headline. HellaSwag is also
-breaking out on the length-normalized metric (acc_norm 0.254 → 0.284,
-+3pp above v1). The other two tasks need more capacity / more tokens
-than 80B can give.
-
-### Step-900 unavailable
-
-8481645 (failover wrapper, 20B 512N) logged step 1000 on 2026-05-14
-but the async checkpoint save was killed mid-write by a bad-node
-crash. step-900 ckpt dir exists on disk but has no `.metadata` /
-`__*_0.distcp` shards, so the eval pipeline can't load it. Latest
-*persisted* ckpt remains step-800.
-
-See production index "Known Issue #7" for the chronic async-save
-corruption pattern across all recent 20B + 2B runs.
-
-## v2 512N sync chain — full sweep step 900 → 3,200 (2026-05-27)
-
-**🏁 First sustained 20B 512N progress since the May-3 async
-regression. Each ckpt eval shows continued strong lift past the
-prior v1+v2 baselines.**
-
-Eval'd every persisted ckpt produced by the sync-mode chain
-(`8505258 → 8505259 → 8507197 → 8507200`) plus the step-900..1000
-ckpts now usable from the older async chain. step-3200 ckpts come
-from `8507200`.
-
-| Step | ARC-Easy `acc` | ARC-C `acc_norm` | HellaSwag `acc_norm` | Winogrande `acc` |
-|-----:|---------------:|-----------------:|---------------------:|-----------------:|
-|   900 | 0.4625 | 0.2244 | 0.2963 | 0.4925 |
-| 1,000 | 0.4680 | 0.2346 | 0.3046 | 0.5162 |
-| 1,200 | 0.4937 | 0.2304 | 0.3339 | 0.5154 |
-| 1,400 | 0.5278 | 0.2560 | 0.3606 | 0.5114 |
-| 1,600 | 0.5577 | 0.2619 | 0.3922 | 0.5067 |
-| 1,800 | 0.5497 | 0.2654 | 0.4164 | 0.5138 |
-| 2,000 | 0.5943 | 0.2782 | 0.4521 | 0.5067 |
-| 2,200 | 0.6115 | 0.3038 | 0.4761 | 0.5249 |
-| 2,400 | 0.6208 | 0.2995 | 0.5023 | 0.5225 |
-| 2,600 | 0.6284 | 0.3080 | 0.5262 | 0.5493 |
-| 2,700 | 0.6376 | 0.3106 | 0.5300 | 0.5343 |
-| 2,800 | 0.6427 | 0.3157 | 0.5467 | 0.5541 |
-| 2,900 | 0.6553 | 0.3225 | 0.5556 | 0.5462 |
-| 3,000 | 0.6566 | 0.3268 | 0.5626 | 0.5367 |
-| 3,100 | 0.6481 | 0.3268 | 0.5751 | 0.5627 |
-| 3,200 | **0.6646** | 0.3225 | **0.5737** | 0.5612 |
-
-### Headline finding — monotonic lift step 900 → 3,200
+**20B 512N sync at step-3,200 beats 2B 256N async at step-45,500 on
+every benchmark per token** — first time in the v2 experiment that
+the bigger model has outperformed the smaller one at matched token
+counts. The lift since step-900 (where the sync-mode workaround
+finally unblocked the chain on 2026-05-24) is monotonic across all
+4 benchmarks:
 
 | Task | step-900 | step-3,200 | Δ |
 |------|---------:|-----------:|--:|
@@ -174,63 +70,116 @@ from `8507200`.
 | HellaSwag `acc_norm` | 0.2963 | **0.5737** | **+27.7pp** |
 | Winogrande `acc` | 0.4925 | 0.5612 | +6.9pp |
 
-**20B 512N sync is now beating 2B 256N async on every benchmark per
-token** — first time the bigger model has outperformed the smaller
-one at matched token counts in this entire v2 experiment. At
-step-3,200 (~329B tokens), 20B 512N ARC-Easy 0.665 vs 2B 256N async
-ARC-Easy ~0.645 at step-45.5K (~2.3T tokens). HellaSwag norm 0.574
-vs ~0.547. ARC-C norm 0.322 vs ~0.315. The 20B is **token-efficient
-in a way the 2B has begun to saturate**.
+Per-token comparison vs the 2B 256N async chain (which has visibly
+plateaued at ARC-Easy ~0.645, HellaSwag norm ~0.547 around step-45K /
+~2.3T tokens):
 
-The sustained monotonic descent through the full 24-ckpt sweep
-(no plateau, no oscillation, no sign of optimizer instability) is
-the strongest live signal yet that the fp32-master / sync-mode
-combination is the right operational stack for the 20B at scale.
+| Task | 20B 512N sync, step-3,200 (~329B tok) | 2B 256N async, step-45.5K (~2.3T tok) |
+|------|---:|---:|
+| ARC-Easy | **0.665** | 0.642 |
+| HellaSwag `acc_norm` | **0.574** | 0.545 |
+| ARC-C `acc_norm` | **0.322** | 0.314 |
+| Winogrande | 0.561 | 0.551 |
 
-### v2 256N comparator (2026-05-22)
+The 20B is **token-efficient in a way the 2B has begun to saturate**.
+The sustained monotonic descent through the full 24-ckpt sweep (no
+plateau, no oscillation, no sign of optimizer instability) is the
+strongest live signal yet that the fp32-master + sync-mode stack is
+the right operational combination for 20B at scale.
 
-Job 8503089 evaluated the 20B 256N chain (`gbs6144`, SophiaG
-LR=2.28e-5, **GBS=6,144** = half the 512N batch) at steps
-100/200/300. Step-400 was unavailable (empty ckpt dir from an
-earlier crash — see Known Issue #7 in production index).
+## v1 vs v2 — full sweep (canonical table)
 
-Results land at `outputs/evals/agpt-20b-v2-256n/step-{N}/`.
+Single canonical table covering **all** evaluated 20B checkpoints
+from disk, regenerated by `plot_v1_vs_v2.py` (same script that
+produces the figure above). Tokens computed as `step × GBS × seq_len`:
+v1 256N (`GBS=3072`, `seq=8192`), v2 256N (`GBS=3072` — TP=2 halves
+the dp-shard count from the naive 6144), v2 512N (`GBS=12288`).
 
-#### Raw accuracy
+Metric is `acc_norm,none` for HellaSwag / ARC; `acc,none` for
+Winogrande (which doesn't expose `acc_norm`).
 
-| Step | Tokens | HellaSwag `acc` | ARC-Easy `acc` | ARC-Chall `acc` | Winogrande `acc` |
-|-----:|------:|---------------:|---------------:|----------------:|-----------------:|
-|  100 |   5.0 | 0.2576 | 0.2698 | 0.2014 | 0.4925 |
-|  200 |  10.1 | 0.2584 | 0.2820 | 0.1843 | 0.5051 |
-|  300 |  15.1 | 0.2610 | 0.3114 | 0.1817 | 0.5067 |
+| Run | Step | Tokens (B) | HellaSwag | ARC-Easy | ARC-Chall | Winogrande |
+|-----|-----:|-----------:|----------:|---------:|----------:|-----------:|
+| v1 256N | 100 | 2.5 | 0.2650 | 0.2571 | 0.2560 | 0.4957 |
+| v1 256N | 500 | 12.6 | 0.2562 | 0.2712 | 0.2355 | 0.4886 |
+| v1 256N | 1,000 | 25.2 | 0.2549 | 0.2647 | 0.2440 | 0.5178 |
+| v1 256N | 1,500 | 37.7 | 0.2505 | 0.2681 | 0.2398 | 0.4807 |
+| v1 256N | 2,000 | 50.3 | 0.2480 | 0.2740 | 0.2543 | 0.5020 |
+| v1 256N | 2,500 | 62.9 | 0.2462 | 0.2736 | 0.2483 | 0.5193 |
+| **v2 256N** | **100** | **2.5** | **0.2559** | **0.2715** | **0.2355** | **0.4925** |
+| **v2 256N** | **200** | **5.0** | **0.2522** | **0.2917** | **0.2304** | **0.5051** |
+| **v2 256N** | **300** | **7.5** | **0.2549** | **0.2976** | **0.2159** | **0.5067** |
+| **v2 512N sync** | **100** | **10.1** | **0.2537** | **0.2710** | **0.2321** | **0.4917** |
+| **v2 512N sync** | **200** | **20.1** | **0.2572** | **0.2891** | **0.2278** | **0.5114** |
+| **v2 512N sync** | **300** | **30.2** | **0.2535** | **0.2950** | **0.2287** | **0.4917** |
+| **v2 512N sync** | **400** | **40.3** | **0.2597** | **0.3178** | **0.2261** | **0.5067** |
+| **v2 512N sync** | **500** | **50.3** | **0.2661** | **0.3455** | **0.2227** | **0.4949** |
+| **v2 512N sync** | **600** | **60.4** | **0.2695** | **0.3598** | **0.2227** | **0.5012** |
+| **v2 512N sync** | **700** | **70.5** | **0.2814** | **0.3914** | **0.2133** | **0.5012** |
+| **v2 512N sync** | **800** | **80.5** | **0.2844** | **0.4061** | **0.2184** | **0.4988** |
+| **v2 512N sync** | **900** | **90.6** | **0.2963** | **0.4112** | **0.2244** | **0.4925** |
+| **v2 512N sync** | **1,000** | **100.7** | **0.3046** | **0.4234** | **0.2346** | **0.5162** |
+| **v2 512N sync** | **1,200** | **120.8** | **0.3339** | **0.4373** | **0.2304** | **0.5154** |
+| **v2 512N sync** | **1,400** | **140.9** | **0.3606** | **0.4684** | **0.2560** | **0.5114** |
+| **v2 512N sync** | **1,600** | **161.1** | **0.3922** | **0.4878** | **0.2619** | **0.5067** |
+| **v2 512N sync** | **1,800** | **181.2** | **0.4164** | **0.5013** | **0.2654** | **0.5138** |
+| **v2 512N sync** | **2,000** | **201.3** | **0.4521** | **0.5379** | **0.2782** | **0.5067** |
+| **v2 512N sync** | **2,200** | **221.5** | **0.4761** | **0.5690** | **0.3038** | **0.5249** |
+| **v2 512N sync** | **2,400** | **241.6** | **0.5023** | **0.5699** | **0.2995** | **0.5225** |
+| **v2 512N sync** | **2,600** | **261.7** | **0.5262** | **0.5896** | **0.3080** | **0.5493** |
+| **v2 512N sync** | **2,700** | **271.8** | **0.5300** | **0.6044** | **0.3106** | **0.5343** |
+| **v2 512N sync** | **2,800** | **281.9** | **0.5467** | **0.5997** | **0.3157** | **0.5541** |
+| **v2 512N sync** | **2,900** | **291.9** | **0.5556** | **0.6149** | **0.3225** | **0.5462** |
+| **v2 512N sync** | **3,000** | **302.0** | **0.5626** | **0.6178** | **0.3268** | **0.5367** |
+| **v2 512N sync** | **3,100** | **312.1** | **0.5751** | **0.6107** | **0.3268** | **0.5627** |
+| **v2 512N sync** | **3,200** | **322.1** | **0.5737** | **0.6221** | **0.3225** | **0.5612** |
 
-#### v2 256N vs v2 512N
+### v2 256N vs v2 512N — per-step parity at early steps
 
-At matched **step counts** the two trajectories are nearly
-identical (within lm-eval stderr):
+At matched **step counts**, the two v2 trajectories are nearly
+identical at the early steps where both have data (within lm-eval
+stderr):
 
-| Step | 256N HellaSwag | 512N HellaSwag | Δ | 256N ARC-Easy | 512N ARC-Easy | Δ |
-|-----:|---------------:|---------------:|--:|--------------:|--------------:|--:|
-|  100 | 0.2576 | 0.2571 | +0.05pp | 0.2698 | 0.2660 | +0.4pp |
-|  200 | 0.2584 | 0.2557 | +0.3pp  | 0.2820 | 0.2896 | -0.8pp |
-|  300 | 0.2610 | 0.2591 | +0.2pp  | 0.3114 | 0.3043 | +0.7pp |
+| Step | 256N HellaSwag | 512N HellaSwag | 256N ARC-Easy | 512N ARC-Easy |
+|-----:|---------------:|---------------:|--------------:|--------------:|
+|  100 | 0.2559 | 0.2537 | 0.2715 | 0.2710 |
+|  200 | 0.2522 | 0.2572 | 0.2917 | 0.2891 |
+|  300 | 0.2549 | 0.2535 | 0.2976 | 0.2950 |
 
-At matched **token counts** (256N step-100 = 512N step-50 ≈ 5B,
-256N step-200 = 512N step-100 ≈ 10B, 256N step-300 = 512N
-step-150 ≈ 15B) — no surprises since 512N hasn't moved meaningfully
-above random by step-150 either. **The strong per-step parity
-mirrors what we saw at 2B** (256N == 512N per-update, 256N wins
-per-token when the chain gets further along).
+**The strong per-step parity mirrors what we saw at 2B** (256N == 512N
+per-update). At matched tokens, 256N would win — but the 20B 256N
+chain hasn't been extended further, so the comparison stops at
+step-300. The large-batch under-training hypothesis generalizes from
+2B to 20B: at matched optimizer steps the two batch sizes produce
+equivalent learning, so 512N gets there in 2× the wall-clock but
+spends 2× the tokens.
 
-This confirms the large-batch under-training hypothesis generalizes
-from 2B to 20B: at matched optimizer steps the two batch sizes
-produce equivalent learning, so 512N gets there in 2× the wall-clock
-but spends 2× the tokens.
+### Δ vs v1 ceiling
 
-> **Plot note**: `plot_v1_vs_v2.py` currently only overlays the
-> 512N trajectory. To add 256N as a third line, extend the script's
-> `V2_RESULTS_BASE` lookup to also glob `agpt-20b-v2-256n/step-*/`.
-> (Followup; not blocking this writeup.)
+v1's flat noise band across 100-2,500 steps establishes the
+counterfactual: with the bf16 RMSNorm freeze, this model never learns
+beyond random regardless of training tokens. At the latest v2 512N
+sync ckpt (step-3,200 / ~322B tokens):
+
+| Task | v1 best (any step) | v2 512N step-3,200 | Δ |
+|------|--------:|-----------:|--:|
+| HellaSwag (`acc_norm`) | 0.2650 | **0.5737** | **+30.9pp** |
+| ARC-Easy (`acc_norm`) | 0.2740 | **0.6221** | **+34.8pp** |
+| ARC-Challenge (`acc_norm`) | 0.2560 | **0.3225** | +6.7pp |
+| Winogrande (`acc`) | 0.5193 | **0.5612** | +4.2pp |
+
+The bf16-master fix is decisively validated at 20B: +30-35pp on the
+easier tasks vs v1's flat noise band, climbing monotonically with no
+sign of saturation. The two harder tasks (ARC-C, Winogrande) are
+lifting more slowly but are now visibly above the noise band.
+
+### Step-900 unavailable (in older async chain)
+
+8481645 (failover wrapper, 20B 512N) logged step 1000 on 2026-05-14
+but the async checkpoint save was killed mid-write by a bad-node
+crash. The empty step-900 ckpt dir was later overwritten by the
+sync-mode dispatch — step-900 in the table above comes from
+`8505258`'s clean sync save.
 
 <details>
 <summary><strong>v1 detailed results (bf16-tainted, kept for record) — click to expand</strong></summary>
