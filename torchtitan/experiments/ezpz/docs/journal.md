@@ -4,6 +4,42 @@ Running log of what's happening, session by session. Most recent first.
 
 ---
 
+## 2026-05-27 — 40th upstream sync (7 commits)
+
+Merged 7 upstream commits (`19c567f76..af33f7638`):
+
+- **PR #3398** ([Module] Replace from_nn_module with native Module
+  subclasses) consolidates `common/{linear,rmsnorm,embedding}.py`
+  into `common/nn_modules.py`. Broke 3 import paths in ezpz; replayed
+  in [`b052f29e4`](https://github.com/saforem2/torchtitan/commit/b052f29e4)
+  with pure import-path swaps (class API is unchanged).
+- **PR #3146** (Use deterministic ops in MoE routing) is the upstream
+  fix for the `_histc_xpu does not have a deterministic
+  implementation` blocker we hit on 2026-05-21. Replaces `histc` with
+  `bincount` and adds `aten.topk.default` to the SAC save list.
+  Inherits transitively; `--debug.deterministic` on MoE+XPU should
+  now work.
+- **PR #3423** (MoE [7/n], 3D tensors through MoE) continues the
+  MoE refactor from #3386/#3389. Doesn't touch `deepseek_v3/model.py`
+  and ezpz doesn't expose the 2D-flatten seam, so we inherit
+  transitively.
+- **PR #3105** (FSDP symmetric memory) adds an `enable_fsdp_symm_mem`
+  flag, plumbed through each model's `apply_fsdp`. ezpz has its own
+  local `apply_fsdp`, so the kwarg doesn't reach our path. Skipping
+  the replay — symm_mem is an optimization and XPU's CCL likely
+  doesn't support it anyway.
+- **PRs #3331 / #3369 / #3361** are all graph_trainer-only; no-ops
+  for ezpz.
+
+Quick imports smoke (`python3 -c "import torchtitan.experiments.ezpz.{agpt,moe.model}"`)
+passes. Live agpt + moe 2N smokes pending the next compute alloc.
+
+Two action items captured in
+[`docs/upstream-sync.md`](upstream-sync.md): smoke-test before next
+production push, and re-try `--debug.deterministic` on MoE+XPU.
+
+---
+
 ## 2026-05-23 — Failover wrapper hardening: tests, ANSI fix, async-mode regression diagnosed
 
 ### Failover-wrapper test harness + 2 more wrapper bugs

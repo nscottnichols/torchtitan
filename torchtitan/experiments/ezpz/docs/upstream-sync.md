@@ -24,6 +24,69 @@ tests and checking against the saved baselines — see
 
 ---
 
+## 2026-05-27 (40th sync — 7 commits; nn_modules consolidation, MoE [7/n], deterministic MoE routing)
+
+Upstream merged in 7 commits (`19c567f76..af33f7638`).
+
+**Upstream commits (7):**
+
+- **[`af33f7638` — \[Module\] Replace from_nn_module with native Module subclasses (#3398)](https://github.com/pytorch/torchtitan/pull/3398).**
+  Deleted `models/common/{embedding,linear,rmsnorm}.py`; consolidated
+  into a single `models/common/nn_modules.py` with native Module
+  subclasses (`class Linear(nn.Linear, Module)`, etc.). The `Config`
+  dataclass + constructor API is unchanged. **Required ezpz replay**
+  ([`b052f29e4`](https://github.com/saforem2/torchtitan/commit/b052f29e4)):
+  fix 3 import paths in `ezpz/agpt/__init__.py` + `ezpz/moe/model.py`.
+
+- **[`7074b056a` — \[MoE\]\[SAC\] Use deterministic ops in MoE routing (#3146)](https://github.com/pytorch/torchtitan/pull/3146).**
+  Replaces `torch.histc` with `torch.bincount` in
+  `TokenChoiceTopKRouter`/`TokenReorderer` and adds `aten.topk.default`
+  to the SAC save list. **This is the upstream fix for the
+  `_histc_xpu does not have a deterministic implementation` blocker
+  we hit on 2026-05-21** (journal entry: "`--debug.deterministic` is
+  incompatible with MoE on XPU"). No ezpz replay needed — we inherit
+  the fix transitively. `--debug.deterministic` on MoE+XPU should
+  now work, unblocking bit-exact regression gates.
+
+- **[`7fcd9beac` — \[MoE\]\[7/n\] Keep 3D tensors through MoE, flatten inside GroupedExperts (#3423)](https://github.com/pytorch/torchtitan/pull/3423).**
+  Continues the MoE refactor from PR #3386/#3389. Touches
+  `models/common/moe.py`, `moe_sharding.py`, `gpt_oss/moe.py` only —
+  not `deepseek_v3/model.py`. ezpz's `moe/model.py` doesn't expose
+  the 2D-flatten seam directly (the MoE wrapper does it internally),
+  so no replay needed. Inherits transitively.
+
+- **[`58b034444` — Add FSDP symmetric memory configuration and related tests (#3105)](https://github.com/pytorch/torchtitan/pull/3105).**
+  New `parallelism.enable_fsdp_symm_mem` config flag, plumbed
+  through each model's `parallelize.py` as a new kwarg to
+  `apply_fsdp`. ezpz has its own local `apply_fsdp` in
+  `agpt/parallelize.py` and `moe/parallelize.py`, so the kwarg
+  doesn't reach our path automatically. **Not blocking** — symm_mem
+  is an optimization, and XPU's CCL likely doesn't support it
+  anyway. Skip the replay; if we want it later, we wire the kwarg.
+
+- **[`f39e12458` — Re-enable FlexAttention bitwise tests (#3331)](https://github.com/pytorch/torchtitan/pull/3331).**
+  graph_trainer tests only. No-op for ezpz.
+
+- **[`c59f8c9b2` — \[graph_trainer\] Use separate EP process groups for overlap (#3369)](https://github.com/pytorch/torchtitan/pull/3369).**
+  graph_trainer only. No-op for ezpz.
+
+- **[`78b08dd62` — \[graph_trainer\] Add DeepSeek V3 16B SDPA config (#3361)](https://github.com/pytorch/torchtitan/pull/3361).**
+  graph_trainer registry entry. No-op for ezpz.
+
+### Replays in ezpz
+
+[**`b052f29e4` — fix(ezpz): replay PR #3398 — import Linear/RMSNorm from nn_modules**](https://github.com/saforem2/torchtitan/commit/b052f29e4).
+Pure import-path swap; class API is unchanged.
+
+### Action items
+
+- Smoke-test agpt_2b + moe_2b_ep on 2N Sunspot before next
+  production push.
+- Try `--debug.deterministic` on MoE+XPU again now that PR #3146
+  has landed; confirm it actually unblocks.
+
+---
+
 ## 2026-05-23 (39th sync — DebugMode numerics debugger)
 
 Upstream merged in 1 commit (`19c567f76`).
