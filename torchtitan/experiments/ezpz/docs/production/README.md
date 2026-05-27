@@ -2,7 +2,7 @@
 
 > **Living document** — updated as jobs complete and new runs are submitted.
 >
-> Last updated: 2026-05-23
+> Last updated: 2026-05-27
 
 ## Scaling Performance
 
@@ -31,18 +31,18 @@ for the diagnosis.
 
 | Model | Nodes | Cumulative steps | Loss | Tokens | Latest job | Status |
 |-------|------:|-----------------:|-----:|-------:|------------|--------|
-| 2B  | 512 | **13,200** (persisted) | **2.79** | **1.33T** (28.4%) | [`8505121`](agpt/2b/n512/README.md#log-8505121) R | Async-mode + flare-saturation wall: chain hits step-13400, async save kills cluster, no new persisted ckpt. Affected by the async-mode regression — see [Known Issues](../guides/known-issues.md#--checkpointasync-modeasync-kills-the-cluster-at-20b-512n). |
-| 20B | 512 | **800** (persisted) | **3.34** | **81B** (1.7%)    | [`8505258`](agpt/20b/n512/README.md) Q (sync-mode) | All dispatches since 2026-05-03 lost to async-save cluster cascade. Switching to `CHECKPOINT_ASYNC_MODE=disabled` on 2026-05-23; live test pending. |
-| 80B | 256 | — | — | — | [`8505222`](agpt/80b/n512/README.md) Q (fat-spares cont) | 5 attempts on 2026-05-23 all died in init from bad-node prevalence. `8505221` tried `select=276` (20 spares) + `FAILOVER_MAX_RETRIES=5` — still couldn't get past init. Aurora environmental issue. |
+| 2B  | 512 | **27,100+** (persisted) | **2.72** | **2.73T** (58.4%) | [`8508753`](agpt/2b/n512/README.md) R (sync-mode) | **🏁 Sync-mode workaround holding cleanly.** Chain has advanced step 13,300 → 27,100 (+13,800) since 2026-05-24, ~107 ckpts persisted across 8506221 + 8507196 (pals-RPC infra failure, separate issue) + 8507199 + 8508753. |
+| 20B | 512 | **3,270** (persisted) | **2.65** | **329B** (7.0%) | [`8508214`](agpt/20b/n512/README.md) Q (sync-mode) | **🏁 20B 512N sync now beats 2B 256N async on every benchmark per token.** Chain has advanced step 800 → 3,270 (+2,470) since 2026-05-24 across 8505258 + 8505259 + 8507197 + 8507200. ARC-Easy 0.665, HellaSwag norm 0.574 at step-3,200. |
+| 80B | 256 | — | — | — | [`8505222`](agpt/80b/n512/README.md) F (5 retries exhausted) | All dispatches since 2026-05-11 fail. Two distinct failure modes documented: [80B SIGSEGV cascade](../experiments/agpt/aurora/20260524-80b-256n-sigsegv-cascade-8505222.md) (production scale) + [blendcorpus EOFError race](../guides/known-bugs/blendcorpus-eoferror-race.md) (8N smoke). Mitigations identified, not yet retested. |
 
-> **Failover wrapper validated 2026-05-21**: [`8481646`](agpt/20b/n256/README.md#log-8481646) (20B 256N) hit a real Aurora gloo crash, the wrapper auto-detected the bad node, swapped in a spare, and retried — **first end-to-end production proof of the swap-and-retry path**. See [failover writeup](../experiments/agpt/aurora/20260521-failover-validated-8481646.md).
+> **Failover wrapper production-validated 2026-05-23**: [`8505298`](agpt/2b/n256/README.md) (2B 8N smoke) caught a real silent hang at step 37, watchdog tripped, blind-swapped the bad node, attempt-2 recovered cleanly + persisted DCP checkpoints. **First end-to-end real-world validation of the swap-and-retry path on a true silent-hang failure.** See [incident report](../experiments/agpt/aurora/20260523-failover-silent-hang-recovery-8505298.md).
 
 ### Active 256N trajectories
 
 | Model | Nodes | Cumulative steps | Loss | Tokens | Latest job | Status |
 |-------|------:|-----------------:|-----:|-------:|------------|--------|
-| 2B  | 256 | **25,500** (persisted) | **2.74** | **1.28T** (27.4%) | [`8505119`](agpt/2b/n256/README.md) → [`8505175`](agpt/2b/n256/README.md) Q | **Only trajectory making consistent on-disk progress.** Async-mode + interval=100 works cleanly at this scale (3,073 files/save). +12,500 fresh persisted steps in the past 30 hours (step-13K → step-25.5K). |
-| 20B | 256 | **300** (persisted) / 326 (in-RAM as of 2026-05-23) | **4.79** | **15B** (0.32%) | [`8505123`](agpt/20b/n256/README.md) R | Same async-save wall. Switching to `CHECKPOINT_ASYNC_MODE=disabled` on 2026-05-23; queued continuations `8505255-57` will be the live test. |
+| 2B  | 256 | **49,900+** (persisted) | **2.68** | **2.50T** (53.5%) | [`8508020`](agpt/2b/n256/README.md) R | Async-mode stable at 256N across 9 dispatches since 2026-05-23. Chain has advanced step 25,500 → 49,900 (+24,400 in 4 days). Plateau in eval scores around ARC-Easy 0.645 / HellaSwag norm 0.547 — model has saturated on this LR/data mix. |
+| 20B | 256 | **1,125** (persisted) | **3.28** | **113B** (2.4%) | [`8505255`](agpt/20b/n256/README.md) F (12h walltime) | Sync-mode 12h dispatch reached step 1,125 cleanly. No continuation queued (256N is per-token comparator; canonical chain is 512N). |
 
 ### Other jobs
 
