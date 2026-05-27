@@ -34,17 +34,24 @@
 
 ## v1 vs v2 — benchmark accuracy
 
-Three trajectories per panel: **v1 256N** (gray circles, bf16-master,
-broken — frozen RMSNorm), **v2 256N** (orange triangles, fp32-master,
-3 ckpts at steps 100/200/300 from the per-token comparator dispatch
-that ran 2026-05-22), and **v2 512N sync** (red diamonds, fp32-master,
-canonical 20B chain — 24 ckpts from steps 100 through 3,200 spanning
-both the original async dispatches and the post-2026-05-24 sync-mode
-breakthrough).
+Four trajectories per panel:
+
+- **v1 256N** (gray circles) — bf16-master, broken, frozen RMSNorm
+- **v2 256N** (orange triangles) — fp32-master, per-token comparator
+  dispatch from 2026-05-22 (3 ckpts at steps 100/200/300)
+- **v2 512N sync** (red diamonds) — fp32-master, canonical 20B chain,
+  24 ckpts from steps 100 through 3,200 spanning both the original
+  async dispatches and the post-2026-05-24 sync-mode breakthrough
+- **2B-MDS SophiaG reference** (black dashed crosses, *different
+  model size*) — pre-torchtitan 2B run trained to 7.77T tokens.
+  Included for cross-size capacity comparison: shows what the 2B
+  size class can reach with a much longer training budget, which
+  the 20B is on track to surpass at much fewer tokens.
 
 v1 hovers within ~1pp of the random baseline on every task across the
 full 2,500-step run (frozen RMSNorm). v2 lifts cleanly off the noise
-band on every benchmark.
+band on every benchmark and is on a trajectory to overtake the
+2B-MDS ceiling around the ~500B-token mark on HellaSwag / ARC-Easy.
 
 Re-render with new v2 ckpts as they become available:
 
@@ -52,7 +59,7 @@ Re-render with new v2 ckpts as they become available:
 python3 torchtitan/experiments/ezpz/docs/evals/agpt/20b/plot_v1_vs_v2.py
 ```
 
-![v1 vs v2 — 20B benchmark accuracy](figures/v1_vs_v2.svg)
+![v1 vs v2 vs MDS — 20B benchmark accuracy](figures/v1_vs_v2.svg)
 
 ## 🏁 Headline finding (2026-05-27)
 

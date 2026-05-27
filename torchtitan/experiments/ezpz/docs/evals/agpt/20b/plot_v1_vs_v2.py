@@ -42,6 +42,11 @@ V2_TRAJECTORIES = {
     256: (REPO_ROOT / "outputs" / "evals" / "agpt-20b-v2-256n", 3_072),   # LBS=1 × 256N × 12 GPUs ÷ TP=2 ⇒ 1536 dp-shards × 2 micro-batches
     512: (REPO_ROOT / "outputs" / "evals" / "agpt-20b-v2-512n", 12_288),  # LBS=2 × 512N × 12 GPUs (no TP)
 }
+# 2B-MDS reference baseline overlaid for cross-size capacity comparison
+# (pre-torchtitan SophiaG, 140K steps / 7.77T tokens). Same trajectory
+# overlay used on the 2B eval page.
+MDS_RESULTS_BASE = REPO_ROOT / "outputs" / "evals" / "agpt-2b-mds"
+MDS_TOKENS_PER_STEP = 7_770e9 / 140_000  # ~55.5M tokens/step
 FIG_DIR = Path(__file__).parent / "figures"
 FIG_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -108,6 +113,30 @@ def load_v2_trajectory(results_base: Path) -> dict[int, dict[str, float]]:
     return out
 
 
+def load_mds() -> dict[int, dict[str, float]]:
+    """2B-MDS reference layout: <stage>/step-<N>/results/results.json with 3
+    stages all symlinked to the same physical ckpt dir for SophiaG. Average
+    across replicates (XPU lm-eval is not bitwise-deterministic)."""
+    if not MDS_RESULTS_BASE.exists():
+        return {}
+    by_step: dict[int, dict[str, list[float]]] = {}
+    for p in sorted(MDS_RESULTS_BASE.glob("*/step-*/results/results.json")):
+        try:
+            step = int(p.parent.parent.name.split("-")[1])
+        except ValueError:
+            continue
+        with p.open() as f:
+            payload = json.load(f)
+        results = payload.get("results", payload)
+        for task in TASKS:
+            if task in results and (acc := _acc(results[task])) is not None:
+                by_step.setdefault(step, {}).setdefault(task, []).append(acc)
+    return {
+        step: {task: sum(vs) / len(vs) for task, vs in d.items()}
+        for step, d in sorted(by_step.items())
+    }
+
+
 def _tokens_for(step: int, gbs: int, seq: int) -> float:
     return step * gbs * seq / 1e9  # billions
 
@@ -123,12 +152,13 @@ def plot_per_task(
     v1: dict[int, dict[str, float]],
     v2_by_nodes: dict[int, dict[int, dict[str, float]]],
     v2_gbs: dict[int, int],
+    mds: dict[int, dict[str, float]],
     out_path: Path,
 ) -> None:
     fig, axes = plt.subplots(2, 2, figsize=(13, 9))
     fig.suptitle(
-        "AuroraGPT 20B  —  v1 (bf16-master, broken) vs v2 (fp32-master, current)",
-        fontsize=13,
+        "AuroraGPT 20B  —  v1 (bf16, broken) vs v2 (fp32) vs 2B-MDS reference",
+        fontsize=12,
         fontweight="bold",
     )
     for ax, task in zip(axes.flat, TASKS):
@@ -144,7 +174,21 @@ def plot_per_task(
             color="#94a3b8", alpha=0.85, label=f"v1 256N (n={len(v1_steps)})",
         )
 
+        # 2B-MDS reference (different model size — included to show the
+        # token-budget ceiling that 7.77T training of a 2B can reach).
+        mds_steps = sorted(s for s in mds if task in mds[s])
+        if mds_steps:
+            mds_tokens = [s * MDS_TOKENS_PER_STEP / 1e9 for s in mds_steps]
+            mds_y = [mds[s][task] for s in mds_steps]
+            ax.plot(
+                mds_tokens, mds_y, marker="x", ms=5, lw=1.4,
+                color="#000000", alpha=0.7, linestyle="--",
+                label=f"2B-MDS SophiaG ref (n={len(mds_steps)})",
+            )
+
         all_y_max = max(v1_y) if v1_y else 0.55
+        if mds_steps:
+            all_y_max = max(all_y_max, max(mds[s][task] for s in mds_steps))
         for nodes, v2_traj in v2_by_nodes.items():
             if not v2_traj:
                 continue
@@ -219,8 +263,10 @@ def main() -> None:
         v2_by_nodes[nodes] = traj
         v2_gbs[nodes] = gbs
         print(f"loaded v2 {nodes}N: {len(traj)} steps from {path}")
+    mds = load_mds()
+    print(f"loaded 2B-MDS reference: {len(mds)} steps from {MDS_RESULTS_BASE}")
     print(f"loaded v1: {len(V1_RESULTS)} steps")
-    plot_per_task(V1_RESULTS, v2_by_nodes, v2_gbs, FIG_DIR / "v1_vs_v2.svg")
+    plot_per_task(V1_RESULTS, v2_by_nodes, v2_gbs, mds, FIG_DIR / "v1_vs_v2.svg")
     print_table(V1_RESULTS, v2_by_nodes, v2_gbs)
 
 
