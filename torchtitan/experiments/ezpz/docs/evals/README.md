@@ -3,13 +3,35 @@
 Benchmark evaluations of AuroraGPT production checkpoints using
 [lm-eval-harness](https://github.com/EleutherAI/lm-evaluation-harness).
 
-## Models
+## All-production overlay (vs tokens, log-x)
+
+One chart, 4 panels (HellaSwag acc_norm, ARC-Easy acc, ARC-C acc_norm,
+Winogrande acc), 5 trajectories overlaid: 2B-MDS reference, 2B 256N async,
+2B 512N sync, 20B 256N, 20B 512N sync. X-axis = tokens consumed so
+GBS-different trajectories are directly comparable.
+
+![All-production eval overlay](figures/all_production_evals.svg)
+
+**Headline (2026-05-27):** the 20B 512N sync chain (red diamonds) at
+~322B tokens is **already at the level the 2B chains reach around
+~2T tokens** on HellaSwag norm and ARC-Easy. The 2B-MDS reference
+(gray, ~7.77T tokens, SophiaG continuation) sets the upper-bound
+ceiling for the 2B size class — both v2 2B chains are still climbing
+toward that ceiling.
+
+Regenerate with:
+
+```bash
+.venv/bin/python -m torchtitan.experiments.ezpz.eval.plot_evals_combined
+```
+
+## Per-trajectory eval pages
 
 | Model | Source | Steps Evaluated | Status |
 |-------|--------|-----------------|--------|
-| [agpt 2B](agpt/2b/) | torchtitan DCP | steps 1K–18K | Done (suspect embedding bug) |
-| [agpt 20B](agpt/20b/) | torchtitan DCP | steps 100–2,500 | Done (same suspect bug) |
-| [agpt 2B (MDS)](agpt/2b-mds/) | Megatron-DeepSpeed SophiaG | steps 5K–140K (28 unique × 3 replicates) | Done — clean training signal |
+| [agpt 2B](agpt/2b/) | torchtitan DCP (v1 + v2 256N async + v2 512N sync) | v2 256N step-36K–49.5K + v2 512N step-1K–25K | **🏁 Sync-mode workaround validated 2026-05-24** |
+| [agpt 20B](agpt/20b/) | torchtitan DCP (v1 + v2 512N sync + v2 256N) | v2 512N step-900–3,200 + v2 256N step-100–300 | **🏁 20B 512N sync now beats 2B 256N async per token on every benchmark (2026-05-27)** |
+| [agpt 2B (MDS)](agpt/2b-mds/) | Megatron-DeepSpeed SophiaG | steps 5K–140K (28 unique × 3 replicates) | Done — clean reference baseline |
 
 ## Pipelines
 
