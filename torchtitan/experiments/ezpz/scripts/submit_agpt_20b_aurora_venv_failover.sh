@@ -104,7 +104,19 @@ DFL_PARENT="torchtitan/experiments/ezpz/data-lists/$(ezpz_get_machine_name)"
 DFL_NAME="${DFL_NAME:-olmo-mix-1124}"
 DFL="${DFL_PARENT}/${DFL_NAME}.txt"
 
-CKPT_KEEP_LATEST_K="${CKPT_KEEP_LATEST_K:-0}"
+# CKPT_KEEP_LATEST_K is HARDCODED to 0 (= keep all). DO NOT change.
+# Setting this > 0 causes torchtitan's _purge_stale_checkpoints() to
+# delete every prior step-* dir on every save, irreversibly. Lost ~334
+# 2B chain ckpts on 2026-05-25 from one accidental `-v CKPT_KEEP_LATEST_K=10`
+# override (job 8505252). If you legitimately need rotation, use a
+# fresh CKPT_DIR override on a separate experiment — not the canonical chain.
+if [[ -n "${CKPT_KEEP_LATEST_K:-}" && "${CKPT_KEEP_LATEST_K}" != "0" ]]; then
+    echo "ERROR: CKPT_KEEP_LATEST_K=${CKPT_KEEP_LATEST_K} is set but this script hardcodes it to 0." >&2
+    echo "       Setting keep_latest_k>0 will destroy older ckpts in the canonical chain." >&2
+    echo "       If you really want rotation, use a fresh CKPT_DIR override on a separate experiment." >&2
+    exit 1
+fi
+CKPT_KEEP_LATEST_K=0
 CKPT_INTERVAL="${CKPT_INTERVAL:-100}"
 CKPT_DIR="${CKPT_DIR:-checkpoints/agpt-${MODEL}-${OPTIMIZER}-${DFL_NAME}-n${NNODES}-gbs${GBS}}"
 DATA_CACHE_PATH="${CKPT_DIR}/.cache/${DFL_NAME}/index-cache"

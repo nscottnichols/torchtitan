@@ -36,7 +36,10 @@ echo "Modules loaded."
 
 cd "${PBS_O_WORKDIR:-/lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz}"
 
-V2_REPO="/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz"
+# Default to the canonical v2 clone, but allow overrides via env var so we
+# can also eval ckpts that live in the legacy /flare/.../projects/saforem2/torchtitan/
+# clone (the chain pre-2026-04-30 was written there before the v2 clone was created).
+V2_REPO="${V2_REPO:-/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz}"
 # Default to the canonical 512N chain (gbs12288); override CKPT_NAME +
 # LABEL to evaluate other trajectories (e.g. the abandoned 256N
 # one-shot).
