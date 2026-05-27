@@ -47,8 +47,7 @@ extensions.
 | `8507196` | 2026-05-25 | 12h | ~14000–~17500 | ~2.77 → ~2.75 | Aurora pals-RPC launcher infra fail mid-run (exit 127), +76 ckpts still persisted. See [pals-RPC writeup](../../experiments/agpt/aurora/). |
 | **`8507199`** | 2026-05-25 | 12h | ~17500–~22500 | ~2.75 → ~2.73 | Sync-mode, +50 ckpts. |
 | **`8508753`** | 2026-05-26 | 12h | ~22500–**27,100+** | ~2.73 → **2.72** | **Running**. |
-| `8508977` | 2026-05-27 | 12h | (cont.) | — | Held (`afterany:8508753`). |
-| `8509042` | 2026-05-27 | 12h | (cont.) | — | Held. |
+| `8509042` | 2026-05-27 | 12h | (cont.) | — | Held (`afterany:8508753`). |
 
 **Latest cumulative**: step **27,100+** · loss **2.72** · **~2.73T tokens** (58.4% of 4.67T target — past the halfway mark).
 
@@ -61,8 +60,7 @@ extensions.
 | **`8505252`** | 2026-05-24 | 12h | (cont.) | — | Done. +57 ckpts. |
 | **`8507195`** | 2026-05-25 | 12h | (cont.) | — | Done. +57 ckpts. |
 | **`8507198`** | 2026-05-26 | 12h | (cont.) | — | Done. +57 ckpts. |
-| **`8508020`** | 2026-05-26 | 12h | ~49,800–**49,900+** | ~2.69 → **2.68** | **Running** (~+15 ckpts so far). |
-| `8508977` | 2026-05-27 | 12h | (cont.) | — | Held (`afterany:8508020`). |
+| **`8508020`** | 2026-05-26 | 12h | ~48,300–**50,000+** | ~2.69 → **2.68** | **Running** (just crossed step-50,000 at 13:54). |
 | `8508977` | 2026-05-27 | 12h | (cont.) | — | Held (`afterany:8508020`). |
 
 **Latest cumulative (256N)**: step **49,900+** · loss **2.68** · **~2.50T tokens** (53.5% of 4.67T target). Eval plateau:
