@@ -178,6 +178,9 @@ Winogrande (which doesn't expose `acc_norm`).
 | **v2 256N** | **48,000** | **2415.9** | **0.5461** | **0.5779** | **0.3157** | **0.5588** |
 | **v2 256N** | **49,000** | **2466.3** | **0.5483** | **0.5816** | **0.3080** | **0.5454** |
 | **v2 256N** | **49,500** | **2491.4** | **0.5452** | **0.5896** | **0.3276** | **0.5462** |
+| **v2 256N** | **50,000** | **2516.6** | **0.5480** | **0.5774** | **0.3234** | **0.5541** |
+| **v2 256N** | **51,000** | **2566.9** | **0.5458** | **0.5804** | **0.3183** | **0.5478** |
+| **v2 256N** | **51,700** | **2602.1** | **0.5507** | **0.5867** | **0.3200** | **0.5501** |
 | **v2 512N** | **1,000** | **100.7** | **0.2636** | **0.3460** | **0.2235** | **0.5099** |
 | **v2 512N** | **2,000** | **201.3** | **0.3039** | **0.4179** | **0.2270** | **0.5075** |
 | **v2 512N** | **3,000** | **302.0** | **0.3477** | **0.4474** | **0.2500** | **0.5193** |
@@ -205,15 +208,15 @@ Winogrande (which doesn't expose `acc_norm`).
 ### Δ vs v1 ceiling
 
 v1 was noise-bound for the entire 18K-step run (HellaSwag norm mean
-0.252, ARC-Easy mean 0.272). At matched ~2.3T-token training budget,
+0.252, ARC-Easy mean 0.272). At matched ~2.6T-token training budget,
 the v2 256N chain delivers:
 
-| Task | v1 best | v2 256N step-49.5K | Δ |
+| Task | v1 best | v2 256N step-51.7K | Δ |
 |------|--------:|------------------:|--:|
-| HellaSwag (acc_norm) | 0.2539 | **0.5452** | **+29.1pp** |
-| ARC-Easy (acc_norm) | 0.2782 | **0.5896** | **+31.1pp** |
-| ARC-Challenge (acc_norm) | 0.2560 | **0.3276** | +7.2pp |
-| Winogrande (acc) | 0.5107 | **0.5462** | +3.5pp |
+| HellaSwag (acc_norm) | 0.2539 | **0.5507** | **+29.7pp** |
+| ARC-Easy (acc_norm) | 0.2782 | **0.5867** | **+30.8pp** |
+| ARC-Challenge (acc_norm) | 0.2560 | **0.3200** | +6.4pp |
+| Winogrande (acc) | 0.5107 | **0.5501** | +3.9pp |
 
 The bf16-master fix is decisively validated: same exact training
 config, +29-31pp on the easier tasks, dramatic separation from v1's
