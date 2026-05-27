@@ -1,14 +1,39 @@
 # Production Training — agpt 80B
 
-## v2 — first production attempt submitted 2026-05-11
+> Last updated: 2026-05-27
+
+## v2 status — STILL BLOCKED (11+ failed dispatches since 2026-05-11)
+
+**Zero ckpts persisted** for 80B production since the v2 effort began on 2026-05-11. The original 8480361/8480362
+dispatch (and 9 follow-up retries) all failed before saving a single checkpoint. Two distinct failure modes:
+
+| Mode | Where | Status |
+|------|-------|--------|
+| **SIGSEGV cascade** | 80B 256N production (every dispatch) | Documented in [`20260524-80b-256n-sigsegv-cascade-8505222.md`](../../../experiments/agpt/aurora/20260524-80b-256n-sigsegv-cascade-8505222.md) |
+| **`blendcorpus` EOFError race** | 80B 8N smoke 8505326 | Documented in [`blendcorpus-eoferror-race.md`](../../../guides/known-bugs/blendcorpus-eoferror-race.md) |
+
+**Latest dispatch `8505222` (2026-05-24)** failed after **5 wrapper retries** — every attempt hit SIGSEGV on a
+different bad node, 3 of them from the **x4101c5/c6 rack cluster**. The failover wrapper rotates spares correctly,
+but the bad-node hit-rate at 256N is high enough that 10 spares is not enough headroom.
+
+The 4N smoke 12466025 from 2026-05-05 remains the **only successful 80B training to date** (20 steps, loss 12.98 → 10.46).
+
+### Next steps (from SIGSEGV writeup)
+
+1. **Try `select=296`** (40 spares vs current 10) to absorb more bad nodes per cascade.
+2. **File ALCF ticket** for the x4101c5/c6 rack — 3 of the 5 retry failures landed there.
+3. **Try 64N / 128N** to characterize whether the SIGSEGV rate scales with node count or is rack-specific.
+
+### Working config (smoke-only, 2026-05-05)
 
 | Trajectory | Status | Cumulative steps | Loss | Tokens |
 |------------|--------|-----------------:|-----:|-------:|
-| [**v2 512N**](n512/README.md) (canonical chain attempt) | **8480361 Q** (522 nodes via failover wrapper, 512 active + 10 spare) | — | — | — |
+| 4N smoke (12466025) | Done (20 steps) | 20 | 12.98 → 10.46 | — |
+| [**v2 256N**](n512/README.md) (canonical chain attempt) | 11+ failed dispatches | 0 | — | — |
+| v2 512N | Not yet attempted | — | — | — |
 
-Working config (proven in 4N smoke 12466025 on 2026-05-05): AdamW
-LR=1e-6, TP=2, AC=full, compile=OFF, fp32-master. Loss descended
-cleanly 12.98 → 10.46 over 20 steps in the smoke. Submit script:
+Working config (proven in 4N smoke): AdamW LR=1e-6, TP=2, AC=full, compile=OFF, fp32-master. Loss descended
+cleanly 12.98 → 10.46 over 20 steps. Submit script:
 [`scripts/submit_agpt_80b_aurora_venv_failover.sh`](../../../../scripts/submit_agpt_80b_aurora_venv_failover.sh).
 
 Production clone: `/flare/AuroraGPT/foremans/runs/agpt-80b-v2/torchtitan-ezpz/`.

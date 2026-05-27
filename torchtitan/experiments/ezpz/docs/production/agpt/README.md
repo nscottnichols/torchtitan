@@ -1,11 +1,26 @@
 # Production Training — Dense (agpt) Models
 
-> Last updated: 2026-05-11
+> Last updated: 2026-05-27
 >
 > **Restarted in v2 clones on 2026-04-30** after the bf16-master
 > RMSNorm-freeze regression. All current production training is on
 > `dtype=float32` master weights. Historical bf16-tainted runs are
 > retained inside each per-model README under "Historical".
+
+## Headline (2026-05-27)
+
+- **2B 256N async chain** at step **49,900+** (loss 2.68, ~2.50T tokens, **53.5%** of target) — async-mode stable
+- **2B 512N sync chain** at step **27,100+** (loss 2.72, ~2.73T tokens, **58.4%** of target) — sync-mode workaround
+  (`CHECKPOINT_ASYNC_MODE=disabled`) has been holding cleanly since 2026-05-24, when 8506221 broke the May-3 async-cascade regression wall
+- **🏁 20B 512N sync chain at step 3,270 now beats 2B 256N async on every benchmark per token.** Eval'd 16 ckpts
+  (step-900 → step-3200): ARC-Easy 0.463 → **0.665** (+20pp), HellaSwag acc_norm 0.296 → **0.574** (+28pp),
+  ARC-C acc_norm 0.224 → **0.322** (+10pp). Monotonic lift across 24+ consecutive ckpts — no plateau, no oscillation.
+- **80B 256N still completely blocked.** 11+ dispatches since 2026-05-11, zero ckpts persisted. The latest
+  (8505222) cascaded through 5 wrapper retries — every attempt hit SIGSEGV on a different bad node, 3 of them
+  from the x4101c5/c6 rack cluster. See
+  [`20260524-80b-256n-sigsegv-cascade-8505222.md`](../../experiments/agpt/aurora/20260524-80b-256n-sigsegv-cascade-8505222.md).
+  Distinct from the 80B 8N smoke failure (data-pipeline race), documented in
+  [`blendcorpus-eoferror-race.md`](../../guides/known-bugs/blendcorpus-eoferror-race.md).
 
 ## Single canonical chain per model
 
@@ -16,30 +31,67 @@ on `gbs`), so they're independent trajectories — they're not joining
 the canonical chain. Treat them as scaling experiments, not as
 extensions.
 
-### 2B canonical chain (512N)
+### 2B canonical chain (512N, sync-mode)
 
 | Job ID | Date | Walltime | Steps | Loss | Status |
 |--------|------|---------:|------:|-----:|--------|
 | [`8460301`](2b/n512/README.md#log-8460301) | 2026-05-01 | 6h | 1–1387 | 12.65 → 3.59 | Done (NODE_FAIL @ end) |
 | [`8463626`](2b/n512/README.md#log-8463626) | 2026-05-03 | 12h | 1300–5073 | 3.59 → 2.97 | Done (NODE_FAIL @ end). 50 ckpts saved. |
 | [`8463627`](2b/n512/README.md#log-8463627) | 2026-05-07 | 12h | 5000–6955 | 2.97 → 2.90 | Done (walltime). |
-| [`8466847`](2b/n512/README.md#log-8466847) | 2026-05-11 | 12h | 6900–13279 | 2.90 → **2.79** | Done (walltime). step-13200 ckpt saved. |
-| [`8479988`](2b/n512/README.md#log-8479988) | 2026-05-11 | 12h | 13200+ | — | **Queued** — resubmit (2026-05-11 evening), auto-resumes from step-13200 |
-| [`8479989`](2b/n512/README.md#log-8479989) | 2026-05-11 | 12h | (cont.) | — | Held (`afterany:8479988`) |
+| [`8466847`](2b/n512/README.md#log-8466847) | 2026-05-11 | 12h | 6900–13279 | 2.90 → 2.79 | Done (walltime). step-13200 ckpt saved. |
+| [`8479988`](2b/n512/README.md#log-8479988) | 2026-05-11 | 12h | 13200+ | — | Done. |
+| `8505121` | 2026-05-23 | 12h | — | — | **Failed** (pre-fix, async-cascade regression). |
+| `8505176` | 2026-05-23 | 12h | — | — | **Failed** (async-cascade regression). |
+| `8506215` | 2026-05-24 | 12h | — | — | **Failed** (preflight bug). |
+| **`8506221`** | 2026-05-24 | 12h | 13200–~14000 | 2.79 → ~2.77 | **🏁 sync-mode breakthrough** (CHECKPOINT_ASYNC_MODE=disabled). +21 ckpts. |
+| `8507196` | 2026-05-25 | 12h | ~14000–~17500 | ~2.77 → ~2.75 | Aurora pals-RPC launcher infra fail mid-run (exit 127), +76 ckpts still persisted. See [pals-RPC writeup](../../experiments/agpt/aurora/). |
+| **`8507199`** | 2026-05-25 | 12h | ~17500–~22500 | ~2.75 → ~2.73 | Sync-mode, +50 ckpts. |
+| **`8508753`** | 2026-05-26 | 12h | ~22500–**27,100+** | ~2.73 → **2.72** | **Running**. |
+| `8508977` | 2026-05-27 | 12h | (cont.) | — | Held (`afterany:8508753`). |
+| `8509042` | 2026-05-27 | 12h | (cont.) | — | Held. |
 
-**Latest cumulative**: step **13,279** · loss **2.79** · **1.34T tokens** (28.7% of 4.67T target — past the quarter mark).
+**Latest cumulative**: step **27,100+** · loss **2.72** · **~2.73T tokens** (58.4% of 4.67T target — past the halfway mark).
 
-### 20B canonical chain (512N)
+### 2B per-token comparator chain (256N, async-mode)
+
+| Job ID | Date | Walltime | Steps | Loss | Status |
+|--------|------|---------:|------:|-----:|--------|
+| `8505118` / `8505119` | 2026-05-23 | 12h | (post-fix dispatches) | — | Done. |
+| **`8505175`** | 2026-05-23 | 12h | (cont.) | — | Done. +57 ckpts. |
+| **`8505252`** | 2026-05-24 | 12h | (cont.) | — | Done. +57 ckpts. |
+| **`8507195`** | 2026-05-25 | 12h | (cont.) | — | Done. +57 ckpts. |
+| **`8507198`** | 2026-05-26 | 12h | (cont.) | — | Done. +57 ckpts. |
+| **`8508020`** | 2026-05-26 | 12h | ~49,800–**49,900+** | ~2.69 → **2.68** | **Running** (~+15 ckpts so far). |
+| `8508977` | 2026-05-27 | 12h | (cont.) | — | Held (`afterany:8508020`). |
+| `8508977` | 2026-05-27 | 12h | (cont.) | — | Held (`afterany:8508020`). |
+
+**Latest cumulative (256N)**: step **49,900+** · loss **2.68** · **~2.50T tokens** (53.5% of 4.67T target). Eval plateau:
+ARC-Easy ~0.645, HellaSwag acc_norm ~0.547.
+
+### 20B canonical chain (512N, sync-mode)
 
 | Job ID | Date | Walltime | Steps | Loss | Status |
 |--------|------|---------:|------:|-----:|--------|
 | [`8460302`](20b/n512/README.md#log-8460302) | 2026-05-01 | 6h | 1–300 | 12.94 → 4.95 | Done (NODE_FAIL @ end). 3 ckpts saved. |
 | [`8463628`](20b/n512/README.md#log-8463628) | 2026-05-03 | 12h | 200–863 | 5.62 → 3.46 | Done (walltime hit). step-100..800 ckpts saved. |
-| [`8466848`](20b/n512/README.md#log-8466848) | 2026-05-07 | — | — | — | **Crashed @ startup** (127s) — `set_determinism` `std::bad_alloc`. Intermittent: didn't reproduce on retry. |
-| [`8479579`](20b/n512/README.md#log-8479579) | 2026-05-11 | 12h | 800–803 | 3.46 → 3.53 | **Killed by qdel @ 5h56m** — silent hang after step 803 (W&B heartbeat continued, no training output for 5h). New failure mode. See [hang report](../../experiments/agpt/aurora/20260511-20b-n512-hang-8479579.md). |
-| [`8479580`](20b/n512/README.md#log-8479580) | 2026-05-11 | 12h | 800+ | — | **Queued** — auto-released from hold, will resume from step-800 |
+| [`8466848`](20b/n512/README.md#log-8466848) | 2026-05-07 | — | — | — | **Crashed @ startup** (127s) — `set_determinism` `std::bad_alloc`. Intermittent. |
+| [`8479579`](20b/n512/README.md#log-8479579) | 2026-05-11 | 12h | 800–803 | 3.46 → 3.53 | Killed by qdel @ 5h56m — silent hang after step 803. See [hang report](../../experiments/agpt/aurora/20260511-20b-n512-hang-8479579.md). |
+| [`8479580`](20b/n512/README.md#log-8479580) | 2026-05-11 | 12h | 800+ | — | Done. |
+| `8505124` | 2026-05-23 | 12h | — | — | **Failed** (pre-fix, async-cascade regression). |
+| `8505256` | 2026-05-24 | 12h | — | — | qdel-dup. |
+| **`8505258`** | 2026-05-24 | 12h | (cont.) | — | **🏁 sync-mode breakthrough**. +6 ckpts. |
+| **`8505259`** | 2026-05-24 | 12h | (cont.) | — | Sync-mode, +6 ckpts. |
+| **`8507197`** | 2026-05-25 | 12h | (cont.) | — | Sync-mode, +6 ckpts. |
+| **`8507200`** | 2026-05-26 | 12h | ~2700–**3,270** | ~2.70 → **2.65** | Done (12h walltime end at 2026-05-27 03:43). +6 ckpts. |
+| `8508214` | 2026-05-27 | 12h | 3,270+ | — | **Queued** (~10h, capacity-blocked in `small` queue). |
+| `8509393` | 2026-05-27 | 12h | (cont.) | — | Held. |
 
-**Latest cumulative**: step **803** · loss **3.53** · **81B tokens** (1.7% of 4.67T target).
+**Latest cumulative**: step **3,270** · loss **2.65** · **~329B tokens** (7.0% of 4.67T target).
+
+**🏁 Eval headline (16 ckpts, step-900 → step-3200)**: ARC-Easy `acc` 0.463 → **0.665** (+20pp), HellaSwag `acc_norm`
+0.296 → **0.574** (+28pp), ARC-C `acc_norm` 0.224 → **0.322** (+10pp). **20B 512N sync now beats 2B 256N async on
+every benchmark per token.** Monotonic across 24+ consecutive ckpts. See
+[`evals/agpt/20b/`](../../evals/agpt/20b/README.md).
 
 ## Other jobs (independent ckpt trajectories)
 
@@ -48,21 +100,26 @@ extensions.
 | [`8463182`](2b/n1024/README.md#log-8463182) | 2026-05-04 | 2B | 1024 | 12h | **Crashed @ startup (211s, std::bad_alloc)** | Fresh start, separate ckpt dir (`n1024-gbs24576`) |
 | [`8463183`](20b/n1024/README.md#log-8463183) | 2026-05-04 | 20B | 1024 | 12h | **Crashed @ startup (211s, SIGSEGV)** | Fresh start, separate ckpt dir (`n1024-gbs24576`) |
 | [`8463659`](20b/n256/README.md#log-8463659) | 2026-05-04 | 20B | 256 | 12h | **NODE_FAIL** after step 364 (loss 4.61) | Fresh start, separate ckpt dir (`n256-gbs6144`). step-300 ckpt saved. |
-| [`8470100`](2b/n256/README.md#log-8470100) | 2026-05-08 | 2B  | 256 | 12h | Done (walltime), step ~10000 | Resumed from step-2000 → step ~10000 in 12h. |
-| [`8470101`](2b/n256/README.md#log-8470101) | 2026-05-11 | 2B  | 256 | 12h | Done (walltime, 12h00m20s; 12,889/2.81) | step **12,889**, loss **2.81** — **caught up to and slightly passed canonical 512N per-step** |
+| [`8470100`](2b/n256/README.md#log-8470100) | 2026-05-08 | 2B  | 256 | 12h | Done | Resumed from step-2000 → step ~10000 in 12h. |
+| [`8470101`](2b/n256/README.md#log-8470101) | 2026-05-11 | 2B  | 256 | 12h | Done (12h00m20s; 12,889/2.81) | step **12,889**, loss **2.81** — caught up to canonical 512N per-step. |
 | [`8470102`](20b/n256/README.md#log-8470102) | 2026-05-08 | 20B | 256 | 12h | **Crashed** (gloo TCP timeout @ 3h15m) | Resumed step-300 → step-400 saved before crash |
 | [`8470103`](20b/n256/README.md#log-8470103) | 2026-05-08 | 20B | 256 | 12h | **Crashed** (gloo TCP timeout @ 2h59m) | Chained continuation, also bad-node |
 | [`8467141`](2b/n512/README.md#log-8467141) | 2026-05-07 | 2B  | 512 | 12h | Done | √2-LR fork (LR=3.22e-5) chain1, separate ckpt dir |
 | [`8467142`](2b/n512/README.md#log-8467142) | 2026-05-11 | 2B  | 512 | 12h | Done | √2-LR fork chain2 |
-| [`8479581`](20b/n256/README.md#log-8479581) | 2026-05-11 | 20B | 256 | 12h | **Crashed** (gloo TCP timeout @ 3h39m, peer 10.115.83.2) — step-500 ckpt saved | step **500**, loss **4.08** |
-| [`8479582`](20b/n256/README.md#log-8479582) | 2026-05-11 | 20B | 256 | 12h | Q (released from hold) — will resume from step-500 | 2nd 256N continuation in chain |
+| [`8479581`](20b/n256/README.md#log-8479581) | 2026-05-11 | 20B | 256 | 12h | **Crashed** (gloo TCP timeout @ 3h39m) — step-500 ckpt saved | step **500**, loss **4.08** |
+| [`8479582`](20b/n256/README.md#log-8479582) | 2026-05-11 | 20B | 256 | 12h | Done | resumed from step-500 |
+| **`8505255`** | 2026-05-24 | 20B | 256 | 12h | Done (12h walltime end on 2026-05-26 20:35) — step **1,125** | 256N is per-token comparator; canonical 20B chain is 512N. **No chain continuation queued.** |
 
-**80B**: **first v2 production attempt submitted 2026-05-11** (8480361
-+ 8480362 chain). 522 nodes (512 active + 10 spare via failover
-wrapper), AdamW LR=1e-6, TP=2, AC=full, compile=OFF — the proven
-working path from the 4N smoke (12466025). See
-[`80b/n512/`](80b/n512/README.md) for trajectory tracking and
-[`80b/`](80b/README.md) for v1 history.
+### 80B 256N production status (2026-05-27)
+
+**Still completely blocked.** 11+ dispatches since 2026-05-11; zero ckpts persisted. Latest dispatch `8505222`
+(2026-05-24) failed after **5 wrapper retries** — every attempt hit SIGSEGV on a different bad node, 3 of them from
+the x4101c5/c6 rack cluster. Canonical writeup:
+[`20260524-80b-256n-sigsegv-cascade-8505222.md`](../../experiments/agpt/aurora/20260524-80b-256n-sigsegv-cascade-8505222.md).
+Distinct from the 80B 8N smoke (8505326), which surfaced a separate `blendcorpus` EOFError race documented in
+[`blendcorpus-eoferror-race.md`](../../guides/known-bugs/blendcorpus-eoferror-race.md). The 4N smoke 12466025
+(2026-05-05) remains the only successful 80B training to date (20 steps). See [`80b/`](80b/README.md) for full
+status + next steps.
 
 ## Reference: pre-torchtitan MDS run (2B SophiaG, ~7.77T tokens)
 
@@ -120,27 +177,28 @@ python3 torchtitan/experiments/ezpz/utils/plot_production_wandb.py --overlay 20b
 ![20B v2 512N Tokens vs Time](20b/n512/figures/tokens_vs_time_20b_v2_512n.png)
 
 <details>
-<summary><strong>2B 256N v2 (active continuation chain at step 10,723) — click to expand</strong></summary>
+<summary><strong>2B 256N v2 (active async chain at step 49,900+) — click to expand</strong></summary>
 
 Separate ckpt trajectory at 256 nodes (`gbs6144`, independent from
-the canonical 512N `gbs12288` chain). Three runs so far: 8459818
-(NODE_FAIL after step 2070), 8470100 (chain1 walltime), 8470101
-(chain2, **currently running**). Step **10,723, loss 2.84, 540B
-tokens (11.5% of target)**. Useful as the per-token comparator for
-the 512N chain.
+the canonical 512N `gbs12288` chain). Now the **per-token comparator** for
+the 20B 512N sync chain. Running async-mode at step **49,900+, loss 2.68,
+~2.50T tokens (53.5% of target)**. Eval plateau: ARC-Easy ~0.645,
+HellaSwag acc_norm ~0.547 — now beaten by 20B 512N sync on every benchmark
+per token.
 
 ![2B v2 256N Diagnostics](2b/n256/figures/training_diagnostics_2b_v2_256n.png)
 
 </details>
 
 <details>
-<summary><strong>20B 256N v2 (struggling — 3 crashes, at step 400) — click to expand</strong></summary>
+<summary><strong>20B 256N v2 (one-shot, ended at step 1,125) — click to expand</strong></summary>
 
 Separate ckpt trajectory at 256 nodes (`gbs6144`, independent from
-the canonical 512N `gbs12288` chain). Three runs: 8463659 (NODE_FAIL
-after step 364), 8470102 + 8470103 (both crashed with gloo TCP
-timeouts at ~3h elapsed). step-400 ckpt saved before the chain
-crashes. **8479581 + 8479582 just submitted (2026-05-11)** to retry.
+the canonical 512N `gbs12288` chain). History: 8463659 (NODE_FAIL after
+step 364), 8470102 + 8470103 (gloo TCP timeouts ~3h), 8479581 + 8479582,
+and most recently **8505255** which ran out the 12h walltime ending
+2026-05-26 20:35 at step **1,125**. **No chain continuation queued** —
+256N is the per-token comparator; the canonical 20B chain is 512N.
 
 ![20B v2 256N Diagnostics](20b/n256/figures/training_diagnostics_20b_v2_256n.png)
 

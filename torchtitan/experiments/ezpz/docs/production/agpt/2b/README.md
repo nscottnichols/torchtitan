@@ -1,5 +1,7 @@
 # Production Training — agpt 2B
 
+> Last updated: 2026-05-27
+>
 > **2026-04-30 — restarted from scratch in `agpt-2b-v2/` clone.** The
 > original 2B 256N run (and its 80B/20B siblings) was found to have a
 > silent `training.dtype = bfloat16` master-weight bug that freezes
@@ -10,14 +12,19 @@
 > [`docs/guides/training-dtype-bf16-norm-freeze.md`](../../../guides/training-dtype-bf16-norm-freeze.md)
 > for the diagnosis.
 
-## Snapshot
+## Snapshot (2026-05-27)
 
 | Trajectory | Status | Cumulative steps | Loss | Tokens |
 |------------|--------|-----------------:|-----:|-------:|
-| [v2 256N](n256/README.md) | One-shot, no continuation | 2,070 | 3.33 | 104B (2.2%) |
-| [**v2 512N**](n512/README.md) (canonical chain) | Queued continuation | **5,073** | **2.97** | **510B (10.9%)** |
-| [v2 1024N](n1024/README.md) | Queued, no data yet | — | — | — |
+| [**v2 256N (async)**](n256/README.md) | **Running** (8508020 R, +chained) | **49,900+** | **2.68** | **~2.50T (53.5%)** |
+| [**v2 512N (sync)**](n512/README.md) (canonical chain) | **Running** (8508753 R, +2 held) | **27,100+** | **2.72** | **~2.73T (58.4%)** |
+| [v2 1024N](n1024/README.md) | Crashed at startup, not retried | — | — | — |
 | v1 256N + 512N | Bf16-tainted, kept under each n* page | (see per-page) | (see per-page) | (see per-page) |
+
+**Headlines:**
+
+- **256N async chain**: 8505175 → 8505252 → 8507195 → 8507198 → **8508020 R** at step **49,900+** (loss 2.68, ~2.50T tokens, 53.5% of 4.67T target). Async-mode stable; eval plateau ARC-Easy ~0.645, HellaSwag norm ~0.547.
+- **🏁 512N sync-mode workaround validated** (`CHECKPOINT_ASYNC_MODE=disabled`): since 8506221 on 2026-05-24 broke through the May-3 async-cascade regression wall, the sync workaround has been holding cleanly. Recent chain: 8506221 (+21) → 8507196 (pals-RPC fail, +76 ckpts persisted) → 8507199 (+50) → **8508753 R** at step **27,100+** (loss 2.72, ~2.73T tokens, 58.4% of 4.67T target). One quirk: 8507196 hit a separate Aurora pals-RPC launcher infra bug (exit 127) — distinct from the async-cascade.
 
 ## v1 vs v2 — overlay
 
@@ -45,6 +52,8 @@ python3 torchtitan/experiments/ezpz/utils/plot_production_wandb.py --overlay 2b
 ## Eval scores
 
 See [`docs/evals/agpt/2b/`](../../../evals/agpt/2b/README.md) for the
-v1-vs-v2 lm-eval comparison (HellaSwag / ARC-Easy / ARC-Challenge /
-Winogrande). Headline: at 503B tokens v2 is **+19.8pp** on ARC-Easy
-and **+15.4pp** on HellaSwag vs v1's flat baseline at any token count.
+v1-vs-v2 lm-eval comparison and 2026-05-27 256N async eval tables
+(HellaSwag / ARC-Easy / ARC-Challenge / Winogrande). Plateau:
+ARC-Easy ~0.645, HellaSwag acc_norm ~0.547. **Note:** as of 2026-05-27
+the 20B 512N sync chain at step 3,270 now beats this 2B 256N plateau on
+every benchmark per token — see [`evals/agpt/20b/`](../../../evals/agpt/20b/README.md).
