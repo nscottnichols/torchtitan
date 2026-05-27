@@ -101,7 +101,7 @@ GAS="${GAS:-1}"
 GBS=$(( NGPUS * LBS * GAS / (TP * PP * CP) ))
 
 TRAIN_TOKENS="${TRAIN_TOKENS:-4673780159710}"
-TRAINING_STEPS=$(( TRAIN_TOKENS / (GBS * SEQ_LEN) ))
+TRAINING_STEPS="${TRAINING_STEPS:-$(( TRAIN_TOKENS / (GBS * SEQ_LEN) ))}"
 
 # 80B uses AdamW LR=1e-6 — SophiaG/Muon are known broken at dim=9216
 # (bf16 overflow in Hessian/Newton-Schulz). LR=1.1e-5 NaNs at
@@ -117,7 +117,7 @@ DFL_NAME="${DFL_NAME:-olmo-mix-1124}"
 DFL="${DFL_PARENT}/${DFL_NAME}.txt"
 
 CKPT_KEEP_LATEST_K="${CKPT_KEEP_LATEST_K:-0}"
-CKPT_INTERVAL=100
+CKPT_INTERVAL="${CKPT_INTERVAL:-100}"
 CKPT_DIR="${CKPT_DIR:-checkpoints/agpt-${MODEL}-${OPTIMIZER}-${DFL_NAME}-n${NNODES}-gbs${GBS}}"
 DATA_CACHE_PATH="${CKPT_DIR}/.cache/${DFL_NAME}/index-cache"
 
@@ -143,6 +143,28 @@ log_message INFO "==========================================="
 #   --activation-checkpoint.mode=full     (required to fit in memory)
 #   --compile.no-enable                    (compile crashes on torch 2.13)
 #   --parallelism.expert-parallel-degree=1 (dense, no MoE)
+
+# ---- Preflight: catch bad nodes BEFORE 30+ min of model init ----
+# Run a tiny single-rank-per-node ezpz.examples.test through failover_run so
+# that any bad nodes are detected (gloo/UR/SIGSEGV/timeout) and swapped for
+# spares before the real training command launches.
+#
+# Timeout sizing: ~40s actual training on 8N; DDP init/all-reduce dominates
+# at scale. 8505298 (8N) needed ~120s; 8506215 (512N) tripped 120s watchdog
+# during DDP init at 6144 ranks. 600s (10 min) leaves plenty of headroom
+# for 1024N+ while still catching genuine hangs quickly.
+# Requires ezpz >= 0.16.0 for --timeout. Especially important for 80B where
+# every wasted init costs ~30 min of compile + memory allocation.
+# --train-iters 5: enough to verify all-reduce works without burning hours of
+# walltime at large N. Each iter at 6144 ranks (512N) is ~4-5 min, so 5 iters
+# ≈ 25-30 min including DDP init. Without this, the test defaults to 200 iters
+# (~16h at 512N — full walltime burned in preflight).
+log_message INFO "preflight smoke: ezpz.examples.test on active nodes"
+FAILOVER_IDLE_TIMEOUT="${PREFLIGHT_IDLE_TIMEOUT:-600}" FAILOVER_MAX_RETRIES=2 \
+    failover_run ezpz launch python3 -m ezpz.examples.test --train-iters 5 \
+    || { log_message ERROR "preflight smoke failed after retries; bailing"; exit 1; }
+log_message INFO "preflight smoke OK — proceeding to main training launch"
+
 failover_run ezpz launch python3 -m torchtitan.experiments.ezpz.train \
     --module=ezpz.agpt \
     --config="agpt_${MODEL}${CONFIG_SUFFIX:-}" \

@@ -96,8 +96,14 @@ PRODUCTION_RUNS: dict[str, dict] = {
         # iekiq5rq = 8503506 (failover continuation, 2026-05-22→23, step 18.8K->23.5K+)
         # ni0etxx7 = 8505118 (post-fix dispatch, exhausted retries cleanly)
         # 0fk1bvtt = 8505119 (post-fix continuation, advanced to step-25,100+)
+        # 3n22a69q = 8505175 (12h, fresh ezpz 0.16.0 tarball, step 25500 -> 30791, async stable at 256N)
+        # 8vmrcxqr = 8505252 (12h continuation, step 30700 -> 36528, 57 ckpts)
+        # 56lkkkh1 = 8507195 (12h chain, step 36528 -> 42515, 57 ckpts)
+        # 24wfvoje = 8507198 (12h chain, step 42610 -> 48329, 57 ckpts)
+        # bs6tay8l = 8508020 (12h R, step 48400+, currently running)
         "run_ids": ["lytjeegk", "0t4h0kuw", "j7bz39tj", "0qpf3hnc", "iekiq5rq",
-                    "ni0etxx7", "0fk1bvtt"],
+                    "ni0etxx7", "0fk1bvtt", "3n22a69q", "8vmrcxqr",
+                    "56lkkkh1", "24wfvoje", "bs6tay8l"],
         "num_nodes": 256,
         "model": "2b",
     },
@@ -109,8 +115,15 @@ PRODUCTION_RUNS: dict[str, dict] = {
         # y70rh76h = 8479989 (12h chain5, advanced step 13282 -> 13400)
         # logai2xn = 8485509 (1h19m chain6, pinned at step-13400)
         # 2qqhpcrm = 8485511 (1h23m chain7, also pinned at step-13400)
+        # 8505176 async-mode died at step-13400 cascade again (3 attempts) — no clean run wandb
+        # w78n1akt = 8506221 (12h, SYNC MODE — async-cascade workaround, step 13300 -> 16676, 21 ckpts)
+        # 8507196 trained step 13300 -> 20989 in-memory but Aurora pals-RPC infra crash; W&B run incomplete, skipped
+        # 21grc6o7 = 8507199 (12h SYNC, step 20900 -> 25967, 50 ckpts)
+        # nv4qwxc8 = 8508753 (12h R SYNC, step 25900 -> 27106+, currently running)
+        # (NB: afr5yvx9 + la416h9c are preflight ezpz.examples.test runs, not the training run)
         "run_ids": ["i252kps9", "d4hlr8qe", "1va7zfki", "6op7ozfh",
-                    "y70rh76h", "logai2xn", "2qqhpcrm"],
+                    "y70rh76h", "logai2xn", "2qqhpcrm", "w78n1akt",
+                    "21grc6o7", "nv4qwxc8"],
         "num_nodes": 512,
         "model": "2b",
     },
@@ -123,8 +136,13 @@ PRODUCTION_RUNS: dict[str, dict] = {
         #            never persisted — log shows step 800->1000 in-memory)
         # 10vf1mqr = 8481647 (failover continuation, 2026-05-22)
         # qttj3l3p = 8505124 (post-fix dispatch 2026-05-23, exhausted retries)
+        # wjy5pvxm = 8505258 (12h, SYNC MODE — first 512N progress since 05-03, step 800 -> 1414, 6 ckpts)
+        # cv3wii8x = 8505259 (12h continuation, step 1414 -> 2043, 6 more ckpts)
+        # tu77pzu7 = 8507197 (12h SYNC continuation, step 2043 -> 2686, 6 ckpts)
+        # 8vixdfg2 = 8507200 (12h SYNC continuation, step 2600 -> 3270, 6 ckpts)
         "run_ids": ["9tsyx5us", "ej3zy5cq", "s6b159xk", "gkzl19dg", "10vf1mqr",
-                    "qttj3l3p"],
+                    "qttj3l3p", "wjy5pvxm", "cv3wii8x",
+                    "tu77pzu7", "8vixdfg2"],
         "num_nodes": 512,
         "model": "20b",
     },

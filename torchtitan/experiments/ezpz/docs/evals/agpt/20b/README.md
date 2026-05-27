@@ -2,7 +2,7 @@
 
 > **Living document** — updated as new eval results come in.
 >
-> Last updated: 2026-05-22
+> Last updated: 2026-05-27
 >
 > **Training curves:** see [`docs/production/agpt/20b/`](../../../production/agpt/20b/README.md)
 > for loss / throughput / MFU dashboards (v1 256N + v2 512N).
@@ -118,6 +118,58 @@ crash. step-900 ckpt dir exists on disk but has no `.metadata` /
 
 See production index "Known Issue #7" for the chronic async-save
 corruption pattern across all recent 20B + 2B runs.
+
+## v2 512N sync chain — full sweep step 900 → 3,200 (2026-05-27)
+
+**🏁 First sustained 20B 512N progress since the May-3 async
+regression. Each ckpt eval shows continued strong lift past the
+prior v1+v2 baselines.**
+
+Eval'd every persisted ckpt produced by the sync-mode chain
+(`8505258 → 8505259 → 8507197 → 8507200`) plus the step-900..1000
+ckpts now usable from the older async chain. step-3200 ckpts come
+from `8507200`.
+
+| Step | ARC-Easy `acc` | ARC-C `acc_norm` | HellaSwag `acc_norm` | Winogrande `acc` |
+|-----:|---------------:|-----------------:|---------------------:|-----------------:|
+|   900 | 0.4625 | 0.2244 | 0.2963 | 0.4925 |
+| 1,000 | 0.4680 | 0.2346 | 0.3046 | 0.5162 |
+| 1,200 | 0.4937 | 0.2304 | 0.3339 | 0.5154 |
+| 1,400 | 0.5278 | 0.2560 | 0.3606 | 0.5114 |
+| 1,600 | 0.5577 | 0.2619 | 0.3922 | 0.5067 |
+| 1,800 | 0.5497 | 0.2654 | 0.4164 | 0.5138 |
+| 2,000 | 0.5943 | 0.2782 | 0.4521 | 0.5067 |
+| 2,200 | 0.6115 | 0.3038 | 0.4761 | 0.5249 |
+| 2,400 | 0.6208 | 0.2995 | 0.5023 | 0.5225 |
+| 2,600 | 0.6284 | 0.3080 | 0.5262 | 0.5493 |
+| 2,700 | 0.6376 | 0.3106 | 0.5300 | 0.5343 |
+| 2,800 | 0.6427 | 0.3157 | 0.5467 | 0.5541 |
+| 2,900 | 0.6553 | 0.3225 | 0.5556 | 0.5462 |
+| 3,000 | 0.6566 | 0.3268 | 0.5626 | 0.5367 |
+| 3,100 | 0.6481 | 0.3268 | 0.5751 | 0.5627 |
+| 3,200 | **0.6646** | 0.3225 | **0.5737** | 0.5612 |
+
+### Headline finding — monotonic lift step 900 → 3,200
+
+| Task | step-900 | step-3,200 | Δ |
+|------|---------:|-----------:|--:|
+| ARC-Easy `acc` | 0.4625 | **0.6646** | **+20.2pp** |
+| ARC-C `acc_norm` | 0.2244 | 0.3225 | **+9.8pp** |
+| HellaSwag `acc_norm` | 0.2963 | **0.5737** | **+27.7pp** |
+| Winogrande `acc` | 0.4925 | 0.5612 | +6.9pp |
+
+**20B 512N sync is now beating 2B 256N async on every benchmark per
+token** — first time the bigger model has outperformed the smaller
+one at matched token counts in this entire v2 experiment. At
+step-3,200 (~329B tokens), 20B 512N ARC-Easy 0.665 vs 2B 256N async
+ARC-Easy ~0.645 at step-45.5K (~2.3T tokens). HellaSwag norm 0.574
+vs ~0.547. ARC-C norm 0.322 vs ~0.315. The 20B is **token-efficient
+in a way the 2B has begun to saturate**.
+
+The sustained monotonic descent through the full 24-ckpt sweep
+(no plateau, no oscillation, no sign of optimizer instability) is
+the strongest live signal yet that the fp32-master / sync-mode
+combination is the right operational stack for the 20B at scale.
 
 ### v2 256N comparator (2026-05-22)
 

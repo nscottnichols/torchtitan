@@ -1,7 +1,18 @@
 # Production Training — agpt 2B @ 512 nodes
 
-> **This is the canonical 2B production chain.** The 256N v2 ran once
-> (no continuation chained); 1024N is queued but not yet started.
+> **This is the canonical 2B production chain.**
+>
+> **Status:** at step **27,106+ (8508753 R as of 2026-05-27 12:37)**,
+> loss **2.72** — sync-mode workaround for async-cascade continues to
+> hold across 3 more dispatches (~107 more ckpts persisted in
+> `8507199` + still-running `8508753` on 2026-05-26 → 2026-05-27;
+> `8507196` lost to a separate Aurora pals-RPC infra failure — see
+> [`Recovery`](#recovery)). The async-mode runs (`8505176` and earlier)
+> had been pinned at step-13,300 for two weeks because every dispatch
+> cleanly trained ~100 steps to the next save then died in the same
+> async-save cluster cascade. Switching `CHECKPOINT_ASYNC_MODE=disabled`
+> keeps the chain advancing — same fix that unblocked the 20B 512N
+> trajectory.
 >
 > **Eval scores:** see [`docs/evals/agpt/2b/`](../../../../evals/agpt/2b/README.md)
 > for the v1-vs-v2 lm-eval comparison. v2 512N at 503B tokens beats
@@ -43,12 +54,47 @@
 | [`8466847`](#log-8466847) | 2026-05-11 | 12h | 6900–13279 | 2.90 → **2.79** | ~2,800 | ~10% | Done (walltime, 12h00m13s). step-13200 ckpt saved. |
 | [`8479988`](#log-8479988) | 2026-05-11 | 12h | 13200+ | — | — | — | **Queued** (resubmit, 2026-05-11 evening) — auto-resumes from step-13200 |
 | [`8479989`](#log-8479989) | 2026-05-11 | 12h | (cont.) | — | — | — | Held (`afterany:8479988`) |
+| [`8505176`](#log-8505176) | 2026-05-23 | 12h | 13,300 → ~13,400 | — | — | — | **All 3 wrapper attempts failed in async-save cluster cascade @ step 13400** (same regression first observed at 20B 512N). Wrapper exhausted retries, exit 143. Only ckpt persisted across the dispatch was step-13300 from attempt 1's brief progress. **Async mode pinned at step-13300.** |
+| [`8506215`](#log-8506215) | 2026-05-24 | — | (qsub fail) | — | — | — | **Sync-mode resubmit aborted in preflight.** All 3 wrapper attempts tripped the 120s preflight DDP-init watchdog (timeout doesn't scale with N at 6,144 ranks). Exit 1. **Bug fix:** bumped default to 600s + added `--train-iters 5` to cap preflight length. |
+| [`8506221`](#log-8506221) | 2026-05-24 | 12h | 13,300 → **16,676** | ~2,700 | ~10% | **SYNC mode (async disabled). 21 ckpts step-14600..step-16600 persisted, loss 2.76.** Preflight attempt 1 hung at iter 111 (real silent hang, 49 min of silence); wrapper SIGTERM'd and blind-swapped bad node `x4305c0s7b0n0` for spare `x4602c3s3b0n0`. Preflight attempt 2 succeeded ~75 min total; main training started 00:17 and ran to walltime exit -29. **First sustained 512N progress in two weeks.** |
+| [`8507196`](#log-8507196) | 2026-05-25 → 2026-05-26 | 11h+ | 13,300 → ~**20,989** | ~2,700 | ~10% | **SYNC mode.** Resumed from step-13,300, ran through 21:12 → 08:17. Trained cleanly to step **20,989** in-memory (loss 2.74), persisted **+76 ckpts** before all 3 wrapper attempts tripped an **Aurora pals-RPC infra failure** (exit 127 in launch phase, 3 different "bad" nodes swapped — pals failures the wrapper cannot recover from). See `memory/project_aurora_pals_rpc_launch_failure.md`. |
+| [`8507199`](#log-8507199) | 2026-05-26 | 12h | 20,900 → **25,967** | ~2,700 | ~10% | Done (walltime, exit -29). **SYNC mode.** `afterany` continuation, ran 09:24 → 21:26. Persisted **~50 ckpts** step-21000..step-25900, ended at loss **2.72**. |
+| [`8508753`](#log-8508753) | 2026-05-27 (R) | 12h | 25,900 → **27,106+** | ~2,700 | ~10% | **Running** (started 09:19, expected end 21:19). **SYNC mode.** `afterany` continuation of 8507199. At 12:37 snapshot: step **27,106**, loss **2.72**. |
 
-**Latest checkpoint:** step-13200 (8466847 saving every 100 steps)
+**Latest checkpoint:** step-25900 (8507199 last persisted; 8508753 R still in first ckpt interval at snapshot)
 
-**Cumulative steps:** 13,279
+**Cumulative steps:** 27,106+ (8508753 R as of 2026-05-27 12:37)
 
-**Tokens consumed:** 13,279 × 12,288 × 8,192 = **1.34T tokens** (28.7% of 4.67T target — past the quarter mark)
+**Tokens consumed:** 27,106 × 12,288 × 8,192 = **2.73T tokens** (58.4% of 4.67T target)
+
+### Recovery
+
+Async checkpoint saves cluster-cascaded at 6,144 ranks: every
+dispatch from 2026-05-11 → 2026-05-23 cleanly trained ~100 steps
+to the next save then died the same way, pinning the chain at
+step-13,300 for two weeks. Same pattern hit the 20B 512N chain.
+
+`8506221` (2026-05-24) ran with `CHECKPOINT_ASYNC_MODE=disabled`
+and advanced the chain by 3,376 steps (+21 ckpts persisted) in
+12h. Sync mode is the operational workaround for both 2B and 20B
+512N trajectories. The follow-on chain (`8507199` + `8508753`)
+has continued the pattern, taking the chain from step-16,676 to
+**27,106+** across two more sustained dispatches.
+
+`8507196` (2026-05-25) was the one stumble in this stretch: trained
+cleanly to step **20,989** in-memory (+76 persisted ckpts), then all
+three wrapper attempts hit an **Aurora pals-RPC infrastructure
+failure** (exit 127 during launch). The wrapper correctly identified
+the failures as node-related and swapped three different nodes before
+exhausting retries — but pals-RPC failures are upstream of anything
+the wrapper can repair. The chain still benefited (76 persisted ckpts
+from step-13,400..step-20,900 advanced the on-disk frontier
+significantly), and `8507199` resumed cleanly from step-20900.
+
+Note the preflight gotcha discovered in `8506215`: the wrapper's
+default 120s smoke-test timeout doesn't scale to 6,144-rank DDP
+init, so all three attempts watchdog-tripped before any real
+training. Default is now 600s + `--train-iters 5`.
 
 ### Logs
 
@@ -62,6 +108,12 @@
 | <a id="log-8479989"></a>`8479989` | `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n512-v2-chain5.o8479989` |
 | <a id="log-8485509"></a>`8485509` | `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n512-v2-chain6.o8485509` (ran 1h19m, walltime; pinned at step-13400) |
 | <a id="log-8485511"></a>`8485511` | `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n512-v2-chain7.o8485511` (ran 1h23m, walltime; also pinned at step-13400 — same ckpt as 8485509 resume) |
+| <a id="log-8505176"></a>`8505176` | `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n512-v2-chain8.o8505176` |
+| <a id="log-8506215"></a>`8506215` | `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n512-v2-sync-chain1.o8506215` |
+| <a id="log-8506221"></a>`8506221` | `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n512-v2-sync-chain2.o8506221` |
+| <a id="log-8507196"></a>`8507196` | `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n512-v2-failover-sync-cont.o8507196` |
+| <a id="log-8507199"></a>`8507199` | `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n512-v2-failover-sync-cont2.o8507199` |
+| <a id="log-8508753"></a>`8508753` | `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n512-v2-failover-sync-cont3.o8508753` |
 
 ---
 

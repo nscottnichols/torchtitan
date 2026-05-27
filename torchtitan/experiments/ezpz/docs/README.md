@@ -22,9 +22,9 @@ going?" Tracking is per-model and per-node-count.
 |------|-------|---------:|
 | [Production Index](./production/README.md) | Top-level snapshot of every active trajectory | 2026-05-23 |
 | [Dense (agpt) Production](./production/agpt/README.md) | 2B / 20B / 80B chains, v1-vs-v2 overlays | 2026-05-23 |
-| [2B 256N](./production/agpt/2b/n256/README.md) | **🚀 only trajectory making consistent on-disk progress.** step **25,500** persisted (1.28T tokens, 27.4% of target). +12,500 steps in 30 hours. | 2026-05-23 |
-| [2B 512N](./production/agpt/2b/n512/README.md) | Step **13,200** persisted. Hits step-13400 wall every dispatch (async-save cluster cascade). Same root cause as 20B 512N. | 2026-05-23 |
-| [20B 512N](./production/agpt/20b/n512/README.md) | **Canonical 20B chain** — step **800** persisted (81B tokens). Three weeks of dispatches lost to async-save regression; sync-mode resubmits live-testing 2026-05-23 evening. | 2026-05-23 |
+| [2B 256N](./production/agpt/2b/n256/README.md) | Step **49,666+** persisted (2.50T tokens, 53.5% of target). 8508020 R as of 2026-05-27 12:37, loss 2.68. Async stable at 256N across 5 dispatches. | 2026-05-27 |
+| [2B 512N](./production/agpt/2b/n512/README.md) | Step **27,106+** persisted (2.73T tokens, 58.4% of target). 8508753 R as of 2026-05-27 12:37, loss 2.72. Sync-mode workaround continues to hold; one pals-RPC infra failure on 8507196 (separate issue). | 2026-05-27 |
+| [20B 512N](./production/agpt/20b/n512/README.md) | **🏁 20B 512N sync now beats 2B 256N async per token on every benchmark.** Step **3,270** persisted (329B tokens, 7.0% of target), loss 2.65 at end of 8507200 (12h walltime exit 2026-05-27 03:43). 8508214 Q ~10h in `small` (capacity exhausted). | 2026-05-27 |
 | [20B 256N](./production/agpt/20b/n256/README.md) | Step **300** persisted. Same async wall as 512N; sync-mode (`8505255`) Q to test fix. | 2026-05-23 |
 | [agpt 80B](./production/agpt/80b/README.md) | 11 attempts since 2026-05-11; zero persisted. Wrapper detects failures correctly, but Aurora bad-node prevalence at init is too high for current spare count. | 2026-05-23 |
 | [80B 256N](./production/agpt/80b/n512/README.md) | Latest config: AdamW LR=1e-6, TP=2, AC=full, compile=OFF, fp32-master. Most recent attempt `8505221` used 20 spares + 5 retries, still died in init. | 2026-05-23 |
@@ -41,8 +41,8 @@ ARC-Challenge / Winogrande vs the (frozen-norm) v1 baseline.
 
 | Page | Notes | Modified |
 |------|-------|---------:|
-| [agpt 2B evals](./evals/agpt/2b/README.md) | v2 512N full sweep step 1K-13K + 256N-vs-512N per-batch. v2 ARC-Easy **0.6115** at step-13K (+33pp vs v1). 8505205 R adding steps 14K-25K. | 2026-05-23 |
-| [agpt 20B evals](./evals/agpt/20b/README.md) | v1 vs v2 step 100-800 (ARC-Easy 0.27 → 0.44) + 256N-vs-512N comparator at matched steps | 2026-05-22 |
+| [agpt 2B evals](./evals/agpt/2b/README.md) | v2 256N async sweep step 36K-45.5K (plateau at ARC-Easy ~0.645). v2 512N sync sweep step 14K-25K. v2 512N full sweep step 1K-13K + 256N-vs-512N per-batch. v2 ARC-Easy **0.6115** at step-13K (+33pp vs v1). | 2026-05-27 |
+| [agpt 20B evals](./evals/agpt/20b/README.md) | **🏁 20B 512N sync full sweep step 900-3,200: ARC-Easy 0.463→0.665 (+20pp), HellaSwag norm 0.296→0.574 (+28pp). Now beating 2B 256N async per token.** v1 vs v2 step 100-800 (ARC-Easy 0.27 → 0.44) + 256N-vs-512N comparator. | 2026-05-27 |
 | [agpt 2B-MDS evals](./evals/agpt/2b-mds/README.md) | Pre-torchtitan reference scores | 2026-05-03 |
 | [Eval Index](./evals/README.md) | Top-level eval landing page | 2026-04-30 |
 
@@ -53,7 +53,7 @@ relevant guide before suggesting work that touches one of these.
 
 | Page | Notes | Modified |
 |------|-------|---------:|
-| [Bad-node failover wrapper](./guides/bad-node-failover.md) | **v2 in production 2026-05-23.** Production submit scripts that request N+spare nodes, swap bad nodes for spares on crash, retry. Now also handles silent hangs via `ezpz launch --timeout=1800` watchdog. Test harness at [`tests/failover/`](../tests/failover/) — 9 fixtures, all passing. | 2026-05-23 |
+| [Bad-node failover wrapper](./guides/bad-node-failover.md) | **🏁 v2 production-validated 2026-05-23** ([incident report 8505298](./experiments/agpt/aurora/20260523-failover-silent-hang-recovery-8505298.md)). Production submit scripts that request N+spare nodes, swap bad nodes for spares on crash, retry. Silent-hang watchdog (`--timeout=1800`) caught its first real production hang at step 37, blind-swapped, recovered cleanly. Test harness at [`tests/failover/`](../tests/failover/) — 9 fixtures, all passing. | 2026-05-23 |
 | [Known Issues / Operational Notes](./guides/known-issues.md) | **Top entry (2026-05-23)**: `--checkpoint.async-mode=async` kills the cluster at 20B 512N+ — root cause of 3 weeks of lost persisted progress. Workaround: `CHECKPOINT_ASYNC_MODE=disabled`. | 2026-05-23 |
 | [bf16-master RMSNorm freeze](./guides/training-dtype-bf16-norm-freeze.md) | Root cause of v1 → v2 restart; `dtype=float32` is now default | 2026-05-03 |
 | [TP > 1 loss reporting off by `dp_world_size`](./guides/loss-reporting-tp-dist-reduce.md) | Upstream regression since 2026-04-27. Fix filed as pytorch/torchtitan#3204 | 2026-05-03 |

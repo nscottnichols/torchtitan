@@ -95,7 +95,7 @@ GAS="${GAS:-1}"
 GBS=$(( NGPUS * LBS * GAS / (TP * PP * CP) ))
 
 TRAIN_TOKENS="${TRAIN_TOKENS:-4673780159710}"
-TRAINING_STEPS=$(( TRAIN_TOKENS / (GBS * SEQ_LEN) ))
+TRAINING_STEPS="${TRAINING_STEPS:-$(( TRAIN_TOKENS / (GBS * SEQ_LEN) ))}"
 
 OPTIMIZER="${OPTIMIZER:-sophiag}"
 LR="${LR:-2.28e-5}"
@@ -105,7 +105,7 @@ DFL_NAME="${DFL_NAME:-olmo-mix-1124}"
 DFL="${DFL_PARENT}/${DFL_NAME}.txt"
 
 CKPT_KEEP_LATEST_K="${CKPT_KEEP_LATEST_K:-0}"
-CKPT_INTERVAL=100
+CKPT_INTERVAL="${CKPT_INTERVAL:-100}"
 CKPT_DIR="${CKPT_DIR:-checkpoints/agpt-${MODEL}-${OPTIMIZER}-${DFL_NAME}-n${NNODES}-gbs${GBS}}"
 DATA_CACHE_PATH="${CKPT_DIR}/.cache/${DFL_NAME}/index-cache"
 
@@ -122,6 +122,26 @@ log_message INFO "LR: ${LR}"
 log_message INFO "GBS: ${GBS}"
 log_message INFO "Checkpoint directory: ${CKPT_DIR}"
 log_message INFO "==========================================="
+
+# ---- Preflight: catch bad nodes BEFORE 30+ min of model init ----
+# Run a tiny single-rank-per-node ezpz.examples.test through failover_run so
+# that any bad nodes are detected (gloo/UR/SIGSEGV/timeout) and swapped for
+# spares before the real training command launches.
+#
+# Timeout sizing: ~40s actual training on 8N; DDP init/all-reduce dominates
+# at scale. 8505298 (8N) needed ~120s; 8506215 (512N) tripped 120s watchdog
+# during DDP init at 6144 ranks. 600s (10 min) leaves plenty of headroom
+# for 1024N+ while still catching genuine hangs quickly.
+# Requires ezpz >= 0.16.0 for --timeout.
+# --train-iters 5: enough to verify all-reduce works without burning hours of
+# walltime at large N. Each iter at 6144 ranks (512N) is ~4-5 min, so 5 iters
+# ≈ 25-30 min including DDP init. Without this, the test defaults to 200 iters
+# (~16h at 512N — full walltime burned in preflight).
+log_message INFO "preflight smoke: ezpz.examples.test on active nodes"
+FAILOVER_IDLE_TIMEOUT="${PREFLIGHT_IDLE_TIMEOUT:-600}" FAILOVER_MAX_RETRIES=2 \
+    failover_run ezpz launch python3 -m ezpz.examples.test --train-iters 5 \
+    || { log_message ERROR "preflight smoke failed after retries; bailing"; exit 1; }
+log_message INFO "preflight smoke OK — proceeding to main training launch"
 
 # ---- Launch with failover ----
 failover_run ezpz launch python3 -m torchtitan.experiments.ezpz.train \

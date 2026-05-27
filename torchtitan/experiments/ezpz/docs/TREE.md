@@ -82,7 +82,8 @@ docs/
 │   ├── running-with-newer-pytorch.md       ← torch 2.13 venv setup + at-scale yeet
 │   ├── xpu-attention-issues.md    ← SDPA / FlexAttention / Triton on Intel Max 1550
 │   └── known-bugs/                ← Per-bug deep dives
-│       └── blendcorpus-megatron-aliasing.md  ← 7 leftover Megatron-style aliases in dataloader
+│       ├── blendcorpus-megatron-aliasing.md  ← 7 leftover Megatron-style aliases in dataloader
+│       └── blendcorpus-eoferror-race.md      ← Cache-build race causing mass EOFError at init (80B 8N, 80B 522N)
 │
 ├── experiments/           ← Per-run reports. Every job that produced data should land a report here.
 │   ├── README.md                  ← Top-level experiment index
@@ -96,6 +97,8 @@ docs/
 │   │   │   ├── 20260414-production-20b-n512.md
 │   │   │   ├── 20260418-80b-tp2-restored.md
 │   │   │   ├── 20260511-20b-n512-hang-8479579.md   ← Silent-hang incident. Now handled by --timeout watchdog (2026-05-23).
+│   │   │   ├── 20260523-failover-silent-hang-recovery-8505298.md  ← 🏁 First real silent-hang recovery validation (job 8505298 PASS).
+│   │   │   ├── 20260524-80b-256n-sigsegv-cascade-8505222.md       ← 80B SIGSEGV-cascade post-mortem (wrapper bailed after 6 attempts).
 │   │   │   └── figures/
 │   │   ├── polaris/               ← Polaris (A100) reports
 │   │   │   ├── 20260412-160749-smoke-n2.md

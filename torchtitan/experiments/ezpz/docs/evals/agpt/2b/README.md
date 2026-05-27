@@ -2,7 +2,7 @@
 
 > **Living document** — updated as new eval results come in.
 >
-> Last updated: 2026-05-22
+> Last updated: 2026-05-27
 >
 > **Training curves:** see [`docs/production/agpt/2b/`](../../../production/agpt/2b/README.md)
 > for loss / throughput / MFU dashboards across all 2B trajectories
@@ -176,12 +176,62 @@ performance on these.
   mid-write by bad-node crash on 2026-05-13). Latest *usable* ckpt
   in the chain is step-13200. See production index "Known Issue #7."
 
+### v2 512N sync chain extension (steps 14K → 25K, 2026-05-27)
+
+After the sync-mode workaround unblocked the 2B 512N chain on
+2026-05-24, eval'd the new ckpts produced by `8506221 → 8507196 →
+8507199 → 8508753`.
+
+| Step | ARC-Easy `acc` | HellaSwag `acc_norm` |
+|-----:|---------------:|---------------------:|
+| 14,000 | 0.6086 | 0.4977 |
+| 15,000 | 0.6107 | 0.4980 |
+| 16,000 | 0.6128 | 0.5030 |
+| 21,000 | 0.6191 | 0.5160 |
+| 22,000 | 0.6309 | 0.5227 |
+| 23,000 | 0.6279 | 0.5203 |
+| 24,000 | 0.6254 | 0.5241 |
+| 25,000 | 0.6296 | 0.5230 |
+
+Loss at step-25K ≈ **2.72**. **2B 512N sync continues modest lift,
+behind 2B 256N async** per the large-batch under-training pattern
+documented above (256N learns more per token, 512N learns more per
+wall clock with the same LR=2.28e-5).
+
 ### Re-render plot
 
 ```bash
 python3 torchtitan/experiments/ezpz/docs/evals/agpt/2b/plot_v1_vs_v2.py
 # writes figures/v1_vs_v2.svg with the new data points
 ```
+
+## v2 256N (n256-gbs6144) — async chain extension (2026-05-27)
+
+The 2B 256N async chain (`gbs6144`, SophiaG LR=2.28e-5) was eval'd
+across steps 36K-45.5K spanning the `8505175 → 8505252 → 8507195 →
+8507198 → 8508020` chain (~24K new steps since the prior 2B 256N
+comparator at steps 100-300).
+
+| Step | ARC-Easy `acc` | ARC-C `acc_norm` | HellaSwag `acc_norm` | Winogrande `acc` |
+|-----:|---------------:|-----------------:|---------------------:|-----------------:|
+| 36,000 | 0.6465 | 0.3183 | 0.5340 | 0.5509 |
+| 37,000 | 0.6410 | 0.3089 | 0.5383 | 0.5564 |
+| 38,000 | 0.6410 | 0.3148 | 0.5137 | 0.5556 |
+| 38,800 | 0.6456 | 0.3131 | 0.5378 | 0.5430 |
+| 40,000 | 0.6469 | 0.3166 | 0.5375 | 0.5446 |
+| 41,000 | 0.6406 | 0.3200 | 0.5437 | 0.5549 |
+| 42,000 | 0.6460 | 0.3131 | 0.5402 | 0.5556 |
+| 42,500 | 0.6477 | 0.3157 | 0.5437 | 0.5651 |
+| 44,000 | 0.6465 | n/a    | 0.5471 | n/a    |
+| 45,000 | 0.6444 | n/a    | 0.5462 | n/a    |
+| 45,500 | 0.6418 | n/a    | 0.5452 | n/a    |
+
+Loss at step-42K ≈ **2.69**. The 2B 256N async chain has **plateaued
+at ARC-Easy ~0.645, HellaSwag norm ~0.54** — the per-token learning
+curve is now visibly saturating for the 2B capacity at ~2T tokens.
+ARC-C `acc_norm` hovers in the 0.31-0.32 band; Winogrande oscillates
+0.54-0.57. (ARC-C / Winogrande for steps 44K-45.5K not yet aggregated
+in this batch.)
 
 <details>
 <summary><strong>v1 detailed results (bf16-tainted, kept for record) — click to expand</strong></summary>

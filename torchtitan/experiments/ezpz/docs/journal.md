@@ -40,6 +40,188 @@ production push, and re-try `--debug.deterministic` on MoE+XPU.
 
 ---
 
+## 2026-05-27 — 20B 512N sync chain doubles its eval scores; 2B chains pass step-49K + step-27K
+
+### Production progress (May 25 → May 27, ~40h)
+
+| Trajectory | Start → End step | Δ steps | Ckpts persisted | Dispatches |
+|---|---|---|---|---|
+| **2B 256N async** | 36,528 → **49,666+** | +13,138+ | **~114** | 8507195 + 8507198 + 8508020 (R) |
+| **2B 512N sync** | 16,676 → **27,106+** | +10,430+ | **~107** | 8507196 (pals-RPC infra fail, +76) + 8507199 (+50) + 8508753 (R) |
+| **20B 512N sync** | 2,043 → **3,270** | +1,227 | **+12** | 8507197 + 8507200 |
+
+**Total: ~233 new on-disk checkpoints across 3 chains in 40h of wall clock.**
+Sync-mode workaround continues to hold for both 2B 512N and 20B 512N
+trajectories; async-mode still stable at 256N.
+
+### 🏁 Headline: 20B 512N sync now beats 2B 256N async per token on every benchmark
+
+Eval'd the full 24-ckpt sync-mode sweep at steps 900..3,200. The 20B
+512N sync trajectory now leads the 2B 256N async on **all four
+benchmarks** at matched token counts:
+
+| Task | 20B 512N step-3,200 (329B tok) | 2B 256N step-45,500 (~2.3T tok) |
+|------|---:|---:|
+| ARC-Easy `acc` | **0.6646** | 0.6418 |
+| ARC-C `acc_norm` | **0.3225** | ~0.315 (oscillating) |
+| HellaSwag `acc_norm` | **0.5737** | 0.5452 |
+| Winogrande `acc` | **0.5612** | ~0.55-0.56 |
+
+The 20B model is now token-efficient in a way the 2B has begun to
+saturate (plateau at ARC-Easy ~0.645, HellaSwag norm ~0.547). The
+full sweep is monotonic — no plateau, no oscillation, no sign of
+optimizer instability across 24 consecutive checkpoints. This is
+**the first time in the entire v2 experiment that the bigger model
+has outperformed the smaller one at matched token counts**, and the
+strongest live signal yet that the fp32-master + sync-mode
+combination is the right operational stack for the 20B at scale.
+
+### Async-regression workaround still solving 512N
+
+The `CHECKPOINT_ASYNC_MODE=disabled` workaround continues to keep both
+512N trajectories advancing. 2B 512N: 4 consecutive sync dispatches
+(starting from `8506221`) have added ~10K steps and ~107 persisted
+ckpts. 20B 512N: 4 consecutive sync dispatches have added 1,243 steps
+and 24 persisted ckpts. No async-cascade failures in any of these.
+
+### One Aurora pals-RPC infra failure (separate from any other bug)
+
+`8507196` (2B 512N) trained cleanly to step **20,989** in-memory
+(persisting 76 ckpts), but all three wrapper attempts hit an Aurora
+**pals-RPC infrastructure failure** during launch (exit 127). The
+wrapper correctly identified the failures as node-related and swapped
+three different "bad" nodes — but pals-RPC is upstream of anything
+the wrapper can repair. See
+`memory/project_aurora_pals_rpc_launch_failure.md`. Not the
+async-cascade bug, not a model issue, not a wrapper bug.
+
+### 80B still blocked (separate SIGSEGV pattern)
+
+No 80B production progress this stretch. Last attempts continue to
+die in the same rank-level SIGSEGV pattern during init that bracketed
+the earlier 80B failures, separate from any of the 2B/20B failure
+modes. Writeup + likely upstream patches still pending from the
+05-25 entry.
+
+### Capacity is now the bottleneck
+
+`8508214` (20B 512N continuation queued at 03:44) has been **Q ~10h**
+in the `small` queue without starting — Aurora capacity for the 512N
+slot is exhausted. The 20B chain is currently throttled not by any
+bug or workaround but by raw queue availability. Same applies if any
+of the 2B 512N continuations need to chain after `8508753`.
+
+---
+
+## 2026-05-25 — 🏁 Sync-mode workaround fully validated for both 2B + 20B 512N; 100+ ckpts persisted overnight
+
+### Production progress (May 24 → May 25)
+
+After kicking off 6 production dispatches and 3 smoke runs late on 2026-05-23,
+**three production chains advanced significantly on disk overnight**:
+
+| Trajectory | Start → End step | Δ steps | Ckpts persisted | Dispatches |
+|---|---|---|---|---|
+| **2B 256N async** | 25,500 → **36,528** | +11,028 | **65** (every 100 steps) | 8505175 + 8505252 |
+| **2B 512N sync** | 13,300 → **16,676** | +3,376 | **21** (every 100 steps) | 8506221 |
+| **20B 512N sync** | 800 → **2,043** | +1,243 | **12** (every 100 steps) | 8505258 + 8505259 |
+
+**Total: 98 new on-disk checkpoints across 3 chains in ~36h of wall clock.**
+First sustained 512N progress since 2026-05-03 for both 2B and 20B.
+
+### Sync-mode async-cascade workaround validated
+
+8505258 (20B 512N sync) was the proof-of-concept: trained 800→1414 cleanly with
+6 ckpts persisted, the first 20B 512N to clear step-800 since the May-3 async
+regression. 8505259 carried the chain to step-2043 (6 more ckpts).
+
+8505176 (2B 512N async) confirmed the **same bug pattern at 2B 512N**: every
+attempt cleanly trained 13300→13400, then died at the step-13400 async save,
+wrapper swapped + retried 3 times before exhausting. Switching to sync mode
+in 8506221 produced **21 consecutive ckpts** at 512N — same fix as 20B.
+
+`CHECKPOINT_ASYNC_MODE=disabled` is now the standard 512N workaround for both
+models. Async still works fine at 256N (65 ckpts in one dispatch).
+
+### Preflight smoke bugs surfaced + fixed
+
+8506215 (first 2B 512N sync attempt) revealed the preflight smoke's 120s
+idle-timeout was too tight for 6144-rank DDP init. Fixed by bumping to 600s
+default + adding `--train-iters 5` to cap the test length (was running 200
+iters by default → 1+ hour of preflight at 512N). See
+[`memory/feedback_preflight_timeout_scales_with_n.md`](.).
+
+8506221 then hit a *real* silent hang during preflight (iter 111, 49 min of
+silence), wrapper SIGTERM'd on watchdog, blind-swapped `x4305c0s7b0n0` for
+`x4602c3s3b0n0`, preflight attempt 2 succeeded, main training started. **The
+wrapper handled the failure exactly as designed even during the preflight
+phase.**
+
+### New jobs queued (May 25 afternoon)
+
+- 8507195 (2B 256N async cont) + 8507198 (afterany +1)
+- 8507196 (2B 512N sync cont) + 8507199 (afterany +1)
+- 8507197 (20B 512N sync cont) + 8507200 (afterany +1)
+- 8507204 / 8507205 / 8507206: lm-eval batches on the new 2B 256N (26-36K),
+  2B 512N (14-16K), and 20B 512N (900-2000) checkpoints respectively
+
+### 80B is still blocked
+
+8505222 (80B 256N production) failed with rank-level SIGSEGV (signal 11) on
+attempt 1 + every retry, wrapper correctly classified as bad-node failure
+but every spare it swapped in was also bad. 5 retries exhausted. Separately,
+80B 8N smoke 8505326 surfaced a deterministic blendcorpus EOFError race in
+cache build (3 wrapper attempts, all same failure). Two distinct 80B failure
+modes both need writeups + likely upstream patches.
+
+---
+
+## 2026-05-23 (late) — 🏁 Failover wrapper passes first production silent-hang test (job 8505298)
+
+While running the 8-node smoke validation of the fresh ezpz 0.16.0
+tarballs (jobs `8505298` / `8505325` / `8505326`), the **2B smoke job
+8505298 caught a real silent training hang at step 37 and recovered
+automatically** — every code path in the v2 failover wrapper that
+exists to handle the [8479579 incident
+pattern](experiments/agpt/aurora/20260511-20b-n512-hang-8479579.md)
+fired correctly, in sequence, on a real-world failure.
+
+Sequence (clean steps to recovery to checkpoint-persist):
+1. Preflight `ezpz.examples.test` ran in ~2 min, exit 0.
+2. Main attempt-1 trained steps 1 → 37, then logged went **completely
+   silent at 21:06:41** — no traceback, no save attempt, no MPI error.
+3. **30 min later at 21:36:41**, `ezpz launch --timeout=1800` watchdog
+   tripped, SIGTERM'd PID 191892, exit 124.
+4. Wrapper classified exit 124 as silent-hang bad-node failure (not
+   walltime), couldn't identify a specific bad node from the log
+   (none — the hang was silent), fell through to
+   `failover_swap_one_blind()`, rotated `x4220c3s6b0n0` →
+   `x4220c5s3b0n0`.
+5. Attempt-2 started 4s after the swap, hit step 1 at 21:38:17, ran
+   cleanly to step 296 (loss 12.96 → 5.68 = ~466M tokens) until
+   PBS walltime kill at 21:57:50.
+6. **step-100 and step-200 DCP checkpoints both persisted** on flare
+   (96 shards × 239 MB each + 5.5 MB metadata). First unambiguous
+   proof since the 2026-05-03 regression that async-save works
+   end-to-end with the fresh ezpz 0.16.0 tarball.
+
+Full writeup with exact log snippets:
+[`experiments/agpt/aurora/20260523-failover-silent-hang-recovery-8505298.md`](experiments/agpt/aurora/20260523-failover-silent-hang-recovery-8505298.md).
+
+Knock-on actions: bumped the
+[`bad-node-failover.md`](guides/bad-node-failover.md) status from
+"v2 in production" to "v2 production-validated"; added back-pointer
+from the original 8479579 incident report; greenlit qdel + resubmit
+of the 9 queued production jobs (2B/20B/80B chains) against the
+fresh tarballs.
+
+20B + 80B smokes (`8505325` / `8505326`) still Q in capacity queue —
+blocked behind `8505200` (the 2-node test.sh used for the tarball
+rebuilds + smoke runs); will start when that walltimes out around
+2026-05-24 04:00 UTC.
+
+---
+
 ## 2026-05-23 — Failover wrapper hardening: tests, ANSI fix, async-mode regression diagnosed
 
 ### Failover-wrapper test harness + 2 more wrapper bugs

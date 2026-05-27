@@ -1,6 +1,17 @@
 # Bad-node failover for production training
 
-> Status: **v2 in production** as of 2026-05-23.
+> Status: **v2 production-validated** as of 2026-05-23.
+>
+> **🏁 First real-world silent-hang recovery, 2026-05-23.**
+> Job [`8505298`](../experiments/agpt/aurora/20260523-failover-silent-hang-recovery-8505298.md)
+> hung silently at step 37; the wrapper's `--timeout=1800` watchdog
+> tripped at exactly 30 min, classified exit 124 as silent-hang
+> bad-node failure, blind-swapped the rank-0 host for a spare,
+> retried, and trained cleanly for ~21 min until walltime — landing
+> step-100 + step-200 DCP checkpoints on disk. **Every code path
+> that exists to handle the 8479579 incident pattern fired
+> correctly.** See the [full incident report with log
+> snippets](../experiments/agpt/aurora/20260523-failover-silent-hang-recovery-8505298.md).
 >
 > v2 (2026-05-13 → 2026-05-23) added: silent-hang detection via
 > `ezpz launch --timeout` watchdog (PR `eefccfc9d`), ANSI-aware
