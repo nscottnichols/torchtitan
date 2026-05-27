@@ -36,10 +36,17 @@ echo "Modules loaded."
 
 cd "${PBS_O_WORKDIR:-/lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz}"
 
-# Default to the canonical v2 clone, but allow overrides via env var so we
-# can also eval ckpts that live in the legacy /flare/.../projects/saforem2/torchtitan/
-# clone (the chain pre-2026-04-30 was written there before the v2 clone was created).
+# V2_REPO controls where the DCP checkpoints LIVE (env-overridable so we
+# can also eval ckpts in the legacy /flare/.../projects/saforem2/torchtitan/
+# clone, where the chain pre-2026-04-30 was written).
 V2_REPO="${V2_REPO:-/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz}"
+# CONVERT_REPO controls where the conversion ENV + script live (the .venv
+# and torchtitan/experiments/ezpz/eval/convert_to_hf.py). This MUST be a
+# clone that has the eval/ subdir + working torch 2.13 venv — i.e. the
+# canonical v2 clone. Default to PWD (where this script is executed from)
+# so it works without override; only override if you have a newer eval env
+# in a different clone.
+CONVERT_REPO="${CONVERT_REPO:-/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz}"
 # Default to the canonical 512N chain (gbs12288); override CKPT_NAME +
 # LABEL to evaluate other trajectories (e.g. the abandoned 256N
 # one-shot).
@@ -74,13 +81,27 @@ for step in $STEPS; do
     HF_DIR_ABS="${EVAL_CLONE}/${HF_DIR}"
     RESULTS_DIR_ABS="${EVAL_CLONE}/${RESULTS_DIR}"
 
-    # ---- Step 1: DCP -> HF (run from v2 clone so torchtitan resolves) ----
+    # ---- Step 1: DCP -> HF (run from CONVERT_REPO so torchtitan resolves) ----
+    # NOTE: V2_REPO can point at any clone (e.g. legacy) so DCP can be sourced
+    # from there, but CONVERT_REPO MUST be the canonical v2 clone with .venv +
+    # torchtitan/experiments/ezpz/eval/convert_to_hf.py. Don't conflate them.
     if [[ ! -f "${HF_DIR_ABS}/model.safetensors.index.json" \
           && ! -f "${HF_DIR_ABS}/model.safetensors" ]]; then
-        echo "[1/2] Converting DCP -> HF (via v2 venv, from ${V2_REPO})..."
+        echo "[1/2] Converting DCP -> HF (venv from ${CONVERT_REPO}, DCP from ${V2_REPO})..."
+        # Validate CONVERT_REPO has what we need before launching the subshell.
+        if [[ ! -f "${CONVERT_REPO}/.venv/bin/activate" ]]; then
+            echo "  ERROR: ${CONVERT_REPO}/.venv/bin/activate missing — set CONVERT_REPO to a clone with a built .venv"
+            echo "[1/2] Conversion FAILED — skipping eval for step ${step}"
+            continue
+        fi
+        if [[ ! -f "${CONVERT_REPO}/torchtitan/experiments/ezpz/eval/convert_to_hf.py" ]]; then
+            echo "  ERROR: ${CONVERT_REPO}/torchtitan/experiments/ezpz/eval/convert_to_hf.py missing"
+            echo "[1/2] Conversion FAILED — skipping eval for step ${step}"
+            continue
+        fi
         mkdir -p "${HF_DIR_ABS}"
         (
-            cd "${V2_REPO}" || exit 1
+            cd "${CONVERT_REPO}" || exit 1
             source .venv/bin/activate
             echo "  subshell: pwd=$(pwd)"
             echo "  subshell: which python3=$(which python3)"
