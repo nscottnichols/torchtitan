@@ -38,6 +38,11 @@ V2_TRAJECTORIES = {
     256: (REPO_ROOT / "outputs" / "evals" / "agpt-2b-v2-256n", 6_144),   # LBS=2 × 256N × 12 GPUs
     512: (REPO_ROOT / "outputs" / "evals" / "agpt-2b-v2-512n", 12_288),  # LBS=2 × 512N × 12 GPUs
 }
+# 2B-MDS reference baseline (pre-torchtitan SophiaG, 140K steps / 7.77T tokens).
+# Three stage dirs all symlink to the same physical ckpt dir — same step
+# can appear up to 3 times; we average across replicates.
+MDS_RESULTS_BASE = REPO_ROOT / "outputs" / "evals" / "agpt-2b-mds"
+MDS_TOKENS_PER_STEP = 7_770e9 / 140_000  # ~55.5M tokens/step
 FIG_DIR = Path(__file__).parent / "figures"
 FIG_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -115,6 +120,30 @@ def load_v2_trajectory(results_base: Path) -> dict[int, dict[str, float]]:
     return out
 
 
+def load_mds() -> dict[int, dict[str, float]]:
+    """MDS layout: <stage>/step-<N>/results/results.json with 3 stages all
+    symlinked to the same physical ckpt dir for SophiaG. Average across
+    replicates (XPU lm-eval is not bitwise-deterministic)."""
+    if not MDS_RESULTS_BASE.exists():
+        return {}
+    by_step: dict[int, dict[str, list[float]]] = {}
+    for p in sorted(MDS_RESULTS_BASE.glob("*/step-*/results/results.json")):
+        try:
+            step = int(p.parent.parent.name.split("-")[1])
+        except ValueError:
+            continue
+        with p.open() as f:
+            payload = json.load(f)
+        results = payload.get("results", payload)
+        for task in TASKS:
+            if task in results and (acc := _acc(results[task])) is not None:
+                by_step.setdefault(step, {}).setdefault(task, []).append(acc)
+    return {
+        step: {task: sum(vs) / len(vs) for task, vs in d.items()}
+        for step, d in sorted(by_step.items())
+    }
+
+
 def _tokens_for(step: int, gbs: int, seq: int) -> float:
     return step * gbs * seq / 1e9
 
@@ -130,12 +159,13 @@ def plot_per_task(
     v1: dict[int, dict[str, float]],
     v2_by_nodes: dict[int, dict[int, dict[str, float]]],
     v2_gbs: dict[int, int],
+    mds: dict[int, dict[str, float]],
     out_path: Path,
 ) -> None:
     fig, axes = plt.subplots(2, 2, figsize=(13, 9))
     fig.suptitle(
-        "AuroraGPT 2B  —  v1 (bf16-master, broken) vs v2 (fp32-master, current)",
-        fontsize=13,
+        "AuroraGPT 2B  —  v1 (bf16-master, broken) vs v2 (fp32-master, current) vs MDS (SophiaG reference)",
+        fontsize=12,
         fontweight="bold",
     )
     for ax, task in zip(axes.flat, TASKS):
@@ -151,7 +181,20 @@ def plot_per_task(
             color="#94a3b8", alpha=0.85, label=f"v1 256N (n={len(v1_steps)})",
         )
 
+        # MDS reference (pre-torchtitan SophiaG, 7.77T tokens).
+        mds_steps = sorted(s for s in mds if task in mds[s])
+        if mds_steps:
+            mds_tokens = [s * MDS_TOKENS_PER_STEP / 1e9 for s in mds_steps]
+            mds_y = [mds[s][task] for s in mds_steps]
+            ax.plot(
+                mds_tokens, mds_y, marker="x", ms=5, lw=1.4,
+                color="#000000", alpha=0.7, linestyle="--",
+                label=f"MDS SophiaG ref (n={len(mds_steps)})",
+            )
+
         all_y_max = max(v1_y) if v1_y else 0.55
+        if mds_steps:
+            all_y_max = max(all_y_max, max(mds[s][task] for s in mds_steps))
         for nodes, v2_traj in v2_by_nodes.items():
             if not v2_traj:
                 continue
@@ -208,8 +251,10 @@ def print_table(
             s = v2[step]
             tok = _tokens_for(step, gbs, V2_SEQ)
             cells = [f"{s[t]:.4f}" if t in s else "—" for t in TASKS]
+            # Use {tok:.1f} (no width) so we don't get leading-space-in-bold
+            # rendering like `** 10.1**`.
             print(
-                f"| **v2 {nodes}N** | **{step:,}** | **{tok:5.1f}** | "
+                f"| **v2 {nodes}N** | **{step:,}** | **{tok:.1f}** | "
                 + " | ".join(f"**{c}**" for c in cells)
                 + " |"
             )
@@ -223,8 +268,10 @@ def main() -> None:
         v2_by_nodes[nodes] = traj
         v2_gbs[nodes] = gbs
         print(f"loaded v2 {nodes}N: {len(traj)} steps from {path}")
+    mds = load_mds()
+    print(f"loaded MDS reference: {len(mds)} steps from {MDS_RESULTS_BASE}")
     print(f"loaded v1: {len(V1_RESULTS)} steps")
-    plot_per_task(V1_RESULTS, v2_by_nodes, v2_gbs, FIG_DIR / "v1_vs_v2.svg")
+    plot_per_task(V1_RESULTS, v2_by_nodes, v2_gbs, mds, FIG_DIR / "v1_vs_v2.svg")
     print_table(V1_RESULTS, v2_by_nodes, v2_gbs)
 
 
