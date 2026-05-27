@@ -249,17 +249,37 @@ The full sweep table has two visible step-range gaps on the 256N row:
 - **step-2,200 → step-13,800** (no evals between step-2,000 and step-14,000)
 - **step-25,200 → step-35,900** (no evals between step-25,100 and step-36,000)
 
-These reflect what's currently on disk, not a script bug. The
-underlying DCP checkpoints in those step ranges were cleaned off
-flare in earlier disk-pressure batches (the 2B 256N chain
-accumulates ~3GB per ckpt × every 100 steps = ~30GB / 1K steps —
-~460GB just for steps 35.6K..50.9K alone). The 154 ckpts currently
-on disk span step-35,600..50,900; everything older is gone.
+**These gaps are NOT missing data — the underlying ckpts exist in a
+different clone the eval pipeline doesn't currently scan.**
 
-If a finer-grained 256N sweep becomes important, the chain would
-need to be re-trained from a sufficiently early ckpt — or
-`CKPT_KEEP_LATEST_K` would need to be set well in advance of any
-cleanup to retain a representative subset.
+The 2B 256N chain has trained across two physical clone locations:
+
+| Clone path | Ckpt range on disk | Count |
+|------------|--------------------|------:|
+| `/flare/AuroraGPT/foremans/projects/saforem2/torchtitan/outputs/checkpoints/agpt-2b-sophiag-olmo-mix-1124-n256-gbs6144/` | step **100 → 9,500** | 95 |
+| `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/outputs/checkpoints/agpt-2b-sophiag-olmo-mix-1124-n256-gbs6144/` | step **35,600 → 50,900+** | 154 |
+
+The eval script (`scripts/eval/eval-2b-v2.sh`) only points at
+`V2_REPO=/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/`
+so it can't see the older ckpts in the legacy clone. The reason the
+sweep table has rows at step-200..2,000 + step-14,000..25,100 (i.e.
+straddling the two visible gaps) is because earlier eval batches were
+manually run against the old clone before the v2 clone existed, and
+their results.json files live under
+`outputs/evals/agpt-2b-v2-256n/step-{N}/` regardless of where the
+underlying ckpts came from. The newer dispatches (which only write
+to the v2 clone) explain the step-35,600+ contiguous run.
+
+To fill the gaps: re-run eval against the old-clone ckpts. The
+existing `eval-2b-v2.sh` script needs the `V2_REPO` env override or
+a `CKPT_NAME` that explicitly points at the legacy clone — once
+done, the ~10,000 → 25,000 step range would be filled (step
+9,500..14,000 range still has the legitimate gap between when the
+old clone stopped writing and the new clone picked up).
+
+Action item (open): wire the eval-2b-v2.sh script to glob both clone
+paths, or run it once with `V2_REPO=/flare/.../projects/saforem2/torchtitan/`
+to fill in steps 100..9,500.
 
 ### Re-render
 
