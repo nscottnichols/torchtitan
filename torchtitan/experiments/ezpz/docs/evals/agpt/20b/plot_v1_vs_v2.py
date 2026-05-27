@@ -178,8 +178,10 @@ def print_table(
         cells = []
         for t in TASKS:
             cells.append(f"{s[t]:.4f}" if t in s else "—")
+        # Use {tok:.1f} (no width) so we don't get leading-space-in-bold
+        # rendering like `** 10.1**`.
         print(
-            f"| **v2 512N** | **{step:,}** | **{tok:5.1f}** | "
+            f"| **v2 512N** | **{step:,}** | **{tok:.1f}** | "
             + " | ".join(f"**{c}**" for c in cells)
             + " |"
         )
