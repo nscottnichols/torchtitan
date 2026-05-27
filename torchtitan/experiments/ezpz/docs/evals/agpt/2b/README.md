@@ -242,6 +242,25 @@ make.
   mid-write by bad-node crash on 2026-05-13). Latest *usable* ckpt
   in the chain is step-13200.
 
+### Gaps in the v2 256N async sweep
+
+The full sweep table has two visible step-range gaps on the 256N row:
+
+- **step-2,200 → step-13,800** (no evals between step-2,000 and step-14,000)
+- **step-25,200 → step-35,900** (no evals between step-25,100 and step-36,000)
+
+These reflect what's currently on disk, not a script bug. The
+underlying DCP checkpoints in those step ranges were cleaned off
+flare in earlier disk-pressure batches (the 2B 256N chain
+accumulates ~3GB per ckpt × every 100 steps = ~30GB / 1K steps —
+~460GB just for steps 35.6K..50.9K alone). The 154 ckpts currently
+on disk span step-35,600..50,900; everything older is gone.
+
+If a finer-grained 256N sweep becomes important, the chain would
+need to be re-trained from a sufficiently early ckpt — or
+`CKPT_KEEP_LATEST_K` would need to be set well in advance of any
+cleanup to retain a representative subset.
+
 ### Re-render
 
 ```bash
