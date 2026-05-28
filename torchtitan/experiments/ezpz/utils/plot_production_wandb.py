@@ -54,6 +54,23 @@ import wandb  # noqa: E402
 
 PROJECT = "aurora_gpt/torchtitan.ezpz.train"
 
+
+def _savefig_both(fig, svg_path, dpi=200):
+    """Save figure as both .svg (vector + rasterized data) and .png.
+
+    GitHub's markdown renderer doesn't reliably display SVGs over ~500KB
+    (the production charts hit 700-800KB with their dense rasterized
+    per-step traces), so we emit a PNG alongside that the README can
+    reference for reliable rendering. SVG stays available for anyone
+    who wants higher-fidelity inspection.
+    """
+    svg_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(svg_path, dpi=dpi, bbox_inches="tight")
+    png_path = svg_path.with_suffix(".png")
+    fig.savefig(png_path, dpi=dpi, bbox_inches="tight")
+    print(f"Saved: {svg_path}")
+    print(f"Saved: {png_path}")
+
 # Production runs identified by step ranges (cross-checked with PBS logs).
 # Listed oldest first so concatenation matches resume order.
 # Each key here drives the figure filename + output dir:
@@ -315,11 +332,9 @@ def plot_dashboard(
     ax.legend()
 
     fig.tight_layout(rect=(0, 0, 1, 0.95))
-    output_path.parent.mkdir(parents=True, exist_ok=True)
     # dpi here sets resolution of the rasterized region in the SVG.
-    fig.savefig(output_path, dpi=200, bbox_inches="tight")
+    _savefig_both(fig, output_path, dpi=200)
     plt.close(fig)
-    print(f"Saved: {output_path}")
     return output_path
 
 
@@ -377,10 +392,8 @@ def plot_diagnostics(
     ax.legend()
 
     fig.tight_layout(rect=(0, 0, 1, 0.95))
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(output_path, dpi=200, bbox_inches="tight")
+    _savefig_both(fig, output_path, dpi=200)
     plt.close(fig)
-    print(f"Saved: {output_path}")
     return output_path
 
 
@@ -438,10 +451,8 @@ def plot_tokens_vs_time(
     fig.autofmt_xdate()
 
     fig.tight_layout()
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(output_path, dpi=200, bbox_inches="tight")
+    _savefig_both(fig, output_path, dpi=200)
     plt.close(fig)
-    print(f"Saved: {output_path}")
     return output_path
 
 
@@ -515,10 +526,8 @@ def plot_overlay(
     axes[2].legend(loc="lower right")
 
     fig.tight_layout(rect=(0, 0, 1, 0.95))
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(output_path, dpi=200, bbox_inches="tight")
+    _savefig_both(fig, output_path, dpi=200)
     plt.close(fig)
-    print(f"Saved: {output_path}")
     return output_path
 
 

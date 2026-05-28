@@ -41,13 +41,14 @@ extensions.
 | [`8466847`](2b/n512/README.md#log-8466847) | 2026-05-11 | 12h | 6900–13279 | 2.90 → 2.79 | Done (walltime). step-13200 ckpt saved. |
 | [`8479988`](2b/n512/README.md#log-8479988) | 2026-05-11 | 12h | 13200+ | — | Done. |
 | `8505121` | 2026-05-23 | 12h | — | — | **Failed** (pre-fix, async-cascade regression). |
-| `8505176` | 2026-05-23 | 12h | — | — | **Failed** (async-cascade regression). |
-| `8506215` | 2026-05-24 | 12h | — | — | **Failed** (preflight bug). |
-| **`8506221`** | 2026-05-24 | 12h | 13200–~14000 | 2.79 → ~2.77 | **🏁 sync-mode breakthrough** (CHECKPOINT_ASYNC_MODE=disabled). +21 ckpts. |
-| `8507196` | 2026-05-25 | 12h | ~14000–~17500 | ~2.77 → ~2.75 | Aurora pals-RPC launcher infra fail mid-run (exit 127), +76 ckpts still persisted. See [pals-RPC writeup](../../experiments/agpt/aurora/). |
-| **`8507199`** | 2026-05-25 | 12h | ~17500–~22500 | ~2.75 → ~2.73 | Sync-mode, +50 ckpts. |
-| **`8508753`** | 2026-05-26 | 12h | ~22500–**27,100+** | ~2.73 → **2.72** | **Running**. |
-| `8509042` | 2026-05-27 | 12h | (cont.) | — | Held (`afterany:8508753`). |
+| [`8505176`](2b/n512/README.md#log-8505176) | 2026-05-23 | 12h | — | — | **Failed** (async-cascade regression). |
+| [`8506215`](2b/n512/README.md#log-8506215) | 2026-05-24 | 12h | — | — | **Failed** (preflight bug). |
+| **[`8506221`](2b/n512/README.md#log-8506221)** | 2026-05-24 | 12h | 13200–~14000 | 2.79 → ~2.77 | **🏁 sync-mode breakthrough** (CHECKPOINT_ASYNC_MODE=disabled). +21 ckpts. |
+| [`8507196`](2b/n512/README.md#log-8507196) | 2026-05-25 | 12h | ~14000–~17500 | ~2.77 → ~2.75 | Aurora pals-RPC launcher infra fail mid-run (exit 127), +76 ckpts still persisted. See [pals-RPC writeup](../../experiments/agpt/aurora/). |
+| **[`8507199`](2b/n512/README.md#log-8507199)** | 2026-05-25 | 12h | ~17500–~22500 | ~2.75 → ~2.73 | Sync-mode, +50 ckpts. |
+| **[`8508753`](2b/n512/README.md#log-8508753)** | 2026-05-26 → 2026-05-27 | 12h | ~22500–**30,484** | ~2.73 → **2.71** | Done (walltime exit -29). +80 ckpts step-22600..step-30400 persisted. |
+| `8509042` | 2026-05-27 | 12h | (cont.) | — | Queued (`afterany:8508753` released). |
+| `8510693` | 2026-05-27 | 12h | (cont.) | — | Held (`afterany:8509042`). |
 
 **Latest cumulative**: step **27,100+** · loss **2.72** · **~2.73T tokens** (58.4% of 4.67T target — past the halfway mark).
 
@@ -56,11 +57,11 @@ extensions.
 | Job ID | Date | Walltime | Steps | Loss | Status |
 |--------|------|---------:|------:|-----:|--------|
 | `8505118` / `8505119` | 2026-05-23 | 12h | (post-fix dispatches) | — | Done. |
-| **`8505175`** | 2026-05-23 | 12h | (cont.) | — | Done. +57 ckpts. |
-| **`8505252`** | 2026-05-24 | 12h | (cont.) | — | Done. +57 ckpts. |
-| **`8507195`** | 2026-05-25 | 12h | (cont.) | — | Done. +57 ckpts. |
-| **`8507198`** | 2026-05-26 | 12h | (cont.) | — | Done. +57 ckpts. |
-| **`8508020`** | 2026-05-26 | 12h | ~48,300–**50,000+** | ~2.69 → **2.68** | **Running** (just crossed step-50,000 at 13:54). |
+| **[`8505175`](2b/n256/README.md#log-8505175)** | 2026-05-23 | 12h | (cont.) | — | Done. +57 ckpts. |
+| **[`8505252`](2b/n256/README.md#log-8505252)** | 2026-05-24 | 12h | (cont.) | — | Done. +57 ckpts. |
+| **[`8507195`](2b/n256/README.md#log-8507195)** | 2026-05-25 | 12h | (cont.) | — | Done. +57 ckpts. |
+| **[`8507198`](2b/n256/README.md#log-8507198)** | 2026-05-26 | 12h | (cont.) | — | Done. +57 ckpts. |
+| **[`8508020`](2b/n256/README.md#log-8508020)** | 2026-05-26 | 12h | ~48,300–**50,000+** | ~2.69 → **2.68** | **Running** (just crossed step-50,000 at 13:54). |
 | `8508977` | 2026-05-27 | 12h | (cont.) | — | Held (`afterany:8508020`). |
 
 **Latest cumulative (256N)**: step **49,900+** · loss **2.68** · **~2.50T tokens** (53.5% of 4.67T target). Eval plateau:
@@ -77,10 +78,10 @@ ARC-Easy ~0.645, HellaSwag acc_norm ~0.547.
 | [`8479580`](20b/n512/README.md#log-8479580) | 2026-05-11 | 12h | 800+ | — | Done. |
 | `8505124` | 2026-05-23 | 12h | — | — | **Failed** (pre-fix, async-cascade regression). |
 | `8505256` | 2026-05-24 | 12h | — | — | qdel-dup. |
-| **`8505258`** | 2026-05-24 | 12h | (cont.) | — | **🏁 sync-mode breakthrough**. +6 ckpts. |
-| **`8505259`** | 2026-05-24 | 12h | (cont.) | — | Sync-mode, +6 ckpts. |
-| **`8507197`** | 2026-05-25 | 12h | (cont.) | — | Sync-mode, +6 ckpts. |
-| **`8507200`** | 2026-05-26 | 12h | ~2700–**3,270** | ~2.70 → **2.65** | Done (12h walltime end at 2026-05-27 03:43). +6 ckpts. |
+| **[`8505258`](20b/n512/README.md#log-8505258)** | 2026-05-24 | 12h | (cont.) | — | **🏁 sync-mode breakthrough**. +6 ckpts. |
+| **[`8505259`](20b/n512/README.md#log-8505259)** | 2026-05-24 | 12h | (cont.) | — | Sync-mode, +6 ckpts. |
+| **[`8507197`](20b/n512/README.md#log-8507197)** | 2026-05-25 | 12h | (cont.) | — | Sync-mode, +6 ckpts. |
+| **[`8507200`](20b/n512/README.md#log-8507200)** | 2026-05-26 | 12h | ~2700–**3,270** | ~2.70 → **2.65** | Done (12h walltime end at 2026-05-27 03:43). +6 ckpts. |
 | `8508214` | 2026-05-27 | 12h | 3,270+ | — | **Queued** (~10h, capacity-blocked in `small` queue). |
 | `8509393` | 2026-05-27 | 12h | (cont.) | — | Held. |
 
