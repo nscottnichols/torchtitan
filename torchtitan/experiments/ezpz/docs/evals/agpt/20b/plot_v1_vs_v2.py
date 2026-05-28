@@ -142,8 +142,11 @@ def _tokens_for(step: int, gbs: int, seq: int) -> float:
 
 # Per-trajectory plot styles (one entry per V2_TRAJECTORIES key).
 V2_STYLE = {
+    # Canonical palette shared across all production charts.
+    # 20B 256N was a one-off NODE_FAIL run; kept here as orange (the
+    # user's shared palette doesn't reserve a color for it).
     256: {"color": "#fb8c00", "marker": "^", "label_prefix": "v2 256N"},
-    512: {"color": "#dc2626", "marker": "D", "label_prefix": "v2 512N sync"},
+    512: {"color": "#1b8a3a", "marker": "D", "label_prefix": "v2 512N sync"},
 }
 
 
@@ -166,7 +169,7 @@ def plot_per_task(
         v1_y = [v1[s][task] for s in v1_steps]
 
         ax.axhline(
-            RANDOM_BASELINE[task], color="#888", lw=1, ls=":", label="random",
+            RANDOM_BASELINE[task], color="#808080", lw=1, ls=":", label="random",
         )
         ax.plot(
             v1_tokens, v1_y, marker="o", ms=4, lw=1.4,
@@ -181,7 +184,7 @@ def plot_per_task(
             mds_y = [mds[s][task] for s in mds_steps]
             ax.plot(
                 mds_tokens, mds_y, marker="x", ms=5, lw=1.4,
-                color="#7B1FA2", alpha=0.8, linestyle="--",
+                color="#0d2c6b", alpha=0.85, linestyle="--",
                 label=f"2B-MDS SophiaG ref (n={len(mds_steps)})",
             )
 

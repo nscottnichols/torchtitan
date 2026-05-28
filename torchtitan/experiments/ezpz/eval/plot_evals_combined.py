@@ -46,13 +46,23 @@ OUT_PATH = (
 
 # Tokens-per-step for each trajectory (computed from GBS × SEQ_LEN where
 # SEQ_LEN=8192 across the board).
+# Canonical per-trajectory palette — shared across all production
+# charts (eval + training). Keep these consistent with
+# plot_production_combined.py and the per-model {2b,20b}/plot_v1_vs_v2.py
+# scripts so a given trajectory always renders the same color.
+COLOR_2B_MDS      = "#0d2c6b"  # dark navy
+COLOR_2B_TT_256N  = "#ef5350"  # salmon-red
+COLOR_2B_TT_512N  = "#b71c1c"  # dark red
+COLOR_20B_TT_512N = "#1b8a3a"  # green
+COLOR_RANDOM      = "#808080"  # gray
+
 TRAJECTORIES: list[dict] = [
     {
         "label": "2B-MDS (SophiaG, n256)",
         "eval_subdir": "agpt-2b-mds",
         "layout": "mds",
         "tokens_per_step": 7_770e9 / 140_000,
-        "color": "#7B1FA2",
+        "color": COLOR_2B_MDS,
         "linestyle": "--",
         "marker": "x",
     },
@@ -61,7 +71,7 @@ TRAJECTORIES: list[dict] = [
         "eval_subdir": "agpt-2b-v2-256n",
         "layout": "dcp",
         "tokens_per_step": 6144 * 8192,
-        "color": "#1E88E5",
+        "color": COLOR_2B_TT_256N,
         "linestyle": "-",
         "marker": "o",
     },
@@ -70,7 +80,7 @@ TRAJECTORIES: list[dict] = [
         "eval_subdir": "agpt-2b-v2-512n",
         "layout": "dcp",
         "tokens_per_step": 12288 * 8192,
-        "color": "#43A047",
+        "color": COLOR_2B_TT_512N,
         "linestyle": "-",
         "marker": "s",
     },
@@ -82,7 +92,7 @@ TRAJECTORIES: list[dict] = [
         "eval_subdir": "agpt-20b-v2-512n",
         "layout": "dcp",
         "tokens_per_step": 12288 * 8192,
-        "color": "#D32F2F",
+        "color": COLOR_20B_TT_512N,
         "linestyle": "-",
         "marker": "D",
     },
@@ -175,14 +185,13 @@ def main() -> None:
 
         ax.axhline(
             y=RANDOM_BASELINE[task],
-            color="black",
+            color=COLOR_RANDOM,
             linestyle=":",
-            alpha=0.4,
+            alpha=0.6,
             linewidth=1,
             label="random",
         )
-        ax.set_xscale("log")
-        ax.set_xlabel("Tokens (B, log scale)")
+        ax.set_xlabel("Tokens consumed (B)")
         ax.set_ylabel("Accuracy")
         ax.set_title(title)
         ax.grid(True, alpha=0.3)

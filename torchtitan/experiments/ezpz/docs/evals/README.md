@@ -3,21 +3,21 @@
 Benchmark evaluations of AuroraGPT production checkpoints using
 [lm-eval-harness](https://github.com/EleutherAI/lm-evaluation-harness).
 
-## All-production overlay (vs tokens, log-x)
+## All-production overlay (vs tokens)
 
 One chart, 4 panels (HellaSwag acc_norm, ARC-Easy acc, ARC-C acc_norm,
-Winogrande acc), 5 trajectories overlaid: 2B-MDS reference, 2B 256N async,
-2B 512N sync, 20B 256N, 20B 512N sync. X-axis = tokens consumed so
+Winogrande acc), 4 trajectories overlaid: 2B-MDS reference, 2B 256N async,
+2B 512N sync, 20B 512N sync. X-axis = tokens consumed (linear) so
 GBS-different trajectories are directly comparable.
 
 ![All-production eval overlay](figures/all_production_evals.svg)
 
-**Headline (2026-05-27):** the 20B 512N sync chain (red diamonds) at
+**Headline (2026-05-27):** the 20B 512N sync chain (green) at
 ~322B tokens is **already at the level the 2B chains reach around
 ~2T tokens** on HellaSwag norm and ARC-Easy. The 2B-MDS reference
-(gray, ~7.77T tokens, SophiaG continuation) sets the upper-bound
-ceiling for the 2B size class — both v2 2B chains are still climbing
-toward that ceiling.
+(dark navy, ~7.77T tokens, SophiaG continuation) sets the upper-bound
+ceiling for the 2B size class — both v2 2B chains (salmon-red 256N,
+dark red 512N) are still climbing toward that ceiling.
 
 Regenerate with:
 

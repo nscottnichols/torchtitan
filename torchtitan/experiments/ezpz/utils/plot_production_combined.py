@@ -64,15 +64,21 @@ MDS_CSV = (
 )
 MDS_TOKENS_PER_STEP = 7_770e9 / 140_000  # ~55.5M tokens/step at GBS=3072, seq=8192
 
-# Per-trajectory style. Color groups: 2B blues, 20B reds.
-# MDS is muted gray-purple to signal "reference, not live".
+# Canonical per-trajectory palette — keep in sync with
+# eval/plot_evals_combined.py and per-model {2b,20b}/plot_v1_vs_v2.py.
+COLOR_2B_MDS      = "#0d2c6b"  # dark navy
+COLOR_2B_TT_256N  = "#ef5350"  # salmon-red
+COLOR_2B_TT_512N  = "#b71c1c"  # dark red
+COLOR_20B_TT_256N = "#fb8c00"  # orange (20B 256N: one-off NODE_FAIL run; no canonical color)
+COLOR_20B_TT_512N = "#1b8a3a"  # green
+
 TRAJECTORIES: list[dict] = [
     {
         "label": "2B-MDS (n256, SophiaG ref)",
         "source": "mds",
         "csv_path": str(MDS_CSV),
         "tokens_per_step": MDS_TOKENS_PER_STEP,
-        "color": "#7B1FA2",
+        "color": COLOR_2B_MDS,
         "linestyle": "--",
         "marker": None,
     },
@@ -81,7 +87,7 @@ TRAJECTORIES: list[dict] = [
         "source": "wandb",
         "key": "2b_v2_256",
         "tokens_per_step": 6144 * 8192,
-        "color": "#1E88E5",
+        "color": COLOR_2B_TT_256N,
         "linestyle": "-",
         "marker": None,
     },
@@ -90,7 +96,7 @@ TRAJECTORIES: list[dict] = [
         "source": "wandb",
         "key": "2b_v2_512",
         "tokens_per_step": 12288 * 8192,
-        "color": "#0d47a1",
+        "color": COLOR_2B_TT_512N,
         "linestyle": "-",
         "marker": None,
     },
@@ -99,7 +105,7 @@ TRAJECTORIES: list[dict] = [
         "source": "wandb",
         "key": "20b_v2_256",
         "tokens_per_step": 3072 * 8192,
-        "color": "#FB8C00",
+        "color": COLOR_20B_TT_256N,
         "linestyle": "--",
         "marker": None,
     },
@@ -108,7 +114,7 @@ TRAJECTORIES: list[dict] = [
         "source": "wandb",
         "key": "20b_v2_512",
         "tokens_per_step": 12288 * 8192,
-        "color": "#D32F2F",
+        "color": COLOR_20B_TT_512N,
         "linestyle": "-",
         "marker": None,
     },
@@ -203,7 +209,6 @@ def main() -> None:
             label=f"{s['label']}  (n={len(s['loss'])})",
         )
     ax.set_ylabel("Loss")
-    ax.set_xscale("log")
     ax.set_title("Training Loss")
     ax.grid(alpha=0.25)
     ax.legend(fontsize=8, loc="upper right", frameon=False)
@@ -221,7 +226,6 @@ def main() -> None:
             label=f"{s['label']}",
         )
     ax.set_ylabel("Tokens / sec / GPU")
-    ax.set_xscale("log")
     ax.set_title("Throughput per GPU")
     ax.grid(alpha=0.25)
 
@@ -240,8 +244,7 @@ def main() -> None:
             label=f"{s['label']}",
         )
     ax.set_ylabel("MFU (%)")
-    ax.set_xlabel("Tokens consumed (B, log scale)")
-    ax.set_xscale("log")
+    ax.set_xlabel("Tokens consumed (B)")
     ax.set_title("Model FLOPs Utilization (TT only — MDS does not log MFU)")
     ax.grid(alpha=0.25)
 

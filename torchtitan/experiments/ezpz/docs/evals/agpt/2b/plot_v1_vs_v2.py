@@ -149,8 +149,9 @@ def _tokens_for(step: int, gbs: int, seq: int) -> float:
 
 # Per-trajectory plot styles (one entry per V2_TRAJECTORIES key).
 V2_STYLE = {
-    256: {"color": "#1e88e5", "marker": "s", "label_prefix": "v2 256N"},
-    512: {"color": "#0d47a1", "marker": "D", "label_prefix": "v2 512N"},
+    # Canonical palette shared across all production charts.
+    256: {"color": "#ef5350", "marker": "s", "label_prefix": "v2 256N"},
+    512: {"color": "#b71c1c", "marker": "D", "label_prefix": "v2 512N"},
 }
 
 
@@ -173,7 +174,7 @@ def plot_per_task(
         v1_y = [v1[s][task] for s in v1_steps]
 
         ax.axhline(
-            RANDOM_BASELINE[task], color="#888", lw=1, ls=":", label="random",
+            RANDOM_BASELINE[task], color="#808080", lw=1, ls=":", label="random",
         )
         ax.plot(
             v1_tokens, v1_y, marker="o", ms=4, lw=1.4,
@@ -187,7 +188,7 @@ def plot_per_task(
             mds_y = [mds[s][task] for s in mds_steps]
             ax.plot(
                 mds_tokens, mds_y, marker="x", ms=5, lw=1.4,
-                color="#7B1FA2", alpha=0.8, linestyle="--",
+                color="#0d2c6b", alpha=0.85, linestyle="--",
                 label=f"MDS SophiaG ref (n={len(mds_steps)})",
             )
 

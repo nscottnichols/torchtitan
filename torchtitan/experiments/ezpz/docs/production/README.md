@@ -25,7 +25,7 @@ master weights, plain CrossEntropyLoss, LBS=2 with the torch 2.13 venv
 [`docs/guides/training-dtype-bf16-norm-freeze.md`](../guides/training-dtype-bf16-norm-freeze.md)
 for the diagnosis.
 
-## All production trajectories — overlay vs tokens (log x)
+## All production trajectories — overlay vs tokens
 
 All canonical chains overlaid on shared axes (Loss / TPS-per-GPU / MFU)
 against tokens consumed. Direct cross-GBS comparison.
