@@ -40,6 +40,10 @@ cd "${PBS_O_WORKDIR:-/lus/flare/projects/AuroraGPT/foremans/projects/saforem2/to
 # can also eval ckpts in the legacy /flare/.../projects/saforem2/torchtitan/
 # clone, where the chain pre-2026-04-30 was written).
 V2_REPO="${V2_REPO:-/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz}"
+# USE_LEGACY_CONVERTER=1 -> call convert_to_hf_legacy.py (handles the
+# pre-qkv_linear FQN layout used by ckpts in the legacy clone). Default 0
+# uses the canonical convert_to_hf.py.
+USE_LEGACY_CONVERTER="${USE_LEGACY_CONVERTER:-0}"
 # CONVERT_REPO controls where the conversion ENV + script live (the .venv
 # and torchtitan/experiments/ezpz/eval/convert_to_hf.py). This MUST be a
 # clone that has the eval/ subdir + working torch 2.13 venv — i.e. the
@@ -94,8 +98,13 @@ for step in $STEPS; do
             echo "[1/2] Conversion FAILED — skipping eval for step ${step}"
             continue
         fi
-        if [[ ! -f "${CONVERT_REPO}/torchtitan/experiments/ezpz/eval/convert_to_hf.py" ]]; then
-            echo "  ERROR: ${CONVERT_REPO}/torchtitan/experiments/ezpz/eval/convert_to_hf.py missing"
+        if [[ "${USE_LEGACY_CONVERTER}" == "1" ]]; then
+            CONVERT_PY="torchtitan/experiments/ezpz/eval/convert_to_hf_legacy.py"
+        else
+            CONVERT_PY="torchtitan/experiments/ezpz/eval/convert_to_hf.py"
+        fi
+        if [[ ! -f "${CONVERT_REPO}/${CONVERT_PY}" ]]; then
+            echo "  ERROR: ${CONVERT_REPO}/${CONVERT_PY} missing"
             echo "[1/2] Conversion FAILED — skipping eval for step ${step}"
             continue
         fi
@@ -105,9 +114,10 @@ for step in $STEPS; do
             source .venv/bin/activate
             echo "  subshell: pwd=$(pwd)"
             echo "  subshell: which python3=$(which python3)"
+            echo "  subshell: converter=${CONVERT_PY}"
             PYTHONPATH=".:${PYTHONPATH:-}" python3 -c "import torchtitan; print('  torchtitan from:', torchtitan.__file__)" \
                 || { echo "  ERROR: torchtitan import failed"; exit 1; }
-            PYTHONPATH=".:${PYTHONPATH:-}" python3 torchtitan/experiments/ezpz/eval/convert_to_hf.py \
+            PYTHONPATH=".:${PYTHONPATH:-}" python3 "${CONVERT_PY}" \
                 "${DCP_DIR}" \
                 "${HF_DIR_ABS}" \
                 --model_name "experiments.ezpz.agpt" \
