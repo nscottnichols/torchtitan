@@ -98,6 +98,52 @@ if [[ "${SCALING_GROUP}" == "heavy" || "${SCALING_GROUP}" == "all" ]]; then
     _add_config    "moe_10b_2b"  "ezpz.moe"  "moe_10b_2b_sdpa" 1  1   1  4096  "off"   "none"
 fi
 
+# FILTER_LABELS: space-separated label whitelist (e.g. "agpt_2b"). When set,
+# drops all other configs before benchmarking. Used by single-model scaling
+# sweeps like submit_2b_scaling_aurora.sh.
+if [[ -n "${FILTER_LABELS:-}" ]]; then
+    read -ra _keep <<< "${FILTER_LABELS}"
+    declare -a _F_LABELS _F_MODULES _F_CONFIGS _F_LBS _F_TP _F_GAS _F_SEQ _F_COMPILE _F_AC
+    for ((i = 0; i < ${#LABELS[@]}; i++)); do
+        for k in "${_keep[@]}"; do
+            if [[ "${LABELS[$i]}" == "$k" ]]; then
+                _F_LABELS+=("${LABELS[$i]}")
+                _F_MODULES+=("${MODULES[$i]}")
+                _F_CONFIGS+=("${CONFIGS[$i]}")
+                _F_LBS+=("${LBS_VALS[$i]}")
+                _F_TP+=("${TP_VALS[$i]}")
+                _F_GAS+=("${GAS_VALS[$i]}")
+                _F_SEQ+=("${SEQ_VALS[$i]}")
+                _F_COMPILE+=("${COMPILE_VALS[$i]}")
+                _F_AC+=("${AC_VALS[$i]}")
+                break
+            fi
+        done
+    done
+    LABELS=("${_F_LABELS[@]}")
+    MODULES=("${_F_MODULES[@]}")
+    CONFIGS=("${_F_CONFIGS[@]}")
+    LBS_VALS=("${_F_LBS[@]}")
+    TP_VALS=("${_F_TP[@]}")
+    GAS_VALS=("${_F_GAS[@]}")
+    SEQ_VALS=("${_F_SEQ[@]}")
+    COMPILE_VALS=("${_F_COMPILE[@]}")
+    AC_VALS=("${_F_AC[@]}")
+fi
+
+# LBS_OVERRIDE_<label>: override LBS per label (e.g. LBS_OVERRIDE_agpt_2b=2 to
+# match production GBS scaling). Lets one row be tuned without rewriting the
+# add_config block.
+for ((i = 0; i < ${#LABELS[@]}; i++)); do
+    _label="${LABELS[$i]}"
+    _var="LBS_OVERRIDE_${_label}"
+    _override="${!_var:-}"
+    if [[ -n "${_override}" ]]; then
+        echo "--- LBS override: ${_label}  ${LBS_VALS[$i]} -> ${_override} ---"
+        LBS_VALS[$i]="${_override}"
+    fi
+done
+
 NUM_CONFIGS="${#LABELS[@]}"
 
 if ((NUM_CONFIGS == 0)); then
