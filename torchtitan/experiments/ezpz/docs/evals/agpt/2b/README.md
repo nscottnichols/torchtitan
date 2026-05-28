@@ -307,6 +307,14 @@ the v2 gap, which remains permanently unfillable.
 The remaining 5 batch-2 ckpts (6000, 7000, 8000, 9000, 9500) were
 not eval'd — extra v1-band noise points have no information value.
 
+**Cleanup (2026-05-27):** moved the 5 misfiled `step-{500,1500,3000,4000,5000}`
+results dirs out of `outputs/evals/agpt-2b-v2-256n/` (where they were
+making the chart look like v2 collapsed back to noise at those steps)
+into `outputs/evals/agpt-2b-v1-256n-legacy/`. They were never v2 256N
+data; they were v1 256N data that landed in the v2 dir because the
+eval-2b-v2.sh wrapper writes to a fixed `agpt-2b-v2-256n` path
+regardless of which clone the DCP came from.
+
 **Lock-down already done (commit `508336fc`):** `CKPT_KEEP_LATEST_K=0`
 is now hardcoded in all 3 submit scripts; setting it >0 via `-v`
 prints an explicit ERROR + bails before training starts.
