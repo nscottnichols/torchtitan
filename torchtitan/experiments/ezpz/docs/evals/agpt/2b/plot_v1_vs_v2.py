@@ -187,7 +187,7 @@ def plot_per_task(
             mds_y = [mds[s][task] for s in mds_steps]
             ax.plot(
                 mds_tokens, mds_y, marker="x", ms=5, lw=1.4,
-                color="#000000", alpha=0.7, linestyle="--",
+                color="#7B1FA2", alpha=0.8, linestyle="--",
                 label=f"MDS SophiaG ref (n={len(mds_steps)})",
             )
 

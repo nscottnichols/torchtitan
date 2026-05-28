@@ -52,8 +52,8 @@ TRAJECTORIES: list[dict] = [
         "eval_subdir": "agpt-2b-mds",
         "layout": "mds",
         "tokens_per_step": 7_770e9 / 140_000,
-        "color": "#808080",
-        "linestyle": ":",
+        "color": "#7B1FA2",
+        "linestyle": "--",
         "marker": "x",
     },
     {
