@@ -281,18 +281,33 @@ After 8505252 (May 25 onwards):
   growing — later dispatches went back to keep-latest-k=0, so they
   accumulate)
 
-**The 95 legacy-clone ckpts (step 100..9,500) are still usable** for
-eval — point `eval-2b-v2.sh`'s `V2_REPO` env var at the legacy clone
-path to evaluate them. The other ~26K steps of missing ckpts
-(step 9,600..35,500) were unique to the v2 clone and got purged.
+**Update (2026-05-27 eval batch 8510551):** I attempted to fill the
+step 500..9,500 gap by running the legacy-clone ckpts through the
+eval pipeline (with a `convert_to_hf_legacy.py` shim that handles
+the pre-`qkv_linear` DCP layout). Got fresh results for steps
+500, 1500, 3000, 4000, 5000. **All five score at v1's noise band**
+(HellaSwag ~0.262, ARC-E ~0.25, Winogrande ~0.49):
 
-Action items:
-- Re-eval the legacy-clone ckpts (`V2_REPO=/flare/.../projects/saforem2/torchtitan/`)
-  to fill in steps 100..9,500
-- Lock down `CKPT_KEEP_LATEST_K=0` (the default) in all submit
-  scripts — don't allow `-v` overrides to silently destroy older
-  ckpts. Possibly add a guard like
-  `[[ $CKPT_KEEP_LATEST_K -gt 0 ]] && warn-loudly-or-bail`.
+| Step | Tokens (B) | HellaSwag | ARC-E | ARC-C | Winogrande |
+|----:|----:|----:|----:|----:|----:|
+| 500  | 25.2 | 0.2638 | 0.2542 | 0.2543 | 0.4878 |
+| 1500 | 75.5 | 0.2636 | 0.2614 | 0.2551 | 0.4854 |
+| 3000 | 151.0 | 0.2626 | 0.2492 | 0.2534 | 0.4886 |
+| 4000 | 201.3 | 0.2629 | 0.2513 | 0.2543 | 0.4712 |
+| 5000 | 251.7 | 0.2620 | 0.2487 | 0.2645 | 0.4964 |
+
+The ckpts were written 2026-03-11..2026-03-18 — *predating the
+2026-04-29 fp32-master fix*. They are **v1 256N** trajectory data,
+not v2. The 5 new points slot into the v1 256N row at finer-grained
+intervals than the existing 1K-step v1 cadence; they do NOT fill
+the v2 gap, which remains permanently unfillable.
+
+The remaining 5 batch-2 ckpts (6000, 7000, 8000, 9000, 9500) were
+not eval'd — extra v1-band noise points have no information value.
+
+**Lock-down already done (commit `508336fc`):** `CKPT_KEEP_LATEST_K=0`
+is now hardcoded in all 3 submit scripts; setting it >0 via `-v`
+prints an explicit ERROR + bails before training starts.
 
 ### Re-render
 
