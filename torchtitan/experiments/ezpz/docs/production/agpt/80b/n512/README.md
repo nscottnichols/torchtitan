@@ -48,8 +48,9 @@
 
 ## Why no v1 here
 
-v1 80B trajectories all NaN'd or hung. See [`../README.md`](../README.md)
-for the v1 history (256N, 512N AdamW LR=1.1e-5 NaN, SophiaG bf16
+v1 80B trajectories all NaN'd or hung. See
+[`../../historical/v1-bf16/`](../../historical/v1-bf16/README.md) for
+the v1 history (256N + 512N AdamW LR=1.1e-5 NaN, SophiaG bf16
 overflow at dim=9216). v2 is a fresh start with the working config.
 
 ## Risks / things to watch

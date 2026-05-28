@@ -11,13 +11,12 @@
 > been Q ~10h since 03:44 — `small` queue capacity exhausted. See
 > [`Recovery`](#recovery) below.
 >
-> **Eval scores:** see [`docs/evals/agpt/20b/`](../../../../evals/agpt/20b/README.md)
-> for the v1-vs-v2 lm-eval comparison. **🏁 The 20B 512N sync chain
-> is now beating 2B 256N async per token on every benchmark** —
-> ARC-Easy 0.665, HellaSwag norm 0.574 at step-3200 (vs 2B 256N
-> async ~0.646 / ~0.547 at step-45,500). First time the bigger model
-> has outperformed the smaller one at matched token counts in this
-> entire v2 experiment.
+> **Eval scores:** see [`docs/evals/agpt/20b/`](../../../../evals/agpt/20b/README.md).
+> **🏁 The 20B 512N sync chain is now beating 2B 256N async per token
+> on every benchmark** — ARC-Easy 0.665, HellaSwag norm 0.574 at
+> step-3200 (vs 2B 256N async ~0.646 / ~0.547 at step-45,500). First
+> time the bigger model has outperformed the smaller one at matched
+> token counts in this entire v2 experiment.
 
 ## v2 — 20B @ 512N — SophiaG LR=2.28e-5 (fp32 master)
 
@@ -36,15 +35,15 @@
 
 ### Loss / Throughput / MFU
 
-![20B v2 512N Training](figures/production_20b_v2_512n.png)
+![20B v2 512N Training](figures/production_20b_v2_512n.svg)
 
 ### Diagnostics
 
-![20B v2 512N Diagnostics](figures/training_diagnostics_20b_v2_512n.png)
+![20B v2 512N Diagnostics](figures/training_diagnostics_20b_v2_512n.svg)
 
 ### Tokens vs Wall Clock
 
-![20B v2 512N Tokens vs Time](figures/tokens_vs_time_20b_v2_512n.png)
+![20B v2 512N Tokens vs Time](figures/tokens_vs_time_20b_v2_512n.svg)
 
 ### Progress (chain)
 
@@ -56,11 +55,11 @@
 | [`8479579`](#log-8479579) | 2026-05-11 | 12h | 800–803 | 3.46 → 3.53 | ~340 then 0 | ~17.6% then 0 | **Killed by qdel @ 5h56m** — silent hang after step 803 (logged 13:30, no further training output through 18:23). W&B heartbeat continued unchanged for 5h. New failure mode (no exit, no crash, no traceback). See [`docs/experiments/agpt/aurora/20260511-20b-n512-hang-8479579.md`](../../../../experiments/agpt/aurora/20260511-20b-n512-hang-8479579.md). |
 | [`8479580`](#log-8479580) | 2026-05-12 | 12h | — | — | — | — | **Crashed @ 9min** — `rank 3220 died from signal 11` (SIGSEGV) early in init. Same `signal 9/11` Aurora NODE_FAIL pattern. No checkpoint advanced. |
 | [`8481645`](#log-8481645) | 2026-05-14 | 12h | 800-1000 (logged) | 3.53 → **3.34** | ~358 (steady) | **~17.5%** | **200 fresh training steps logged**, MFU back at baseline, loss dropped 0.19 in-RAM. Killed @ 3h26m by bad node `10.115.76.36` (gloo `Connection closed by peer`). **`step-900` ckpt dir is empty on disk** — async save never finalized before the crash, so no persisted progress. Latest usable ckpt remains `step-800`. Failover wrapper had a then-undiscovered "zombie success" bug — see [failover writeup](../../../../experiments/agpt/aurora/20260521-failover-validated-8481646.md). |
-| [`8505258`](#log-8505258) | 2026-05-23 | 12h | 800 → **1,414** | ~355 | ~17.8% | **SYNC mode (async disabled). 6 ckpts step-900..step-1400 persisted, loss 3.09.** Resumed from step-800 (last persisted, from May 3 era). Walltime exit -29. **First sustained 20B 512N trajectory past step-800 since 2026-05-03 — sync-mode workaround for async-cascade fully validated.** |
-| [`8505259`](#log-8505259) | 2026-05-24 | 12h | 1,414 → **2,043** | ~355 | ~17.8% | **SYNC mode.** `afterany` continuation of 8505258. 6 ckpts step-1500..step-2000 persisted, loss **2.86**. Walltime exit -29. |
-| [`8507197`](#log-8507197) | 2026-05-25 → 2026-05-26 | 12h | 2,043 → **2,686** | ~355 | ~17.8% | Done (walltime, exit -29). **SYNC mode.** `afterany` continuation, ran 21:12 → 09:01. **6 ckpts step-2100..step-2600 persisted, loss 2.72.** |
-| [`8507200`](#log-8507200) | 2026-05-26 → 2026-05-27 | 12h | 2,600 → **3,270** | ~355 | ~17.8% | Done (walltime, exit -29). **SYNC mode.** `afterany` continuation of 8507197, ran 21:01 → 03:43. **6 ckpts step-2700..step-3200 persisted, loss 2.65.** |
-| `8508214` | 2026-05-27 (Q) | 12h | — | — | — | **Queued** in `small` since 03:44 (no start ~10h). Aurora capacity exhausted for the `small` queue. |
+| [`8505258`](#log-8505258) | 2026-05-23 | 12h | 800 → **1,414** | 3.34 → **3.09** | ~355 | ~17.8% | **SYNC mode (async disabled).** 6 ckpts step-900..step-1400 persisted. Resumed from step-800 (last persisted, from May 3 era). Walltime exit -29. **First sustained 20B 512N trajectory past step-800 since 2026-05-03 — sync-mode workaround for async-cascade fully validated.** |
+| [`8505259`](#log-8505259) | 2026-05-24 | 12h | 1,414 → **2,043** | 3.09 → **2.86** | ~355 | ~17.8% | **SYNC mode.** `afterany` continuation of 8505258. 6 ckpts step-1500..step-2000 persisted. Walltime exit -29. |
+| [`8507197`](#log-8507197) | 2026-05-25 → 2026-05-26 | 12h | 2,043 → **2,686** | 2.86 → **2.72** | ~355 | ~17.8% | Done (walltime, exit -29). **SYNC mode.** `afterany` continuation, ran 21:12 → 09:01. 6 ckpts step-2100..step-2600 persisted. |
+| [`8507200`](#log-8507200) | 2026-05-26 → 2026-05-27 | 12h | 2,600 → **3,270** | 2.72 → **2.65** | ~355 | ~17.8% | Done (walltime, exit -29). **SYNC mode.** `afterany` continuation of 8507197, ran 21:01 → 03:43. 6 ckpts step-2700..step-3200 persisted. |
+| [`8508214`](#log-8508214) | 2026-05-27 → 2026-05-28 | 12h | 3,270 → **3,806** | 2.71 → **2.60** | ~340 | ~17% | Done (walltime exit -29). **SYNC mode.** `afterany` continuation of 8507200; ~14h Q delay in `small` queue, started 21:26. 6 ckpts step-3300..step-3800 persisted. |
 
 **Latest checkpoint:** step-3200 (8507200, sync mode, saving every 100 steps)
 
@@ -112,67 +111,6 @@ Default is now 600s + `--train-iters 5`.
 | <a id="log-8505259"></a>`8505259` | `/flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/agpt-20b-n512-v2-sync-chain2.o8505259` |
 | <a id="log-8507197"></a>`8507197` | `/flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/agpt-20b-n512-v2-failover-sync-cont.o8507197` |
 | <a id="log-8507200"></a>`8507200` | `/flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/agpt-20b-n512-v2-failover-sync-cont2.o8507200` |
+| <a id="log-8508214"></a>`8508214` | `/flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/agpt-20b-n512-v2-failover-sync-cont3.o8508214` |
 
 > **Note on 8466848 crash:** `set_determinism` calls `torch.distributed.broadcast(seed_tensor, src=0)` and one rank hit `std::bad_alloc`. This is the same failure mode that killed both 1024N attempts (8463182, 8463183) on 2026-05-04 — but at 6,144 ranks (512N) instead of 12,288 (1024N). The previous 20B 512N run (8463628, 4 days earlier) succeeded at the same scale and same script, and so does the resubmit (8479579), so it's intermittent. See [`memory/project_1024n_init_crash.md`](.) — that memory's "1024N only" claim is stale; the bug fires unpredictably at 512N+ but is not reliably triggered.
-
----
-
-<details>
-<summary><strong>v1 — 20B @ 512N — SophiaG LR=2.28e-5 (bf16 master, BROKEN) — click to expand</strong></summary>
-
-This run is kept for the record. It uses `--training.dtype=bfloat16`
-and has **frozen RMSNorm weights** — see
-[`docs/guides/training-dtype-bf16-norm-freeze.md`](../../../../guides/training-dtype-bf16-norm-freeze.md).
-Don't draw conclusions from these loss curves.
-
-| Field | Value |
-|-------|-------|
-| Model | agpt_20b (20.7B params) |
-| Submit script | [`submit/aurora/submit_agpt_20b_n512.sh`](../../../../../submit/aurora/submit_agpt_20b_n512.sh) (v1 torch 2.10 layout) |
-| Nodes / GPUs | 512 / 6,144 |
-| Parallelism | TP=1, FSDP=6144 |
-| Compile | on |
-| Optimizer | SophiaG, LR=2.28e-5 |
-| GBS | 6,144 (LBS=1) |
-| Total steps | 92,859 |
-| Total tokens | 4.67T |
-| Checkpoint dir | `outputs/checkpoints/agpt-20b-sophiag-olmo-mix-1124-n512-gbs6144` |
-
-### Loss / Throughput / MFU (512N)
-
-![20B v1 512N Training](figures/production_20b_v1_512n.png)
-
-### Progress
-
-| Job ID | Date | Steps | Loss (start → end) | TPS/GPU | MFU | Memory | Status |
-|--------|------|-------|---------------------|---------|-----|--------|--------|
-| [`8443819`](#log-8443819) | 2026-04-22 | 1–458 | 12.94 → 7.09 | 41 | 2.1% | 54.14 GiB | Complete (walltime) |
-| [`8446343`](#log-8446343) | 2026-04-25 | 0 | — | — | — | — | Segfault (signal 11) |
-| [`8446344`](#log-8446344) | 2026-04-26 | — | — | — | — | — | Queued |
-
-**W&B:** [8of5hse0](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/8of5hse0)
-
-**Latest checkpoint:** step-400
-
-**Tokens consumed:** 458 × 6144 × 8192 = **23.1B tokens** (0.5% of target)
-
-**Note:** Very low TPS (41) — compile took most of the 12h walltime.
-512N continuation (8446343) segfaulted on a bad node. 8446344 will retry.
-
-### Logs
-
-| Job ID | Path |
-|--------|------|
-| <a id="log-8443819"></a>`8443819` | `/lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz/agpt-20b-sophiag-n512.o8443819` |
-| <a id="log-8446343"></a>`8446343` | `/lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz/agpt-20b-sophiag-n512.o8446343` |
-| <a id="log-8446344"></a>`8446344` | `/lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz/agpt-20b-sophiag-n512.o8446344` |
-
-### Job Chains (historical)
-
-```
-20B-256N (torch 2.10, LBS=1): 8446340 → 8446341 → 8446342 → 8451749 → 8451751
-20B-512N (torch 2.10, LBS=1): 8446343 → 8446344
-20B-512N (torch 2.13, LBS=2): 8451725 → 8451726 (killed — yeet-env saturated flare)
-```
-
-</details>

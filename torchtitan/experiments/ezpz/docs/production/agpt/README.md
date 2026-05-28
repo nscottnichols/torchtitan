@@ -4,8 +4,8 @@
 >
 > **Restarted in v2 clones on 2026-04-30** after the bf16-master
 > RMSNorm-freeze regression. All current production training is on
-> `dtype=float32` master weights. Historical bf16-tainted runs are
-> retained inside each per-model README under "Historical".
+> `dtype=float32` master weights. Historical bf16-tainted runs:
+> [`historical/v1-bf16/`](historical/v1-bf16/README.md).
 
 ## Headline (2026-05-27)
 
@@ -130,50 +130,40 @@ grad_norm / TFLOPS / TPS) and eval scores live at:
 - [`production/agpt/2b-mds/`](2b-mds/README.md) — training curves
 - [`evals/agpt/2b-mds/`](../../evals/agpt/2b-mds/README.md) — lm-eval scores
 
-## v1 (bf16-master, broken) vs v2 (fp32-master, current)
+## Historical v1 (bf16-tainted) runs
 
-The original 2026-04-{14..29} runs were trained with
-`--training.dtype=bfloat16`, which silently froze every RMSNorm.weight
-at 1.0 (sub-ULP master-weight updates). v2 is the clean restart on
-`--training.dtype=float32`. See
-[`guides/training-dtype-bf16-norm-freeze.md`](../../guides/training-dtype-bf16-norm-freeze.md)
-for the full diagnosis. Per-model overlays:
-
-| 2B (v1 256N vs v2 256N + 512N) | 20B (v1 256N vs v2 512N) |
-|--------------------------------|--------------------------|
-| ![2B overlay](2b/figures/overlay_2b_v1_vs_v2.png) | ![20B overlay](20b/figures/overlay_20b_v1_vs_v2.png) |
-
-Reproduce:
-```bash
-python3 torchtitan/experiments/ezpz/utils/plot_production_wandb.py --overlay 2b
-python3 torchtitan/experiments/ezpz/utils/plot_production_wandb.py --overlay 20b
-```
+All pre-2026-04-30 production runs used `--training.dtype=bfloat16`,
+which silently froze RMSNorm.weight at its 1.0 init. v2 is the clean
+restart on `--training.dtype=float32`. v1 archive (training curves,
+v1-vs-v2 overlays, job tables, log paths):
+[`historical/v1-bf16/`](historical/v1-bf16/README.md). Root-cause
+diagnosis: [`guides/training-dtype-bf16-norm-freeze.md`](../../guides/training-dtype-bf16-norm-freeze.md).
 
 ## Canonical chain dashboards (v2)
 
 ### 2B 512N — Loss / Throughput / MFU
 
-![2B v2 512N Training](2b/n512/figures/production_2b_v2_512n.png)
+![2B v2 512N Training](2b/n512/figures/production_2b_v2_512n.svg)
 
 ### 2B 512N — Diagnostics
 
-![2B v2 512N Diagnostics](2b/n512/figures/training_diagnostics_2b_v2_512n.png)
+![2B v2 512N Diagnostics](2b/n512/figures/training_diagnostics_2b_v2_512n.svg)
 
 ### 2B 512N — Tokens vs Wall Clock
 
-![2B v2 512N Tokens vs Time](2b/n512/figures/tokens_vs_time_2b_v2_512n.png)
+![2B v2 512N Tokens vs Time](2b/n512/figures/tokens_vs_time_2b_v2_512n.svg)
 
 ### 20B 512N — Loss / Throughput / MFU
 
-![20B v2 512N Training](20b/n512/figures/production_20b_v2_512n.png)
+![20B v2 512N Training](20b/n512/figures/production_20b_v2_512n.svg)
 
 ### 20B 512N — Diagnostics
 
-![20B v2 512N Diagnostics](20b/n512/figures/training_diagnostics_20b_v2_512n.png)
+![20B v2 512N Diagnostics](20b/n512/figures/training_diagnostics_20b_v2_512n.svg)
 
 ### 20B 512N — Tokens vs Wall Clock
 
-![20B v2 512N Tokens vs Time](20b/n512/figures/tokens_vs_time_20b_v2_512n.png)
+![20B v2 512N Tokens vs Time](20b/n512/figures/tokens_vs_time_20b_v2_512n.svg)
 
 <details>
 <summary><strong>2B 256N v2 (active async chain at step 49,900+) — click to expand</strong></summary>
@@ -185,7 +175,7 @@ the 20B 512N sync chain. Running async-mode at step **49,900+, loss 2.68,
 HellaSwag acc_norm ~0.547 — now beaten by 20B 512N sync on every benchmark
 per token.
 
-![2B v2 256N Diagnostics](2b/n256/figures/training_diagnostics_2b_v2_256n.png)
+![2B v2 256N Diagnostics](2b/n256/figures/training_diagnostics_2b_v2_256n.svg)
 
 </details>
 
@@ -199,7 +189,7 @@ and most recently **8505255** which ran out the 12h walltime ending
 2026-05-26 20:35 at step **1,125**. **No chain continuation queued** —
 256N is the per-token comparator; the canonical 20B chain is 512N.
 
-![20B v2 256N Diagnostics](20b/n256/figures/training_diagnostics_20b_v2_256n.png)
+![20B v2 256N Diagnostics](20b/n256/figures/training_diagnostics_20b_v2_256n.svg)
 
 </details>
 
@@ -212,6 +202,6 @@ per-token gap to 256N is achievable with LR scaling. Two short runs:
 8467141 (4h) and 8467142 (1h53m). Writes to its own ckpt dir
 `gbs12288-lr3.22e-5`.
 
-![2B v2 512N LR=3.22e-5 Training](2b/n512/figures/production_2b_v2_512_lr3.22e-5n.png)
+![2B v2 512N LR=3.22e-5 Training](2b/n512/figures/production_2b_v2_512_lr3.22e-5n.svg)
 
 </details>

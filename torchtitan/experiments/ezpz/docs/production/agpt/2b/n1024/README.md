@@ -36,4 +36,3 @@ This is an *independent* trajectory from the canonical 512N chain
 (`gbs24576` vs `gbs12288`) and would start fresh from step 0. Useful
 as a scaling experiment, not as a chain extension.
 
-There are no v1 figures for 1024N — v1 never ran at this scale.

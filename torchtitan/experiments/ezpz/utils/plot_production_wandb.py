@@ -27,6 +27,7 @@ Run from the repo root:
 from __future__ import annotations
 
 import argparse
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -128,15 +129,22 @@ PRODUCTION_RUNS: dict[str, dict] = {
         # 2qqhpcrm = 8485511 (1h23m chain7, also pinned at step-13400)
         # 8505176 async-mode died at step-13400 cascade again (3 attempts) — no clean run wandb
         # w78n1akt = 8506221 (12h, SYNC MODE — async-cascade workaround, step 13300 -> 16676, 21 ckpts)
-        # 8507196 trained step 13300 -> 20989 in-memory but Aurora pals-RPC infra crash; W&B run incomplete, skipped
+        # i0ayskft = 8507196 (12h SYNC, step 16601 -> 20989; W&B run crashed mid-sync,
+        #            history() returns 0 rows — recovered via .o-log fallback below)
         # 21grc6o7 = 8507199 (12h SYNC, step 20900 -> 25967, 50 ckpts)
         # nv4qwxc8 = 8508753 (12h R SYNC, step 25900 -> 27106+, currently running)
         # (NB: afr5yvx9 + la416h9c are preflight ezpz.examples.test runs, not the training run)
         "run_ids": ["i252kps9", "d4hlr8qe", "1va7zfki", "6op7ozfh",
                     "y70rh76h", "logai2xn", "2qqhpcrm", "w78n1akt",
-                    "21grc6o7", "nv4qwxc8"],
+                    "i0ayskft", "21grc6o7", "nv4qwxc8"],
         "num_nodes": 512,
         "model": "2b",
+        # Map W&B run_id -> .o log path for runs whose W&B history() is empty
+        # (run crashed mid-sync). Parsed for `step: N loss: L grad_norm: G
+        # memory: ... tps: T tflops: F mfu: M` lines.
+        "olog_fallbacks": {
+            "i0ayskft": "/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n512-v2-failover-sync-cont.o8507196",
+        },
     },
     "20b_v2_512": {
         # 9tsyx5us = 8460302 (initial 6h, step 0->300)
@@ -218,15 +226,89 @@ def fetch_run(api: wandb.Api, run_id: str) -> dict[str, np.ndarray]:
     return {k: np.array(v) for k, v in columns.items()}
 
 
-def concat_runs(api: wandb.Api, run_ids: list[str]) -> dict[str, np.ndarray]:
-    """Fetch and concatenate multiple wandb runs by ascending _step."""
+# Per-step metric lines in PBS .o files look like:
+#   [TIMESTAMP][I][.../metrics:526:log] step: 3300  loss:  2.61866  grad_norm:  0.1672
+#   memory: 44.55GiB(69.63%)  tps: 349  tflops: 51.93  mfu: 17.41%
+# ANSI escape codes wrap each field — strip them first. memory shows
+# "GiB(PCT%)"; we only need PCT for the dashboards. We don't have
+# loss_metrics/global_max_loss, lr, or _timestamp from the .o lines, so
+# those columns stay NaN — downstream callers already filter for valid
+# _step + loss via `~np.isnan(steps)` so missing diagnostics degrade
+# gracefully (the max-loss panel will just lack the recovered range).
+_OLOG_STEP_RE = re.compile(
+    r"step:\s+(?P<step>\d+)\s+"
+    r"loss:\s+(?P<loss>[\d.]+)\s+"
+    r"grad_norm:\s+(?P<grad_norm>[\d.]+)\s+"
+    r"memory:\s+[\d.]+GiB\((?P<mem_pct>[\d.]+)%\)\s+"
+    r"tps:\s+(?P<tps>[\d,]+)\s+"
+    r"tflops:\s+(?P<tflops>[\d.]+)\s+"
+    r"mfu:\s+(?P<mfu>[\d.]+)%"
+)
+_OLOG_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def fetch_from_olog(log_path: str) -> dict[str, np.ndarray]:
+    """Parse per-step metric lines from a PBS .o log into the same
+    shape as ``fetch_run``. Used as a fallback when a W&B run's
+    ``history()`` is empty (run crashed mid-sync but the trainer was
+    still printing to stdout). Missing METRIC_KEYS (loss_metrics/*, lr,
+    _timestamp, n_tokens_seen) come back as NaN arrays.
+    """
+    p = Path(log_path)
+    if not p.exists():
+        print(f"    .o-log fallback: {log_path} not found")
+        return {k: np.array([]) for k in METRIC_KEYS}
+    columns: dict[str, list] = {k: [] for k in METRIC_KEYS}
+    with p.open() as f:
+        for raw in f:
+            line = _OLOG_ANSI_RE.sub("", raw)
+            m = _OLOG_STEP_RE.search(line)
+            if not m:
+                continue
+            step = int(m.group("step"))
+            columns["_step"].append(step)
+            columns["loss_metrics/global_avg_loss"].append(float(m.group("loss")))
+            columns["grad_norm"].append(float(m.group("grad_norm")))
+            columns["throughput(tps)"].append(float(m.group("tps").replace(",", "")))
+            columns["mfu(%)"].append(float(m.group("mfu")))
+            # Unavailable from .o lines — leave as NaN
+            columns["_timestamp"].append(np.nan)
+            columns["lr"].append(np.nan)
+            columns["loss_metrics/global_max_loss"].append(np.nan)
+            columns["n_tokens_seen"].append(np.nan)
+    return {k: np.array(v) for k, v in columns.items()}
+
+
+def concat_runs(
+    api: wandb.Api,
+    run_ids: list[str],
+    olog_fallbacks: dict[str, str] | None = None,
+) -> dict[str, np.ndarray]:
+    """Fetch and concatenate multiple wandb runs by ascending _step.
+
+    When a run's W&B history() returns 0 rows AND that run_id appears
+    in ``olog_fallbacks``, parse the corresponding PBS .o file instead.
+    Filled metrics are limited (no lr/max_loss/timestamp/n_tokens_seen
+    available from stdout), but the step+loss+tps+mfu trajectory
+    survives — which is what the main dashboard plots use.
+    """
+    olog_fallbacks = olog_fallbacks or {}
     parts = []
     for rid in run_ids:
         data = fetch_run(api, rid)
         if len(data["_step"]) == 0:
-            print(f"  {rid}: no rows, skipping")
-            continue
-        print(f"  {rid}: {len(data['_step'])} rows, steps [{data['_step'][0]}, {data['_step'][-1]}]")
+            if rid in olog_fallbacks:
+                print(f"  {rid}: W&B history empty — falling back to .o log {olog_fallbacks[rid]}")
+                data = fetch_from_olog(olog_fallbacks[rid])
+                if len(data["_step"]) == 0:
+                    print(f"  {rid}: .o-log fallback also empty, skipping")
+                    continue
+                print(f"  {rid}: .o-log {len(data['_step'])} rows, steps [{int(data['_step'][0])}, {int(data['_step'][-1])}]")
+            else:
+                print(f"  {rid}: no rows, skipping")
+                continue
+        else:
+            print(f"  {rid}: {len(data['_step'])} rows, steps [{data['_step'][0]}, {data['_step'][-1]}]")
         parts.append(data)
 
     # For each step, keep the record from the latest run (resume semantics).
@@ -576,14 +658,15 @@ def main() -> None:
             raise SystemExit(
                 f"no PRODUCTION_RUNS entries found for model={args.overlay!r}"
             )
+        # v1-vs-v2 overlay charts live in the historical archive.
         out_dir = args.output_dir or (
-            DOCS_BASE / "production" / "agpt" / args.overlay / "figures"
+            DOCS_BASE / "production" / "agpt" / "historical" / "v1-bf16" / "figures"
         )
         series = []
         for key in keys_to_overlay:
             cfg = PRODUCTION_RUNS[key]
             print(f"\n=== Pulling {key} ({len(cfg['run_ids'])} runs) ===")
-            data = concat_runs(api, cfg["run_ids"])
+            data = concat_runs(api, cfg["run_ids"], cfg.get("olog_fallbacks"))
             print(f"  Concatenated: {len(data['_step'])} unique steps")
             if len(data["_step"]) == 0:
                 print(f"  no data, skipping {key}")
@@ -608,16 +691,28 @@ def main() -> None:
         model_name = cfg.get("model", key)
         # Output dir is keyed on (model, node count) — per-trajectory
         # figures land at production/agpt/<model>/n<nodes>/figures/.
-        # The model-level overlay (handled in the --overlay branch
-        # above) stays in production/agpt/<model>/figures/.
-        out_dir = args.output_dir or (
-            DOCS_BASE
-            / "production"
-            / "agpt"
-            / model_name
-            / f"n{cfg['num_nodes']}"
-            / "figures"
-        )
+        # v1 (bf16-tainted) per-trajectory figures live in the
+        # historical archive; the model-level overlay also goes there
+        # (handled in the --overlay branch above).
+        if "_v1_" in key:
+            default_out = (
+                DOCS_BASE
+                / "production"
+                / "agpt"
+                / "historical"
+                / "v1-bf16"
+                / "figures"
+            )
+        else:
+            default_out = (
+                DOCS_BASE
+                / "production"
+                / "agpt"
+                / model_name
+                / f"n{cfg['num_nodes']}"
+                / "figures"
+            )
+        out_dir = args.output_dir or default_out
 
         print(f"\n=== Pulling {key} ({len(cfg['run_ids'])} runs) ===")
         data = concat_runs(api, cfg["run_ids"])

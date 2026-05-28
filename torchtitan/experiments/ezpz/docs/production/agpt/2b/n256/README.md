@@ -1,8 +1,7 @@
 # Production Training — agpt 2B @ 256 nodes
 
 > **Eval scores:** see [`docs/evals/agpt/2b/`](../../../../evals/agpt/2b/README.md)
-> for the v1-vs-v2 lm-eval comparison (covers all 2B trajectories on
-> shared axes).
+> for the v2 lm-eval results.
 
 ## v2 — 2B @ 256N — SophiaG LR=2.28e-5 (fp32 master)
 
@@ -38,15 +37,15 @@
 
 ### Loss / Throughput / MFU
 
-![2B v2 256N Training](figures/production_2b_v2_256n.png)
+![2B v2 256N Training](figures/production_2b_v2_256n.svg)
 
 ### Diagnostics
 
-![2B v2 256N Diagnostics](figures/training_diagnostics_2b_v2_256n.png)
+![2B v2 256N Diagnostics](figures/training_diagnostics_2b_v2_256n.svg)
 
 ### Tokens vs Wall Clock
 
-![2B v2 256N Tokens vs Time](figures/tokens_vs_time_2b_v2_256n.png)
+![2B v2 256N Tokens vs Time](figures/tokens_vs_time_2b_v2_256n.svg)
 
 ### Progress
 
@@ -85,73 +84,3 @@
 | <a id="log-8507195"></a>`8507195` | `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n256-v2-failover-cont.o8507195` |
 | <a id="log-8507198"></a>`8507198` | `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n256-v2-failover-cont2.o8507198` |
 | <a id="log-8508020"></a>`8508020` | `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n256-v2-failover-cont3.o8508020` |
-
----
-
-<details>
-<summary><strong>v1 — 2B @ 256N — SophiaG LR=2.28e-5 (bf16 master, BROKEN) — click to expand</strong></summary>
-
-This run is kept for the record. It uses `--training.dtype=bfloat16`
-and has **frozen RMSNorm weights** — see
-[`docs/guides/training-dtype-bf16-norm-freeze.md`](../../../../guides/training-dtype-bf16-norm-freeze.md).
-Don't draw conclusions from these loss curves.
-
-| Field | Value |
-|-------|-------|
-| Model | agpt_2b (1.99B params) |
-| Submit script | [`submit/aurora/submit_agpt_2b.sh`](../../../../../submit/aurora/submit_agpt_2b.sh) (v1 torch 2.10 layout) |
-| Nodes / GPUs | 256 / 3,072 |
-| Parallelism | TP=1, FSDP=3072 |
-| Compile | on |
-| Optimizer | SophiaG, LR=2.28e-5 |
-| GBS | 3,072 (LBS=1) |
-| Total steps | 185,718 |
-| Total tokens | 4.67T |
-| Seq len | 8,192 |
-| Checkpoint dir | `outputs/checkpoints/agpt-2b-sophiag-olmo-mix-1124-n256-gbs3072` |
-| Checkpoint interval | 100 steps |
-
-### Loss / Throughput / MFU
-
-![2B v1 256N Training](figures/production_2b_v1_256n.png)
-
-### Diagnostics (grad_norm / lr / max_loss)
-
-![2B v1 256N Diagnostics](figures/training_diagnostics_2b_v1_256n.png)
-
-### Tokens vs Wall Clock
-
-![2B v1 256N Tokens vs Time](figures/tokens_vs_time_2b_v1_256n.png)
-
-> Diagnostic and tokens-vs-time figures are pulled from W&B by
-> `torchtitan/experiments/ezpz/utils/plot_production_wandb.py`.
-
-### Progress
-
-| Job ID | Date | Steps | Loss (start → end) | TPS/GPU | MFU | Memory | Status |
-|--------|------|-------|---------------------|---------|-----|--------|--------|
-| [`8444122`](#log-8444122) | 2026-04-22 | 1–1431 | 12.94 → 6.13 | 489 | 1.8% | 47.12 GiB | Complete (walltime) |
-| [`8446337`](#log-8446337) | 2026-04-25 | 1401–9876 | 6.13 → 5.78 | 1,794 | 6.7% | — | Complete (walltime) |
-| [`8446338`](#log-8446338) | 2026-04-26 | 9876–17424 | 5.78 → 5.73 | 2,280 | 8.6% | 47.02 GiB | Complete (walltime) |
-| [`8446339`](#log-8446339) | 2026-04-27 | 17401–17518+ | 5.73 → 5.73 | 761 | 2.9% | 47.02 GiB | Walltime |
-
-**W&B:** [pjanidnw](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/pjanidnw) (job 8444122), [4u9w23p9](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/4u9w23p9) (job 8446337)
-
-**Latest checkpoint:** step-17400
-
-**Tokens consumed:** 17518 × 3072 × 8192 = **441.1B tokens** (9.4% of target)
-
-**Note:** TPS degraded significantly (2,400 → 40-700) during 8446338/8446339 due to
-concurrent 512N yeet-env copies saturating the flare filesystem. 512N venv jobs were
-killed; throughput is recovering.
-
-### Logs
-
-| Job ID | Path |
-|--------|------|
-| <a id="log-8444122"></a>`8444122` | `/lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz/agpt-2b-sophiag-n256.o8444122` |
-| <a id="log-8446337"></a>`8446337` | `/lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz/agpt-2b-sophiag-n256.o8446337` |
-| <a id="log-8446338"></a>`8446338` | `/lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz/agpt-2b-sophiag-n256.o8446338` |
-| <a id="log-8446339"></a>`8446339` | `/lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz/agpt-2b-sophiag-n256.o8446339` |
-
-</details>

@@ -15,8 +15,7 @@
 > trajectory.
 >
 > **Eval scores:** see [`docs/evals/agpt/2b/`](../../../../evals/agpt/2b/README.md)
-> for the v1-vs-v2 lm-eval comparison. v2 512N at 503B tokens beats
-> v1 by **+19.8pp** on ARC-Easy and **+15.4pp** on HellaSwag.
+> for the current v2 lm-eval results.
 
 ## v2 — 2B @ 512N — SophiaG LR=2.28e-5 (fp32 master)
 
@@ -34,15 +33,15 @@
 
 ### Loss / Throughput / MFU
 
-![2B v2 512N Training](figures/production_2b_v2_512n.png)
+![2B v2 512N Training](figures/production_2b_v2_512n.svg)
 
 ### Diagnostics
 
-![2B v2 512N Diagnostics](figures/training_diagnostics_2b_v2_512n.png)
+![2B v2 512N Diagnostics](figures/training_diagnostics_2b_v2_512n.svg)
 
 ### Tokens vs Wall Clock
 
-![2B v2 512N Tokens vs Time](figures/tokens_vs_time_2b_v2_512n.png)
+![2B v2 512N Tokens vs Time](figures/tokens_vs_time_2b_v2_512n.svg)
 
 ### Progress (chain)
 
@@ -56,10 +55,10 @@
 | [`8479989`](#log-8479989) | 2026-05-11 | 12h | (cont.) | — | — | — | Held (`afterany:8479988`) |
 | [`8505176`](#log-8505176) | 2026-05-23 | 12h | 13,300 → ~13,400 | — | — | — | **All 3 wrapper attempts failed in async-save cluster cascade @ step 13400** (same regression first observed at 20B 512N). Wrapper exhausted retries, exit 143. Only ckpt persisted across the dispatch was step-13300 from attempt 1's brief progress. **Async mode pinned at step-13300.** |
 | [`8506215`](#log-8506215) | 2026-05-24 | — | (qsub fail) | — | — | — | **Sync-mode resubmit aborted in preflight.** All 3 wrapper attempts tripped the 120s preflight DDP-init watchdog (timeout doesn't scale with N at 6,144 ranks). Exit 1. **Bug fix:** bumped default to 600s + added `--train-iters 5` to cap preflight length. |
-| [`8506221`](#log-8506221) | 2026-05-24 | 12h | 13,300 → **16,676** | ~2,700 | ~10% | **SYNC mode (async disabled). 21 ckpts step-14600..step-16600 persisted, loss 2.76.** Preflight attempt 1 hung at iter 111 (real silent hang, 49 min of silence); wrapper SIGTERM'd and blind-swapped bad node `x4305c0s7b0n0` for spare `x4602c3s3b0n0`. Preflight attempt 2 succeeded ~75 min total; main training started 00:17 and ran to walltime exit -29. **First sustained 512N progress in two weeks.** |
-| [`8507196`](#log-8507196) | 2026-05-25 → 2026-05-26 | 11h+ | 13,300 → ~**20,989** | ~2,700 | ~10% | **SYNC mode.** Resumed from step-13,300, ran through 21:12 → 08:17. Trained cleanly to step **20,989** in-memory (loss 2.74), persisted **+76 ckpts** before all 3 wrapper attempts tripped an **Aurora pals-RPC infra failure** (exit 127 in launch phase, 3 different "bad" nodes swapped — pals failures the wrapper cannot recover from). See `memory/project_aurora_pals_rpc_launch_failure.md`. |
-| [`8507199`](#log-8507199) | 2026-05-26 | 12h | 20,900 → **25,967** | ~2,700 | ~10% | Done (walltime, exit -29). **SYNC mode.** `afterany` continuation, ran 09:24 → 21:26. Persisted **~50 ckpts** step-21000..step-25900, ended at loss **2.72**. |
-| [`8508753`](#log-8508753) | 2026-05-27 (R) | 12h | 25,900 → **27,106+** | ~2,700 | ~10% | **Running** (started 09:19, expected end 21:19). **SYNC mode.** `afterany` continuation of 8507199. At 12:37 snapshot: step **27,106**, loss **2.72**. |
+| [`8506221`](#log-8506221) | 2026-05-24 | 12h | 13,300 → **16,676** | 2.79 → **2.76** | ~2,700 | ~10% | **SYNC mode (async disabled).** 21 ckpts step-14600..step-16600 persisted. Preflight attempt 1 hung at iter 111 (real silent hang, 49 min of silence); wrapper SIGTERM'd and blind-swapped bad node `x4305c0s7b0n0` for spare `x4602c3s3b0n0`. Preflight attempt 2 succeeded ~75 min total; main training started 00:17 and ran to walltime exit -29. **First sustained 512N progress in two weeks.** |
+| [`8507196`](#log-8507196) | 2026-05-25 → 2026-05-26 | 11h+ | 13,300 → ~**20,989** | 2.76 → **2.74** | ~2,700 | ~10% | **SYNC mode.** Resumed from step-13,300, ran through 21:12 → 08:17. Trained cleanly to step **20,989** in-memory, persisted **+76 ckpts** before all 3 wrapper attempts tripped an **Aurora pals-RPC infra failure** (exit 127 in launch phase, 3 different "bad" nodes swapped — pals failures the wrapper cannot recover from). See `memory/project_aurora_pals_rpc_launch_failure.md`. |
+| [`8507199`](#log-8507199) | 2026-05-26 | 12h | 20,900 → **25,967** | 2.74 → **2.72** | ~2,700 | ~10% | Done (walltime, exit -29). **SYNC mode.** `afterany` continuation, ran 09:24 → 21:26. Persisted **~50 ckpts** step-21000..step-25900. |
+| [`8508753`](#log-8508753) | 2026-05-27 → 2026-05-28 | 12h | 25,900 → **30,484** | 2.72 → **2.71** | ~2,700 | ~10% | Done (walltime exit -29). **SYNC mode.** `afterany` continuation of 8507199, ran 09:19 → 21:19. +80 ckpts step-22600..step-30400 persisted. |
 
 **Latest checkpoint:** step-25900 (8507199 last persisted; 8508753 R still in first ckpt interval at snapshot)
 
@@ -114,55 +113,3 @@ training. Default is now 600s + `--train-iters 5`.
 | <a id="log-8507196"></a>`8507196` | `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n512-v2-failover-sync-cont.o8507196` |
 | <a id="log-8507199"></a>`8507199` | `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n512-v2-failover-sync-cont2.o8507199` |
 | <a id="log-8508753"></a>`8508753` | `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n512-v2-failover-sync-cont3.o8508753` |
-
----
-
-<details>
-<summary><strong>v1 — 2B @ 512N — SophiaG LR=2.28e-5 (bf16 master, BROKEN) — click to expand</strong></summary>
-
-This run is kept for the record. It uses `--training.dtype=bfloat16`
-and has **frozen RMSNorm weights** — see
-[`docs/guides/training-dtype-bf16-norm-freeze.md`](../../../../guides/training-dtype-bf16-norm-freeze.md).
-Don't draw conclusions from these loss curves.
-
-| Field | Value |
-|-------|-------|
-| Model | agpt_2b (1.99B params) |
-| Submit script | [`submit/aurora/submit_agpt_2b_n512.sh`](../../../../../submit/aurora/submit_agpt_2b_n512.sh) (v1 torch 2.10 layout) |
-| Nodes / GPUs | 512 / 6,144 |
-| Parallelism | TP=1, FSDP=6144 |
-| Compile | **off** (OOM at 512N) |
-| Optimizer | SophiaG, LR=2.28e-5 |
-| GBS | 6,144 (LBS=1) |
-| Total steps | 92,859 |
-| Total tokens | 4.67T |
-| Checkpoint dir | `outputs/checkpoints/agpt-2b-sophiag-olmo-mix-1124-n512-gbs6144` |
-
-### Progress
-
-| Job ID | Date | Steps | Loss | TPS/GPU | MFU | Memory | Status |
-|--------|------|-------|------|---------|-----|--------|--------|
-| [`8443818`](#log-8443818) | 2026-04-22 | 0 | — | — | — | — | OOM (compile) |
-| [`8446349`](#log-8446349) | 2026-04-25 | 0 | — | — | — | — | Segfault (signal 11) |
-| [`8446350`](#log-8446350) | 2026-04-26 | — | — | — | — | — | Queued |
-
-(No v1 512N training-curve figures were ever generated — the run never
-got past the first step.)
-
-### Logs
-
-| Job ID | Path |
-|--------|------|
-| <a id="log-8443818"></a>`8443818` | `/lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz/agpt-2b-sophiag-n512.o8443818` |
-| <a id="log-8446349"></a>`8446349` | `/lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz/agpt-2b-sophiag-n512.o8446349` |
-| <a id="log-8446350"></a>`8446350` | `/lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz/agpt-2b-sophiag-n512.o8446350` |
-
-### Job Chains (historical)
-
-```
-2B-256N (torch 2.10, LBS=1): 8446337 → 8446338 → 8446339 → 8451750 → 8451752
-2B-512N (torch 2.10, LBS=1): 8446349 → 8446350
-2B-512N (torch 2.13, LBS=2): 8451723 → 8451724 (killed — yeet-env saturated flare)
-```
-
-</details>
