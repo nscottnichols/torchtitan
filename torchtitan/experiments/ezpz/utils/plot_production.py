@@ -38,17 +38,11 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 
-try:
-    import ambivalent
+# ambivalent is required — silent fallback hides style regressions.
+# Install with: uv pip install --no-deps "git+https://github.com/saforem2/ambivalent"
+import ambivalent  # noqa: F401
 
-    plt.style.use(ambivalent.STYLES["ambivalent"])
-except ImportError as e:
-    import warnings
-
-    warnings.warn(
-        f"ambivalent style unavailable, using matplotlib defaults: {e}",
-        stacklevel=2,
-    )
+plt.style.use(ambivalent.STYLES["ambivalent"])
 
 # Regex to strip ANSI escape sequences
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")

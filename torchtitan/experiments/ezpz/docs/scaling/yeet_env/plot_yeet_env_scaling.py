@@ -24,12 +24,11 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 
-try:
-    import ambivalent  # noqa: F401
+# ambivalent is required — silent fallback hides style regressions.
+# Install with: uv pip install --no-deps "git+https://github.com/saforem2/ambivalent"
+import ambivalent  # noqa: F401
 
-    plt.style.use(ambivalent.STYLES["ambivalent"])
-except ImportError:
-    pass
+plt.style.use(ambivalent.STYLES["ambivalent"])
 
 plt.rcParams["font.family"] = "monospace"
 
