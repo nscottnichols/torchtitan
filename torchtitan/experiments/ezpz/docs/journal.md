@@ -4,6 +4,27 @@ Running log of what's happening, session by session. Most recent first.
 
 ---
 
+## 2026-05-28 — 41st upstream sync (no-op replay)
+
+Merged 1 upstream commit (`200100e7d`, PR
+[#3425](https://github.com/pytorch/torchtitan/pull/3425) — MoE [8/n]
+shape-suffix rename). Pure rename refactor applying the Shazeer
+shape-suffix convention across all MoE tensors. Loss-comparator
+verified `--assert-equal` upstream. Renames break several internal
+method signatures (`dispatch`, `_unpermute`, `_make_dispatcher`) but
+none are called from `experiments/ezpz/`. No replay needed; imports
+smoke green.
+
+Still open: maintainer direction on
+[pytorch/torchtitan#3436](https://github.com/pytorch/torchtitan/pull/3436)
+(histc → bincount/scatter for XPU determinism). Posted the
+statistical E2E A/B yesterday — bincount and histc are
+indistinguishable on `moe_2b_ep` (Welch's p=0.66, n=135 per variant).
+Recommendation: scatter_add_ as the cleanest swap. Waiting on
+maintainer choice between options A/B/C.
+
+---
+
 ## 2026-05-27 — 40th upstream sync (7 commits)
 
 Merged 7 upstream commits (`19c567f76..af33f7638`):

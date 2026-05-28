@@ -24,7 +24,23 @@ tests and checking against the saved baselines — see
 
 ---
 
-## 2026-05-27 (40th sync — 7 commits; nn_modules consolidation, MoE [7/n], deterministic MoE routing)
+## 2026-05-28 (41st sync — MoE [8/n] shape-suffix rename)
+
+Upstream merged in 1 commit (`200100e7d`).
+
+- **[`200100e7d` — \[MoE\]\[8/n\] Use shape suffix for MoE (#3425)](https://github.com/pytorch/torchtitan/pull/3425).**
+  Pure rename refactor applying the [Shazeer shape-suffix style](https://medium.com/@NoamShazeer/shape-suffixes-good-coding-style-f836e72e24fd)
+  across MoE tensors (e.g. `x → x_BLD`, `routed_output → routed_output_RD`,
+  `selected_experts_indices → topk_expert_ids_TK`). Touches
+  `common/moe.py`, `token_dispatcher.py`, `deepseek_v3/`, `llama4/`,
+  `qwen3/`, `gpt_oss/`, the optimizer, and the EP unit tests.
+  Loss-comparator verified `--assert-equal` on llama4_debugmodel
+  (TP=2 EP=2). Several method signatures change (e.g.
+  `dispatch(x, top_scores, selected_experts_indices)` →
+  `dispatch(x_TD, topk_scores_TK, topk_expert_ids_TK)`), but those
+  are internal to upstream and not called from `experiments/ezpz/`.
+  **No ezpz replay needed.** Imports smoke-tested green
+  (`python3 -c "import torchtitan.experiments.ezpz.{agpt,moe.model}"`).
 
 Upstream merged in 7 commits (`19c567f76..af33f7638`).
 
