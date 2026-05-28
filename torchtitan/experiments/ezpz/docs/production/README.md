@@ -25,6 +25,22 @@ master weights, plain CrossEntropyLoss, LBS=2 with the torch 2.13 venv
 [`docs/guides/training-dtype-bf16-norm-freeze.md`](../guides/training-dtype-bf16-norm-freeze.md)
 for the diagnosis.
 
+## All production trajectories — overlay vs tokens (log x)
+
+All canonical chains overlaid on shared axes (Loss / TPS-per-GPU / MFU)
+against tokens consumed. Direct cross-GBS comparison.
+
+![All-production training overlay](figures/all_production_training.svg)
+
+The companion eval-side chart (same 5 trajectories on HellaSwag / ARC /
+Winogrande vs tokens) is at
+[`../evals/figures/all_production_evals.svg`](../evals/figures/all_production_evals.svg).
+
+Reproduce:
+```bash
+python3 -m torchtitan.experiments.ezpz.utils.plot_production_combined
+```
+
 ## Active Runs
 
 ### Canonical chains (one per model)
