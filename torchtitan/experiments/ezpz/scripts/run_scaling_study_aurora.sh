@@ -22,14 +22,19 @@
 set -o pipefail
 
 # ---------------------------------------------------------------------------
-# Environment setup (set +u needed: lmod/ezpz reference unset vars)
+# Environment setup — match production submit scripts:
+#   ezpz-utils + setup_job + load_modules_aurora + activate project .venv
+# (torch 2.13). The earlier ezpz_setup_env path landed on
+# venvs/aurora/torchtitan-ezpz-aurora_frameworks-2025.3.1/ which is stale
+# (predates the experiments/ezpz/agpt/config_registry.py refactor) and
+# crashes every run with `ImportError: Cannot import config_registry for
+# module 'ezpz.agpt'`.
 # ---------------------------------------------------------------------------
 set +u
-source <(curl -fsSL https://bit.ly/ezpz-utils) && ezpz_setup_env
-
-if ! command -v ezpz >/dev/null; then
-    uv pip install --no-cache --link-mode=copy "git+https://github.com/saforem2/ezpz"
-fi
+source <(curl -fsSL https://bit.ly/ezpz-utils) \
+    && ezpz_setup_job \
+    && ezpz_load_modules_aurora \
+    && source .venv/bin/activate
 set -u
 
 # ---------------------------------------------------------------------------
