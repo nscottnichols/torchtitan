@@ -62,21 +62,27 @@ _queue_for_nodes() {
 
 _walltime_for_nodes() {
     local n=$1
+    # 2B-only sweep at BENCH_STEPS=20 needs:
+    #   yeet-env (~70s @ 8N -> ~755s @ 4096N per CLAUDE.md table)
+    #   DDP init (~5-10 min at large N)
+    #   torch.compile (~7-15 min for 2B)
+    #   20 training steps (~3 min)
+    # Total ~30-45 min worst-case. Pad ~2x for slack.
     if ((n <= 16)); then
-        # capacity has 168h max — 2h gives plenty of margin
-        echo "02:00:00"
+        # capacity has 168h max; small env overhead dominated by compile
+        echo "01:00:00"
     elif ((n <= 256)); then
         # debug-scaling caps at 1h
         echo "01:00:00"
     elif ((n <= 1024)); then
-        # prod-small: comfortable 6h budget
-        echo "06:00:00"
+        # prod-small: 1h is enough; shorter walltime = better backfill priority
+        echo "01:30:00"
     elif ((n <= 1919)); then
-        # prod-medium: same
-        echo "06:00:00"
+        # prod-medium
+        echo "01:30:00"
     else
-        # prod-large: yeet-env at 4096N is ~13min, give 6h
-        echo "06:00:00"
+        # prod-large: 4096N yeet-env ~13min, total still under 45min; pad ~2x
+        echo "02:00:00"
     fi
 }
 
