@@ -28,13 +28,14 @@ import matplotlib
 
 matplotlib.use("Agg")
 
-try:
-    import ambivalent
-    import matplotlib.pyplot as plt
+# ambivalent is required — silent fallback gave us months of charts with
+# the wrong style + opaque white background. If it fails to load, surface
+# loudly so we install the missing dep instead of shipping bad plots.
+import ambivalent
+import matplotlib.pyplot as plt
 
-    plt.style.use(ambivalent.STYLES["ambivalent"])
-except ImportError:
-    import matplotlib.pyplot as plt  # noqa: F401
+plt.style.use(ambivalent.STYLES["ambivalent"])
+plt.rcParams["font.family"] = "monospace"
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 EVALS_DIR = REPO_ROOT / "outputs" / "evals"
@@ -73,15 +74,9 @@ TRAJECTORIES: list[dict] = [
         "linestyle": "-",
         "marker": "s",
     },
-    {
-        "label": "20B 256N (GBS=3072)",
-        "eval_subdir": "agpt-20b-v2-256n",
-        "layout": "dcp",
-        "tokens_per_step": 3072 * 8192,
-        "color": "#FB8C00",
-        "linestyle": "--",
-        "marker": "^",
-    },
+    # 20B 256N (8463659) was a one-off 364-step NODE_FAIL run, 18.3B tokens.
+    # Production is consolidated on 20B 512N — dropping the 256N from the
+    # combined chart removes a noisy 3-pt cluster that crowded the legend.
     {
         "label": "20B 512N sync (GBS=12288)",
         "eval_subdir": "agpt-20b-v2-512n",
@@ -209,7 +204,7 @@ def main() -> None:
     plt.tight_layout()
 
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    plt.savefig(OUT_PATH, dpi=150, bbox_inches="tight")
+    plt.savefig(OUT_PATH, dpi=150, bbox_inches="tight", transparent=True)
     plt.close()
     print(f"\nSaved: {OUT_PATH}")
 

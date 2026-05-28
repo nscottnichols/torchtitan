@@ -25,13 +25,12 @@ matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
 
-try:
-    import ambivalent  # noqa: F401
+# ambivalent is required — silent fallback gave us months of charts with
+# the wrong style + opaque white background. If it fails to load, surface
+# loudly so we install the missing dep instead of shipping bad plots.
+import ambivalent  # noqa: F401
 
-    plt.style.use(ambivalent.STYLES["ambivalent"])
-except ImportError:
-    pass
-
+plt.style.use(ambivalent.STYLES["ambivalent"])
 plt.rcParams["font.family"] = "monospace"
 
 REPO_ROOT = Path(__file__).resolve().parents[7]
@@ -214,10 +213,21 @@ def plot_per_task(
         ax.set_title(TASK_TITLES[task])
         ax.set_ylim(0.20, max(0.55, all_y_max * 1.10))
         ax.grid(alpha=0.25)
-        ax.legend(loc="upper left", fontsize=9)
 
-    fig.tight_layout(rect=(0, 0, 1, 0.96))
-    fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    # Single shared legend above the grid — per-axis legends were landing
+    # directly over the climbing trajectories.
+    handles, labels = axes.flat[0].get_legend_handles_labels()
+    fig.legend(
+        handles, labels,
+        loc="upper center",
+        bbox_to_anchor=(0.5, 0.98),
+        ncol=min(len(labels), 4),
+        fontsize=9,
+        frameon=False,
+    )
+
+    fig.tight_layout(rect=(0, 0, 1, 0.93))
+    fig.savefig(out_path, dpi=150, bbox_inches="tight", transparent=True)
     plt.close(fig)
     print(f"wrote {out_path}")
 
