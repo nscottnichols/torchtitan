@@ -11,14 +11,14 @@
 
 | Trajectory | Status | Cumulative steps | Loss | Tokens |
 |------------|--------|-----------------:|-----:|-------:|
-| [**v2 256N (async)**](n256/README.md) | **Running** (8508020 R, +chained) | **49,900+** | **2.68** | **~2.50T (53.5%)** |
-| [**v2 512N (sync)**](n512/README.md) (canonical chain) | **Running** (8508753 R, +2 held) | **27,100+** | **2.72** | **~2.73T (58.4%)** |
+| [**v2 256N (async)**](n256/README.md) | 8508977 done (pals-RPC exit 127); 8510692 Q for slot | **55,026** | **2.67** | **~2.77T (59.3%)** |
+| [**v2 512N (sync)**](n512/README.md) (canonical chain) | 8508753 done (walltime); 8509042 crashed (std::bad_alloc); 8510693 Q for slot | **30,484** | **2.71** | **~3.07T (65.7%)** |
 | [v2 1024N](n1024/README.md) | Crashed at startup, not retried | — | — | — |
 
-**Headlines:**
+**Headlines (2026-05-28):**
 
-- **256N async chain**: 8505175 → 8505252 → 8507195 → 8507198 → **8508020 R** at step **49,900+** (loss 2.68, ~2.50T tokens, 53.5% of 4.67T target). Async-mode stable; eval plateau ARC-Easy ~0.645, HellaSwag norm ~0.547.
-- **🏁 512N sync-mode workaround validated** (`CHECKPOINT_ASYNC_MODE=disabled`): since 8506221 on 2026-05-24 broke through the May-3 async-cascade regression wall, the sync workaround has been holding cleanly. Recent chain: 8506221 (+21) → 8507196 (pals-RPC fail, +76 ckpts persisted) → 8507199 (+50) → **8508753 R** at step **27,100+** (loss 2.72, ~2.73T tokens, 58.4% of 4.67T target). One quirk: 8507196 hit a separate Aurora pals-RPC launcher infra bug (exit 127) — distinct from the async-cascade.
+- **256N async chain**: 8505175 → 8505252 → 8507195 → 8507198 → 8508020 (walltime) → **8508977 (pals-RPC exit 127)** at step **55,026** (loss 2.67, ~2.77T tokens, 59.3% of 4.67T target). 8510692 cont5 Q for slot. Async-mode stable; eval plateau in HSn 0.547-0.553 / ARC-E 0.59-0.64 range since step 47K.
+- **🏁 512N sync-mode workaround holding** (`CHECKPOINT_ASYNC_MODE=disabled`): chain advanced 8506221 (+21) → 8507196 (pals-RPC, +76) → 8507199 (+50) → 8508753 (walltime, +80) to step **30,484**. Next continuation 8509042 hit the documented intermittent `std::bad_alloc` in `set_determinism` at 6,144 ranks (same failure mode as 8466848); 8510693 cont5 Q for slot. Loss **2.71**, ~3.07T tokens, **65.7%** of target.
 
 ## Per-trajectory detail
 

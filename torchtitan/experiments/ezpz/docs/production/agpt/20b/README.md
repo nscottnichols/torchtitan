@@ -7,26 +7,27 @@
 > [`../historical/v1-bf16/`](../historical/v1-bf16/README.md) along
 > with the diagnosis link.
 
-## 🏁 Headline (2026-05-27)
+## 🏁 Headline (2026-05-28)
 
-**20B 512N sync chain now beats 2B 256N async on every benchmark per token.** Eval'd 16 ckpts step-900 → step-3200:
+**20B 512N sync chain now beats 2B 256N async on every benchmark per token.** Eval'd 30 ckpts step-100 → step-3800:
 
-- ARC-Easy `acc` 0.463 → **0.665** (+20pp)
-- HellaSwag `acc_norm` 0.296 → **0.574** (+28pp)
-- ARC-C `acc_norm` 0.224 → **0.322** (+10pp)
+- ARC-Easy `acc` 0.266 → **0.678** (+41pp)
+- HellaSwag `acc_norm` 0.254 → **0.611** (+36pp)
+- ARC-C `acc_norm` 0.232 → **0.355** (+12pp)
+- Winogrande `acc` 0.492 → **0.582** (+9pp)
 
-Monotonic lift — no plateau, no oscillation, 24+ consecutive ckpts trending up. See
+Monotonic lift — no plateau, no oscillation, 30+ consecutive ckpts trending up. See
 [`evals/agpt/20b/`](../../../evals/agpt/20b/README.md) for the full tables.
 
 ## Snapshot
 
 | Trajectory | Status | Cumulative steps | Loss | Tokens |
 |------------|--------|-----------------:|-----:|-------:|
-| [**v2 512N (sync)**](n512/README.md) (canonical chain) | 8507200 done (12h walltime end 2026-05-27 03:43); 8508214 Q ~10h (capacity-blocked in `small`); 8509393 H | **3,270** | **2.65** | **~329B (7.0%)** |
+| [**v2 512N (sync)**](n512/README.md) (canonical chain) | 8508214 done (12h walltime end 2026-05-28 09:26); 8509393 Q ~16h (capacity-blocked in `small`); 8510696 H | **3,806** | **2.60** | **~382B (8.2%)** |
 | [v2 256N](n256/README.md) (8505255 final) | Done — 12h walltime end 2026-05-26 20:35 at step **1,125**. No chain continuation queued (256N is per-token comparator; canonical 20B chain is 512N). | 1,125 | — | — |
 | [v2 1024N](n1024/README.md) | First attempt 8463183 crashed at startup (SIGSEGV at 12,288 ranks); not retried | — | — | — |
 
-**Canonical 512N chain (sync-mode)**: 8505258 (🏁 sync-mode breakthrough, +6) → 8505259 (+6) → 8507197 (+6) → 8507200 (+6, walltime end at step 3,270) → 8508214 Q → 8509393 H.
+**Canonical 512N chain (sync-mode)**: 8505258 (🏁 sync-mode breakthrough, +6) → 8505259 (+6) → 8507197 (+6) → 8507200 (+6, walltime, ended step 3,270) → 8508214 (walltime, +5 ckpts, ended step 3,806) → 8509393 Q → 8510696 H.
 
 ## Per-trajectory detail
 

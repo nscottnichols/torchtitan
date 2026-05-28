@@ -2,7 +2,7 @@
 
 > **Living document** — updated as jobs complete and new runs are submitted.
 >
-> Last updated: 2026-05-27
+> Last updated: 2026-05-28
 
 ## Scaling Performance
 
@@ -47,8 +47,8 @@ python3 -m torchtitan.experiments.ezpz.utils.plot_production_combined
 
 | Model | Nodes | Cumulative steps | Loss | Tokens | Latest job | Status |
 |-------|------:|-----------------:|-----:|-------:|------------|--------|
-| 2B  | 512 | **27,100+** (persisted) | **2.72** | **2.73T** (58.4%) | [`8508753`](agpt/2b/n512/README.md) R (sync-mode) | **🏁 Sync-mode workaround holding cleanly.** Chain has advanced step 13,300 → 27,100 (+13,800) since 2026-05-24, ~107 ckpts persisted across 8506221 + 8507196 (pals-RPC infra failure, separate issue) + 8507199 + 8508753. |
-| 20B | 512 | **3,270** (persisted) | **2.65** | **329B** (7.0%) | [`8508214`](agpt/20b/n512/README.md) Q (sync-mode) | **🏁 20B 512N sync now beats 2B 256N async on every benchmark per token.** Chain has advanced step 800 → 3,270 (+2,470) since 2026-05-24 across 8505258 + 8505259 + 8507197 + 8507200. ARC-Easy 0.665, HellaSwag norm 0.574 at step-3,200. |
+| 2B  | 512 | **30,484** (persisted) | **2.71** | **3.07T** (65.7%) | [`8510693`](agpt/2b/n512/README.md) Q (sync-mode) | **🏁 Sync-mode workaround holding through 8508753 walltime.** Chain advanced step 13,300 → 30,484 (+17,184) across 8506221 + 8507196 (pals-RPC fail, +76 persisted) + 8507199 + 8508753. Next cont 8509042 crashed in `set_determinism` `std::bad_alloc` (intermittent 6,144-rank issue); 8510693 cont5 Q for slot. |
+| 20B | 512 | **3,806** (persisted) | **2.60** | **382B** (8.2%) | [`8509393`](agpt/20b/n512/README.md) Q (sync-mode) | **🏁 20B 512N sync now beats 2B 256N async on every benchmark per token.** Chain has advanced step 800 → 3,806 (+3,006) since 2026-05-24 across 8505258 + 8505259 + 8507197 + 8507200 + 8508214. ARC-Easy 0.678, HellaSwag norm 0.611 at step-3,800. |
 | 80B | 256 | — | — | — | [`8505222`](agpt/80b/n512/README.md) F (5 retries exhausted) | All dispatches since 2026-05-11 fail. Two distinct failure modes documented: [80B SIGSEGV cascade](../experiments/agpt/aurora/20260524-80b-256n-sigsegv-cascade-8505222.md) (production scale) + [blendcorpus EOFError race](../guides/known-bugs/blendcorpus-eoferror-race.md) (8N smoke). Mitigations identified, not yet retested. |
 
 > **Failover wrapper production-validated 2026-05-23**: [`8505298`](agpt/2b/n256/README.md) (2B 8N smoke) caught a real silent hang at step 37, watchdog tripped, blind-swapped the bad node, attempt-2 recovered cleanly + persisted DCP checkpoints. **First end-to-end real-world validation of the swap-and-retry path on a true silent-hang failure.** See [incident report](../experiments/agpt/aurora/20260523-failover-silent-hang-recovery-8505298.md).
@@ -57,7 +57,7 @@ python3 -m torchtitan.experiments.ezpz.utils.plot_production_combined
 
 | Model | Nodes | Cumulative steps | Loss | Tokens | Latest job | Status |
 |-------|------:|-----------------:|-----:|-------:|------------|--------|
-| 2B  | 256 | **49,900+** (persisted) | **2.68** | **2.50T** (53.5%) | [`8508020`](agpt/2b/n256/README.md) R | Async-mode stable at 256N across 9 dispatches since 2026-05-23. Chain has advanced step 25,500 → 49,900 (+24,400 in 4 days). Plateau in eval scores around ARC-Easy 0.645 / HellaSwag norm 0.547 — model has saturated on this LR/data mix. |
+| 2B  | 256 | **55,026** (persisted) | **2.67** | **2.77T** (59.3%) | [`8510692`](agpt/2b/n256/README.md) Q | Async-mode stable at 256N across 10 dispatches since 2026-05-23. Chain has advanced step 25,500 → 55,026 (+29,526 in 5 days). Most recent dispatch 8508977 crashed at exit 127 (Aurora pals-RPC infra fail, not failover-recoverable); 8510692 cont5 Q for slot. Plateau in eval scores around ARC-Easy 0.594 / HellaSwag norm 0.550 — model has saturated on this LR/data mix. |
 | 20B | 256 | **1,125** (persisted) | **3.28** | **113B** (2.4%) | [`8505255`](agpt/20b/n256/README.md) F (12h walltime) | Sync-mode 12h dispatch reached step 1,125 cleanly. No continuation queued (256N is per-token comparator; canonical chain is 512N). |
 
 ### Other jobs

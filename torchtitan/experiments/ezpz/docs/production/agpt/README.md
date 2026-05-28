@@ -7,14 +7,12 @@
 > `dtype=float32` master weights. Historical bf16-tainted runs:
 > [`historical/v1-bf16/`](historical/v1-bf16/README.md).
 
-## Headline (2026-05-27)
+## Headline (2026-05-28)
 
-- **2B 256N async chain** at step **49,900+** (loss 2.68, ~2.50T tokens, **53.5%** of target) — async-mode stable
-- **2B 512N sync chain** at step **27,100+** (loss 2.72, ~2.73T tokens, **58.4%** of target) — sync-mode workaround
-  (`CHECKPOINT_ASYNC_MODE=disabled`) has been holding cleanly since 2026-05-24, when 8506221 broke the May-3 async-cascade regression wall
-- **🏁 20B 512N sync chain at step 3,270 now beats 2B 256N async on every benchmark per token.** Eval'd 16 ckpts
-  (step-900 → step-3200): ARC-Easy 0.463 → **0.665** (+20pp), HellaSwag acc_norm 0.296 → **0.574** (+28pp),
-  ARC-C acc_norm 0.224 → **0.322** (+10pp). Monotonic lift across 24+ consecutive ckpts — no plateau, no oscillation.
+- **2B 256N async chain** at step **55,026** (loss 2.67, ~2.77T tokens, **59.3%** of target) — most recent dispatch 8508977 crashed at exit 127 (Aurora pals-RPC infra failure, not failover-recoverable). 8510692 Q for slot.
+- **2B 512N sync chain** at step **30,484** (loss 2.71, ~3.07T tokens, **65.7%** of target) — most recent dispatch 8508753 done cleanly at walltime; 8509042 cont crashed in `set_determinism` `std::bad_alloc` (documented intermittent at 6,144 ranks); 8510693 cont5 Q for slot.
+- **20B 512N sync chain** at step **3,806** (loss 2.60, ~382B tokens, **8.2%** of target) — 8508214 done cleanly at walltime; 8509393 cont4 Q (16+h, Aurora `small` queue congested).
+- **🏁 20B 512N now beats 2B 256N async on every benchmark per token.** Latest evals (step 3,800, ~382B tokens): HellaSwag `acc_norm` **0.611** (+32pp vs step-900 0.296), ARC-Easy `acc` **0.678**, ARC-C `acc_norm` **0.355**. Monotonic lift across 30+ consecutive ckpts.
 - **80B 256N still completely blocked.** 11+ dispatches since 2026-05-11, zero ckpts persisted. The latest
   (8505222) cascaded through 5 wrapper retries — every attempt hit SIGSEGV on a different bad node, 3 of them
   from the x4101c5/c6 rack cluster. See
