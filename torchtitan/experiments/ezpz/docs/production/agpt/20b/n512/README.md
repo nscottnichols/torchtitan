@@ -2,13 +2,12 @@
 
 > **This is the canonical 20B production chain.**
 >
-> **Status:** at step **3,270 (last 8507200 12h walltime exit 2026-05-27
-> 03:43)**, loss **2.65** — sync-mode workaround for async-cascade
-> continues to hold across 2 more dispatches (`8507197` + `8507200`
-> on 2026-05-25 → 2026-05-27, +12 more ckpts persisted, total **24
-> ckpts persisted** since the workaround took hold). Currently
-> **blocked on Aurora capacity**: `8508214` (next continuation) has
-> been Q ~10h since 03:44 — `small` queue capacity exhausted. See
+> **Status:** R since 2026-05-28 23:34 on `8509393`, currently at step
+> **4,300** (~432B tokens), loss **2.52**, mfu ~16-17% — chain has
+> persisted **+11 ckpts** (step-3,300 → step-4,300) since 2026-05-27
+> resume. Sync-mode workaround still holding cleanly across all
+> dispatches. Next-up continuation `8513546` is Q+H behind 8509393
+> (`afterany`), so chain survives walltime hit. See
 > [`Recovery`](#recovery) below.
 >
 > **Eval scores:** see [`docs/evals/agpt/20b/`](../../../../evals/agpt/20b/README.md).

@@ -159,9 +159,13 @@ PRODUCTION_RUNS: dict[str, dict] = {
         # cv3wii8x = 8505259 (12h continuation, step 1414 -> 2043, 6 more ckpts)
         # tu77pzu7 = 8507197 (12h SYNC continuation, step 2043 -> 2686, 6 ckpts)
         # 8vixdfg2 = 8507200 (12h SYNC continuation, step 2600 -> 3270, 6 ckpts)
+        # 0pmsn01c = 8509393 (12h SYNC continuation, resumed 2026-05-28 23:34,
+        #            step 3300 -> 4300+ as of 2026-05-29, +11 ckpts so far;
+        #            d00iszlc is the preflight set_determinism test run,
+        #            not the training run.)
         "run_ids": ["9tsyx5us", "ej3zy5cq", "s6b159xk", "gkzl19dg", "10vf1mqr",
                     "qttj3l3p", "wjy5pvxm", "cv3wii8x",
-                    "tu77pzu7", "8vixdfg2"],
+                    "tu77pzu7", "8vixdfg2", "0pmsn01c"],
         "num_nodes": 512,
         "model": "20b",
     },
