@@ -4,6 +4,45 @@ Running log of what's happening, session by session. Most recent first.
 
 ---
 
+## 2026-05-29 — 42nd upstream sync (RoPE refactor + replays)
+
+Merged 6 upstream commits (`28483d0eb..065c2625d`). The headline is
+PR [#3395](https://github.com/pytorch/torchtitan/pull/3395) which
+restructures every model's `update_from_config`:
+
+- Renames the `trainer_config` keyword to `config`.
+- Promotes `seq_len > rope.max_seq_len` from warning to hard
+  `ValueError`.
+- Moves TP / `n_heads`/`n_kv_heads` validation, MoE `deepep`/`hybridep`
+  EP=1 guard, MoE `moe_force_load_balance` debug flag, and the
+  `rope.max_seq_len` sync into `Decoder.Config.update_from_config`.
+- Adds async out-of-bounds checks inside `apply_rotary_emb_*`.
+
+Replayed in `experiments/ezpz/{agpt,moe}/model.py`:
+
+- agpt was a pure `trainer_config`→`config` rename plus parameter
+  forwarding.
+- moe was bigger: deleted the now-duplicated rope/MoE/TP checks and
+  delegated to `Decoder.Config.update_from_config`; kept only the
+  per-layer attention rope-field sync, the for_loop XPU fallback,
+  the CP+MoE attention check, and `set_moe_sharding_config`. Dropped
+  three now-unused imports.
+
+Mirrors the post-refactor shape of upstream `deepseek_v3/model.py`.
+Imports smoke-tested green; live agpt/moe 2N smokes still pending an
+alloc.
+
+Smaller commits in the same sync: #3448 (#3395 fix-forward), #3452
+(1-line determinism cleanup), #3445/#3446 (flux/qwen3-vl), #3347 (RL
+batcher). None affect ezpz.
+
+Bookkeeping curiosity: `git cherry` flagged 41st-sync MoE [8/n]
+(`200100e7d`) as already present in our branch under a different SHA
+(`56dc8e1d4`). `git merge` correctly skipped it. So the "7 unmerged
+commits" `git log` showed was really 6.
+
+---
+
 ## 2026-05-28 — 41st upstream sync (no-op replay)
 
 Merged 1 upstream commit (`200100e7d`, PR

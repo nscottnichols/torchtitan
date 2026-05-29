@@ -24,6 +24,60 @@ tests and checking against the saved baselines — see
 
 ---
 
+## 2026-05-29 (42nd sync — RoPE refactor + 5 smaller commits)
+
+Upstream merged in 6 commits (`28483d0eb..065c2625d`).
+
+- **[`28483d0eb` — RoPE refactor: Using model's max_sequence_length as the upper bound of Training.sequence_length (#3395)](https://github.com/pytorch/torchtitan/pull/3395).**
+  Significant restructuring of model `update_from_config`:
+  - `trainer_config` parameter renamed to `config`.
+  - `seq_len > rope.max_seq_len` is now a hard `ValueError` (was a warning).
+  - TP `n_heads`/`n_kv_heads` validation, MoE `deepep`/`hybridep`
+    EP=1 guard, MoE `moe_force_load_balance` debug flag, and the
+    `rope.max_seq_len` sync all moved from per-model overrides into
+    `Decoder.Config.update_from_config`.
+  - Added async out-of-bounds `_maybe_check_max_pos` inside
+    `apply_rotary_emb_{complex,single_complex,cos_sin}`.
+  - **Required ezpz replays**:
+    - `experiments/ezpz/agpt/model.py`: rename `trainer_config`→`config`.
+    - `experiments/ezpz/moe/model.py`: rename `trainer_config`→`config`,
+      delegate base validation to `Decoder.Config.update_from_config`,
+      drop the now-redundant rope/MoE/TP checks (kept the per-layer
+      attention rope-field sync, the for_loop XPU fallback, the
+      CP+MoE attention check, and `set_moe_sharding_config`).
+    - Dropped unused imports (`dataclasses`, `DeepEPTokenDispatcher`,
+      `HybridEPTokenDispatcher`) from `moe/model.py`.
+
+- **[`92abc88e7` — Fix model test failure in #3395: rope refactor (#3448)](https://github.com/pytorch/torchtitan/pull/3448).**
+  Three-file fix-forward for #3395: `common/decoder.py` TP validation
+  now handles attention configs without an `n_kv_heads` field;
+  `common/rope.py` accepts a pre-broadcast 4D RoPE cache; `qwen3_vl`
+  signature tweak. Pure consumption — no ezpz replay.
+
+- **[`065c2625d` — \[be\] remove redundant torch.use_deterministic_algorithms call (#3452)](https://github.com/pytorch/torchtitan/pull/3452).**
+  One-line drop of a duplicate
+  `torch.use_deterministic_algorithms(True)` call in
+  `distributed/utils.py:set_determinism`. No ezpz impact.
+
+- **[`3079bc32b` — \[Module\]\[Qwen3-VL\] Module-build conversion for vision encoder (#3446)](https://github.com/pytorch/torchtitan/pull/3446).**
+  qwen3_vl only. No-op for ezpz.
+
+- **[`9c94bda0f` — \[Module\]\[Flux\] Convert Flux modules to fully config-based (#3445)](https://github.com/pytorch/torchtitan/pull/3445).**
+  flux only. No-op for ezpz.
+
+- **[`c04f92fdd` — \[rl\] Add Batcher in RL Loop (#3347)](https://github.com/pytorch/torchtitan/pull/3347).**
+  RL experiment only. No-op for ezpz.
+
+### Side note on the merge bookkeeping
+
+`git log HEAD..upstream/main` initially showed 7 unmerged commits,
+but `git cherry -v HEAD upstream/main` flagged the 41st-sync MoE [8/n]
+commit (`200100e7d`) as already present in our branch under a
+different SHA (`56dc8e1d4`) — it had been re-applied via a previous
+merge with different metadata. `git merge` correctly skipped it.
+
+---
+
 ## 2026-05-28 (41st sync — MoE [8/n] shape-suffix rename)
 
 Upstream merged in 1 commit (`200100e7d`).
