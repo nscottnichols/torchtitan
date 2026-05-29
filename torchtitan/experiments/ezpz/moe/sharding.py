@@ -44,12 +44,14 @@ if TYPE_CHECKING:
     )
 
 
-# Routed-expert layout for the shared ``GroupedExperts`` / ``EzpzGroupedExperts``
-# (w1/w2/w3). Matches upstream ``deepseek_v3.sharding._GROUPED_EXPERTS_PARAM_LAYOUT``.
+# Routed-expert layout for the shared ``GroupedExperts`` / ``EzpzGroupedExperts``.
+# After upstream PR #3425 (41st sync, MoE [8/n] shape-suffix rename), the
+# parameters are named w{1,2,3}_E{F,D}D using Shazeer shape-suffix style.
+# Matches upstream ``deepseek_v3.sharding._GROUPED_EXPERTS_PARAM_LAYOUT``.
 _GROUPED_EXPERTS_PARAM_LAYOUT: dict[str, Placement] = {
-    "w1": Shard(1),
-    "w2": Shard(2),
-    "w3": Shard(1),
+    "w1_EFD": Shard(1),
+    "w2_EDF": Shard(2),
+    "w3_EFD": Shard(1),
 }
 
 

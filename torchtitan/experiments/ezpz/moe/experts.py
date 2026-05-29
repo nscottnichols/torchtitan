@@ -91,16 +91,18 @@ class EzpzGroupedExperts(GroupedExperts):
         if self.compute_backend == "grouped_mm":
             return super()._experts_forward(x, num_tokens_per_expert)
 
-        if isinstance(self.w1, DTensor):
-            w1 = self.w1.to_local()
+        # Param names use Shazeer shape-suffix style post upstream PR #3425
+        # (41st sync): w1_EFD, w2_EDF, w3_EFD.
+        if isinstance(self.w1_EFD, DTensor):
+            w1 = self.w1_EFD.to_local()
             # pyrefly: ignore [missing-attribute]
-            w2 = self.w2.to_local()
+            w2 = self.w2_EDF.to_local()
             # pyrefly: ignore [missing-attribute]
-            w3 = self.w3.to_local()
+            w3 = self.w3_EFD.to_local()
         else:
-            w1 = self.w1
-            w2 = self.w2
-            w3 = self.w3
+            w1 = self.w1_EFD
+            w2 = self.w2_EDF
+            w3 = self.w3_EFD
 
         if self.compute_backend == "for_loop":
             return _run_experts_for_loop(w1, w2, w3, x, num_tokens_per_expert)
