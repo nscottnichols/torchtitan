@@ -29,8 +29,30 @@ Replayed in `experiments/ezpz/{agpt,moe}/model.py`:
   three now-unused imports.
 
 Mirrors the post-refactor shape of upstream `deepseek_v3/model.py`.
-Imports smoke-tested green; live agpt/moe 2N smokes still pending an
-alloc.
+2N smoke on alloc 12467655 surfaced two follow-ups:
+
+- A missed `trainer_config`→`config` rename at
+  `experiments/ezpz/trainer.py:163` (the trainer's own
+  `model_config.update_from_config(...)` callsite, not the model
+  override). Fixed in [04199e522](https://github.com/saforem2/torchtitan/commit/04199e522).
+- A pre-existing miss from the 41st sync ([#3425](https://github.com/pytorch/torchtitan/pull/3425)
+  MoE shape-suffix rename) that we hadn't smoked: three ezpz-side
+  references to the old `w1`/`w2`/`w3` parameter names in
+  `EzpzGroupedExperts` sharding/init/forward paths — caught when
+  the rope replay let us reach trainer init for the first time post-
+  41st-sync. Fixed in [88dbd916e](https://github.com/saforem2/torchtitan/commit/88dbd916e).
+
+Post-fix smoke results (both clean, matching 2026-05-27 baselines):
+
+- `agpt_2b`: 154 s, peak 24.34 GiB (38.04%), 21.95% MFU.
+- `moe_2b_ep` LBS=2: 323 s, peak 26.99 GiB (42.18%), 9.09% MFU,
+  loss step 50 = 6.13.
+
+Lesson worth remembering: always smoke `moe_2b_ep` after a sync that
+touches `GroupedExperts`. Today's chain of bugs hid behind the
+trainer init failure — the model-init order is rope → expert sharding
+→ first forward, so a rope-stage failure prevents us from seeing
+expert-stage failures.
 
 Smaller commits in the same sync: #3448 (#3395 fix-forward), #3452
 (1-line determinism cleanup), #3445/#3446 (flux/qwen3-vl), #3347 (RL

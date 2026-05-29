@@ -39,14 +39,45 @@ Upstream merged in 6 commits (`28483d0eb..065c2625d`).
   - Added async out-of-bounds `_maybe_check_max_pos` inside
     `apply_rotary_emb_{complex,single_complex,cos_sin}`.
   - **Required ezpz replays**:
-    - `experiments/ezpz/agpt/model.py`: rename `trainer_config`→`config`.
-    - `experiments/ezpz/moe/model.py`: rename `trainer_config`→`config`,
-      delegate base validation to `Decoder.Config.update_from_config`,
-      drop the now-redundant rope/MoE/TP checks (kept the per-layer
-      attention rope-field sync, the for_loop XPU fallback, the
-      CP+MoE attention check, and `set_moe_sharding_config`).
-    - Dropped unused imports (`dataclasses`, `DeepEPTokenDispatcher`,
-      `HybridEPTokenDispatcher`) from `moe/model.py`.
+    - `experiments/ezpz/agpt/model.py` ([b52e64841](https://github.com/saforem2/torchtitan/commit/b52e64841)):
+      rename `trainer_config`→`config`.
+    - `experiments/ezpz/moe/model.py` ([b52e64841](https://github.com/saforem2/torchtitan/commit/b52e64841)):
+      rename `trainer_config`→`config`, delegate base validation to
+      `Decoder.Config.update_from_config`, drop the now-redundant
+      rope/MoE/TP checks (kept the per-layer attention rope-field
+      sync, the for_loop XPU fallback, the CP+MoE attention check,
+      and `set_moe_sharding_config`). Dropped unused imports
+      (`dataclasses`, `DeepEPTokenDispatcher`, `HybridEPTokenDispatcher`).
+    - `experiments/ezpz/trainer.py` ([04199e522](https://github.com/saforem2/torchtitan/commit/04199e522)):
+      same `trainer_config`→`config` rename at the
+      `model_config.update_from_config(...)` callsite. Missed in the
+      initial b52e64841 pass; caught by the 2N smoke.
+
+### Smoke results (2026-05-29, alloc 12467655)
+
+- `agpt_2b`: 50 steps clean in 154 s, peak 24.34 GiB (38.04%),
+  ~5,850 TPS, 21.95% MFU. Matches the 2026-05-27 baseline.
+- `moe_2b_ep` at LBS=2: 50 steps clean in 323 s, peak 26.99 GiB
+  (42.18%), 3,135 TPS, 9.09% MFU, loss step 50 = 6.13. Matches the
+  2026-05-27 baseline. Also surfaced a separate pre-existing miss
+  from the 41st sync — see commit [88dbd916e](https://github.com/saforem2/torchtitan/commit/88dbd916e).
+
+### Bonus catch-up from 41st sync
+
+The 41st sync ([#3425](https://github.com/pytorch/torchtitan/pull/3425)
+MoE shape-suffix rename) renamed `GroupedExperts` parameters from
+`w1`/`w2`/`w3` to `w1_EFD`/`w2_EDF`/`w3_EFD`. We didn't smoke
+`moe_2b_ep` after that sync landed, so three ezpz-side references
+to the old names slipped through:
+
+- `experiments/ezpz/moe/sharding.py`: `_GROUPED_EXPERTS_PARAM_LAYOUT` keys.
+- `experiments/ezpz/moe/__init__.py`: `_depth_experts_init` keys.
+- `experiments/ezpz/moe/experts.py`: `self.w[123]` reads in `_experts_forward`.
+
+All three caught at trainer init / first forward by today's smoke
+and fixed in [88dbd916e](https://github.com/saforem2/torchtitan/commit/88dbd916e).
+Lesson: always smoke `moe_2b_ep` after a sync that touches
+`GroupedExperts`.
 
 - **[`92abc88e7` — Fix model test failure in #3395: rope refactor (#3448)](https://github.com/pytorch/torchtitan/pull/3448).**
   Three-file fix-forward for #3395: `common/decoder.py` TP validation
