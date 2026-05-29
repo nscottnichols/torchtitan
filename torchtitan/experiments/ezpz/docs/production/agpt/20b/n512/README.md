@@ -2,13 +2,17 @@
 
 > **This is the canonical 20B production chain.**
 >
-> **Status:** R since 2026-05-28 23:34 on `8509393`, currently at step
-> **4,300** (~432B tokens), loss **2.52**, mfu ~16-17% — chain has
-> persisted **+11 ckpts** (step-3,300 → step-4,300) since 2026-05-27
-> resume. Sync-mode workaround still holding cleanly across all
-> dispatches. Next-up continuation `8513546` is Q+H behind 8509393
-> (`afterany`), so chain survives walltime hit. See
-> [`Recovery`](#recovery) below.
+> **Status:** R 11:35h on `8509393` (12h walltime, ~25min headroom),
+> currently at step **4,400** (~442B tokens), loss **2.51**,
+> mfu ~16-17% — chain has persisted **+12 ckpts** (step-3,300 →
+> step-4,400) since 2026-05-27 resume. Sync-mode workaround still
+> holding cleanly across all dispatches. Next-up continuation
+> `8513546` is Q+H behind 8509393 (`afterany`), so chain survives
+> walltime hit. See [`Recovery`](#recovery) below.
+>
+> **Eval progression (step-4,300 just landed):**
+> HSn **0.6278** (+0.9pp from step-4,200), ARC-E 0.6646, ARC-C 0.3643,
+> Wino **0.5943** (+1.0pp). Steady climb continues.
 >
 > **Eval scores:** see [`docs/evals/agpt/20b/`](../../../../evals/agpt/20b/README.md).
 > **🏁 The 20B 512N sync chain is now beating 2B 256N async per token
