@@ -13,19 +13,44 @@
 #   LRF_INIT_LR     — starting LR (default: 1e-6)
 #   LRF_MAX_LR      — max LR (default: 1.0)
 #   LRF_TIMEOUT     — per-run timeout in seconds (default: 1800)
+#   LRF_LBS         — local batch size per device (default: 1). At production
+#                     N + LBS to measure the optimal LR at the actual GBS the
+#                     production chain will run at (e.g. LBS=2 for 2b 256N
+#                     gives GBS=6144 matching submit_agpt_2b_aurora_venv.sh).
 
 set -o pipefail
 
 # ---------------------------------------------------------------------------
-# Environment setup (set +u needed: lmod/ezpz reference unset vars)
+# Environment setup — production torch 2.13 .venv + ezpz yeet-env (matches
+# scripts/submit_agpt_2b_aurora_venv.sh so the LR-finder runs in the SAME
+# stack as the production chain it's calibrating).
 # ---------------------------------------------------------------------------
-set +u
-source <(curl -fsSL https://bit.ly/ezpz-utils) && ezpz_setup_env
+module load oneapi/release/2025.3.1 hdf5 pti-gpu
+export ZE_FLAT_DEVICE_HIERARCHY=FLAT
+export CCL_PROCESS_LAUNCHER=pmix
+export CCL_OP_SYNC=1
+export ONEAPI_DEVICE_SELECTOR="opencl:gpu;level_zero:gpu"
+export TORCH_CPP_LOG_LEVEL=ERROR
+export http_proxy="${http_proxy:-http://proxy.alcf.anl.gov:3128}"
+export https_proxy="${https_proxy:-http://proxy.alcf.anl.gov:3128}"
+export ftp_proxy="${ftp_proxy:-http://proxy.alcf.anl.gov:3128}"
+export no_proxy="${no_proxy:-localhost,127.0.0.1,*.alcf.anl.gov,*.aurora.alcf.anl.gov}"
 
-if ! command -v ezpz >/dev/null; then
-    uv pip install --no-cache --link-mode=copy "git+https://github.com/saforem2/ezpz"
-fi
+set +u
+source <(curl -fsSL https://bit.ly/ezpz-utils) && ezpz_setup_job
 set -u
+
+cd "${PBS_O_WORKDIR:-$(pwd)}"
+source .venv/bin/activate
+if [[ -f .venv.tar.gz ]]; then
+    log_message INFO "lr-finder: yeet-env via tarball (.venv.tar.gz)"
+    ezpz yeet-env --src .venv.tar.gz
+else
+    log_message INFO "lr-finder: yeet-env via per-file rsync (.venv.tar.gz not present)"
+    ezpz yeet-env
+fi
+deactivate
+source /tmp/.venv/bin/activate
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -37,6 +62,7 @@ LRF_FRACTION="${LRF_FRACTION:-0.1}"
 LRF_INIT_LR="${LRF_INIT_LR:-1e-6}"
 LRF_MAX_LR="${LRF_MAX_LR:-1.0}"
 LRF_TIMEOUT="${LRF_TIMEOUT:-1800}"
+LRF_LBS="${LRF_LBS:-1}"
 
 read -ra MODELS <<< "${LRF_MODELS}"
 read -ra OPTIMIZERS <<< "${LRF_OPTIMIZERS}"
@@ -109,7 +135,7 @@ for model in "${MODELS[@]}"; do
             --config "${config}" \
             --optimizer "${opt}" \
             --training.steps "${LRF_STEPS}" \
-            --training.local_batch_size 1 \
+            --training.local_batch_size "${LRF_LBS}" \
             --training.seq_len 8192 \
             --metrics.log_freq 1 \
             --checkpoint.no-enable \
