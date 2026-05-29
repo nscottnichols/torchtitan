@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Overlay v1 (bf16-master, broken) vs v2 (fp32-master, current) 2B
-eval scores on a single figure per task.
+"""Overlay v2 (fp32-master, current production) 2B eval scores
+against the 2B-MDS reference ceiling on a single figure per task.
 
-Mirrors docs/evals/agpt/20b/plot_v1_vs_v2.py — see that file for the
-design rationale (v1 scores hardcoded from the eval table; v2 scores
-loaded fresh from outputs/evals/agpt-2b-v2/).
+v1 (bf16-master, archived) results are now at
+docs/production/agpt/historical/v1-bf16/ and no longer plotted here.
 
 Usage:
     python3 plot_v1_vs_v2.py
@@ -44,32 +43,6 @@ MDS_RESULTS_BASE = REPO_ROOT / "outputs" / "evals" / "agpt-2b-mds"
 MDS_TOKENS_PER_STEP = 7_770e9 / 140_000  # ~55.5M tokens/step
 FIG_DIR = Path(__file__).parent / "figures"
 FIG_DIR.mkdir(parents=True, exist_ok=True)
-
-# v1 (bf16-tainted) scores from the eval README.
-# Steps × GBS=3072 (LBS=1) × seq=8192. Scores are reported as percentages
-# in the README (25.35 = 0.2535).
-V1_RESULTS = {
-    1000:  {"hellaswag": 0.2535, "arc_easy": 0.2744, "arc_challenge": 0.2338, "winogrande": 0.4783},
-    2000:  {"hellaswag": 0.2526, "arc_easy": 0.2719, "arc_challenge": 0.2423, "winogrande": 0.4957},
-    3000:  {"hellaswag": 0.2525, "arc_easy": 0.2689, "arc_challenge": 0.2355, "winogrande": 0.5107},
-    4000:  {"hellaswag": 0.2512, "arc_easy": 0.2698, "arc_challenge": 0.2406, "winogrande": 0.4846},
-    5000:  {"hellaswag": 0.2509, "arc_easy": 0.2698, "arc_challenge": 0.2406, "winogrande": 0.4901},
-    6000:  {"hellaswag": 0.2510, "arc_easy": 0.2748, "arc_challenge": 0.2423, "winogrande": 0.4854},
-    7000:  {"hellaswag": 0.2539, "arc_easy": 0.2719, "arc_challenge": 0.2355, "winogrande": 0.4988},
-    8000:  {"hellaswag": 0.2535, "arc_easy": 0.2698, "arc_challenge": 0.2449, "winogrande": 0.5107},
-    9000:  {"hellaswag": 0.2517, "arc_easy": 0.2723, "arc_challenge": 0.2406, "winogrande": 0.4767},
-    10000: {"hellaswag": 0.2507, "arc_easy": 0.2782, "arc_challenge": 0.2381, "winogrande": 0.4886},
-    11000: {"hellaswag": 0.2536, "arc_easy": 0.2668, "arc_challenge": 0.2415, "winogrande": 0.4799},
-    12000: {"hellaswag": 0.2504, "arc_easy": 0.2731, "arc_challenge": 0.2406, "winogrande": 0.4909},
-    13000: {"hellaswag": 0.2511, "arc_easy": 0.2731, "arc_challenge": 0.2415, "winogrande": 0.4901},
-    14000: {"hellaswag": 0.2500, "arc_easy": 0.2748, "arc_challenge": 0.2457, "winogrande": 0.4988},
-    15000: {"hellaswag": 0.2517, "arc_easy": 0.2778, "arc_challenge": 0.2415, "winogrande": 0.5099},
-    16000: {"hellaswag": 0.2527, "arc_easy": 0.2744, "arc_challenge": 0.2415, "winogrande": 0.4996},
-    17000: {"hellaswag": 0.2516, "arc_easy": 0.2673, "arc_challenge": 0.2560, "winogrande": 0.4980},
-    18000: {"hellaswag": 0.2522, "arc_easy": 0.2727, "arc_challenge": 0.2500, "winogrande": 0.4949},
-}
-V1_GBS = 3072
-V1_SEQ = 8192
 
 V2_SEQ = 8192
 
@@ -156,7 +129,6 @@ V2_STYLE = {
 
 
 def plot_per_task(
-    v1: dict[int, dict[str, float]],
     v2_by_nodes: dict[int, dict[int, dict[str, float]]],
     v2_gbs: dict[int, int],
     mds: dict[int, dict[str, float]],
@@ -164,21 +136,13 @@ def plot_per_task(
 ) -> None:
     fig, axes = plt.subplots(2, 2, figsize=(13, 9))
     fig.suptitle(
-        "AuroraGPT 2B  —  v1 (bf16-master, broken) vs v2 (fp32-master, current) vs MDS (SophiaG reference)",
+        "AuroraGPT 2B  —  v2 (fp32-master, current production) vs MDS (SophiaG reference)",
         fontsize=12,
         fontweight="bold",
     )
     for ax, task in zip(axes.flat, TASKS):
-        v1_steps = sorted(v1)
-        v1_tokens = [_tokens_for(s, V1_GBS, V1_SEQ) for s in v1_steps]
-        v1_y = [v1[s][task] for s in v1_steps]
-
         ax.axhline(
             RANDOM_BASELINE[task], color="#808080", lw=1, ls=":", label="random",
-        )
-        ax.plot(
-            v1_tokens, v1_y, marker="o", ms=4, lw=1.4,
-            color="#94a3b8", alpha=0.85, label=f"v1 256N (n={len(v1_steps)})",
         )
 
         # MDS reference (pre-torchtitan SophiaG, 7.77T tokens).
@@ -192,7 +156,7 @@ def plot_per_task(
                 label=f"MDS SophiaG ref (n={len(mds_steps)})",
             )
 
-        all_y_max = max(v1_y) if v1_y else 0.55
+        all_y_max = 0.55
         if mds_steps:
             all_y_max = max(all_y_max, max(mds[s][task] for s in mds_steps))
         for nodes, v2_traj in v2_by_nodes.items():
@@ -240,21 +204,12 @@ def plot_per_task(
 
 
 def print_table(
-    v1: dict[int, dict[str, float]],
     v2_by_nodes: dict[int, dict[int, dict[str, float]]],
     v2_gbs: dict[int, int],
 ) -> None:
-    print("\n## v1 vs v2 — by training step\n")
+    print("\n## v2 — by training step\n")
     print("| Run | Step | Tokens (B) | HellaSwag | ARC-Easy | ARC-Chall | Winogrande |")
     print("|-----|-----:|-----------:|----------:|---------:|----------:|-----------:|")
-    for step in sorted(v1):
-        s = v1[step]
-        tok = _tokens_for(step, V1_GBS, V1_SEQ)
-        print(
-            f"| v1 256N | {step:,} | {tok:5.1f} | "
-            f"{s['hellaswag']:.4f} | {s['arc_easy']:.4f} | "
-            f"{s['arc_challenge']:.4f} | {s['winogrande']:.4f} |"
-        )
     for nodes in sorted(v2_by_nodes):
         v2 = v2_by_nodes[nodes]
         gbs = v2_gbs[nodes]
@@ -281,9 +236,8 @@ def main() -> None:
         print(f"loaded v2 {nodes}N: {len(traj)} steps from {path}")
     mds = load_mds()
     print(f"loaded MDS reference: {len(mds)} steps from {MDS_RESULTS_BASE}")
-    print(f"loaded v1: {len(V1_RESULTS)} steps")
-    plot_per_task(V1_RESULTS, v2_by_nodes, v2_gbs, mds, FIG_DIR / "v1_vs_v2.svg")
-    print_table(V1_RESULTS, v2_by_nodes, v2_gbs)
+    plot_per_task(v2_by_nodes, v2_gbs, mds, FIG_DIR / "v1_vs_v2.svg")
+    print_table(v2_by_nodes, v2_gbs)
 
 
 if __name__ == "__main__":
