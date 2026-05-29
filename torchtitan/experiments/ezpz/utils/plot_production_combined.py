@@ -66,7 +66,7 @@ MDS_TOKENS_PER_STEP = 7_770e9 / 140_000  # ~55.5M tokens/step at GBS=3072, seq=8
 
 # Canonical per-trajectory palette — keep in sync with
 # eval/plot_evals_combined.py and per-model {2b,20b}/plot_v1_vs_v2.py.
-COLOR_2B_MDS      = "#0d2c6b"  # dark navy
+COLOR_2B_MDS      = "C0"       # matplotlib C0 (ambivalent palette first color — reads well on both light + dark bg)
 COLOR_2B_TT_256N  = "#ef5350"  # salmon-red
 COLOR_2B_TT_512N  = "#b71c1c"  # dark red
 COLOR_20B_TT_256N = "#fb8c00"  # orange (20B 256N: one-off NODE_FAIL run; no canonical color)

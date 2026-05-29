@@ -29,7 +29,7 @@ Tokens consumed at step *N* = `N × 3,072 × 8,192`. Random baseline is
 
 Two production trajectories per panel: **v2 256N async** + **v2 512N
 sync** (current production, fp32-master), overlaid against the
-**MDS SophiaG reference** (dark navy dashed crosses, pre-torchtitan
+**MDS SophiaG reference** (blue dashed crosses, pre-torchtitan
 Megatron-DeepSpeed 2B continuation trained to 7.77T tokens — the
 upper-bound ceiling for the 2B size class on this benchmark set).
 
@@ -188,7 +188,7 @@ Winogrande (which doesn't expose `acc_norm`).
 
 ### v2 256N vs MDS reference ceiling
 
-The MDS SophiaG 2B continuation (~7.77T tokens, dark navy in the
+The MDS SophiaG 2B continuation (~7.77T tokens, blue in the
 figure) sets the upper-bound for the 2B size class on this benchmark
 set. Latest v2 256N points vs that ceiling:
 
