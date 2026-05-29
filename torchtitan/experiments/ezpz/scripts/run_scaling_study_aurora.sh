@@ -22,19 +22,40 @@
 set -o pipefail
 
 # ---------------------------------------------------------------------------
-# Environment setup — match production submit scripts:
-#   ezpz-utils + setup_job + load_modules_aurora + activate project .venv
-# (torch 2.13). The earlier ezpz_setup_env path landed on
-# venvs/aurora/torchtitan-ezpz-aurora_frameworks-2025.3.1/ which is stale
-# (predates the experiments/ezpz/agpt/config_registry.py refactor) and
-# crashes every run with `ImportError: Cannot import config_registry for
-# module 'ezpz.agpt'`.
+# Environment setup — mirror production submit_agpt_*_aurora_venv.sh:
+#   1. CCL/oneAPI env vars (matches submit_agpt_2b_aurora_venv_failover.sh)
+#   2. ezpz-utils + ezpz_setup_job
+#   3. activate project .venv (torch 2.13)
+#   4. yeet .venv to local /tmp on every compute node (REQUIRED at N >= 256;
+#      without it, all ranks load Python from flare and saturate metadata,
+#      triggering set_determinism std::bad_alloc/SIGSEGV crashes at 6,144+
+#      ranks — exactly what hits production 512N intermittently)
+#   5. reactivate /tmp/.venv so subsequent ezpz launch uses local python
 # ---------------------------------------------------------------------------
 set +u
-source <(curl -fsSL https://bit.ly/ezpz-utils) \
-    && ezpz_setup_job \
-    && ezpz_load_modules_aurora \
-    && source .venv/bin/activate
+module load oneapi/release/2025.3.1 hdf5 pti-gpu
+export ZE_FLAT_DEVICE_HIERARCHY=FLAT
+export CCL_PROCESS_LAUNCHER=pmix
+export CCL_OP_SYNC=1
+export ONEAPI_DEVICE_SELECTOR="opencl:gpu;level_zero:gpu"
+export TORCH_CPP_LOG_LEVEL=ERROR
+export http_proxy="${http_proxy:-http://proxy.alcf.anl.gov:3128}"
+export https_proxy="${https_proxy:-http://proxy.alcf.anl.gov:3128}"
+export ftp_proxy="${ftp_proxy:-http://proxy.alcf.anl.gov:3128}"
+export no_proxy="${no_proxy:-localhost,127.0.0.1,*.alcf.anl.gov,*.aurora.alcf.anl.gov}"
+
+source <(curl -fsSL https://bit.ly/ezpz-utils) && ezpz_setup_job
+
+source .venv/bin/activate
+if [[ -f .venv.tar.gz ]]; then
+    log_message INFO "scaling: yeet-env via tarball (.venv.tar.gz)"
+    ezpz yeet-env --src .venv.tar.gz
+else
+    log_message INFO "scaling: yeet-env via per-file rsync (.venv.tar.gz not present)"
+    ezpz yeet-env
+fi
+deactivate
+source /tmp/.venv/bin/activate
 set -u
 
 # ---------------------------------------------------------------------------
