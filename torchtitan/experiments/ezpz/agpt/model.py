@@ -25,7 +25,7 @@ class AgptModel(Llama3Model):
         def update_from_config(
             self,
             *,
-            trainer_config,
+            config,
             **kwargs,
         ) -> None:
             # Run llama3's validation + rope sync first. It calls
@@ -36,14 +36,14 @@ class AgptModel(Llama3Model):
             # bare super() in a slots=True nested-class dataclass can't
             # resolve the enclosing class name correctly.
             super(AgptModel.Config, self).update_from_config(
-                trainer_config=trainer_config, **kwargs
+                config=config, **kwargs
             )
 
             from torchtitan.experiments.ezpz.agpt.sharding import (
                 set_agpt_sharding_config,
             )
 
-            parallelism = trainer_config.parallelism
+            parallelism = config.parallelism
             set_agpt_sharding_config(
                 self,
                 loss_parallel=not parallelism.disable_loss_parallel,

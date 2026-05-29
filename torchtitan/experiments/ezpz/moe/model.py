@@ -4,7 +4,6 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-import dataclasses
 import math
 from dataclasses import dataclass
 
@@ -20,10 +19,6 @@ from torchtitan.models.common.attention import (
 from torchtitan.models.common.decoder import Decoder, TransformerBlock
 from torchtitan.models.common.nn_modules import Linear, RMSNorm
 from torchtitan.models.common.rope import apply_rotary_emb_single_complex
-from torchtitan.models.common.token_dispatcher import (
-    DeepEPTokenDispatcher,
-    HybridEPTokenDispatcher,
-)
 from torchtitan.models.utils import get_moe_model_nparams_and_flops
 from torchtitan.protocols.module import Module
 from torchtitan.tools.logging import logger
@@ -205,36 +200,38 @@ class moeModel(Decoder):  # noqa: N801
         def update_from_config(
             self,
             *,
-            trainer_config,
+            config,
             **kwargs,
         ) -> None:
-            training = trainer_config.training
-            parallelism = trainer_config.parallelism
-            debug = trainer_config.debug
-            seq_len = training.seq_len
-            if seq_len > self.rope.max_seq_len:
-                logger.warning(
-                    f"Sequence length {seq_len} exceeds original maximum {self.rope.max_seq_len}."
-                )
-            self.rope = dataclasses.replace(self.rope, max_seq_len=seq_len)
+            # Run Decoder.Config's validation + rope sync + MoE/TP/EP
+            # checks first. After PR #3395 (42nd sync) these moved from
+            # per-model overrides into the shared Decoder.Config helper.
+            Decoder.Config.update_from_config(self, config=config, **kwargs)
+            parallelism = config.parallelism
 
-            # Sync rope fields to attention for all layers.
-            # Mutate in-place — simpler than replacing each config in the list.
-            for layer_cfg in self.layers:
-                assert isinstance(layer_cfg.attention, Attention.Config)
-                layer_cfg.attention.rope_max_seq_len = seq_len
-                layer_cfg.attention.rope_factor = self.rope.rope_factor
-                layer_cfg.attention.rope_original_seq_len = self.rope.original_seq_len
+            from torchtitan.trainer import Trainer
 
+            # Sync rope fields to attention for all layers. Mirrors
+            # upstream deepseek_v3 — needed because our Attention.Config
+            # holds rope_* fields separately from self.rope. Skipped for
+            # non-trainer callers (e.g. RL generator) since they don't
+            # set training.seq_len.
+            if isinstance(config, Trainer.Config):
+                seq_len = config.training.seq_len
+                for layer_cfg in self.layers:
+                    assert isinstance(layer_cfg.attention, Attention.Config)
+                    layer_cfg.attention.rope_max_seq_len = seq_len
+                    layer_cfg.attention.rope_factor = self.rope.rope_factor
+                    layer_cfg.attention.rope_original_seq_len = (
+                        self.rope.original_seq_len
+                    )
+
+            # for_loop fallback when CUDA SM90+ grouped_mm is unavailable
+            # (notably on XPU). Upstream Decoder.Config doesn't know about
+            # compute_backend, so this stays.
             for layer_cfg in self.layers:
                 if layer_cfg.moe is not None:
                     experts_cfg = layer_cfg.moe.experts
-                    # Upstream `GroupedExperts` calls `torch._grouped_mm`
-                    # unconditionally (the `use_grouped_mm` config field was
-                    # removed in pytorch/torchtitan#3308). On devices without
-                    # an SM90+ CUDA grouped-mm kernel — most importantly XPU,
-                    # which has no fallback at all — switch the
-                    # `EzpzGroupedExperts` config to the for_loop backend.
                     if getattr(
                         experts_cfg, "compute_backend", "grouped_mm"
                     ) == "grouped_mm" and not has_cuda_capability(9, 0):
@@ -243,23 +240,6 @@ class moeModel(Decoder):  # noqa: N801
                             "back to for_loop expert backend.",
                         )
                         experts_cfg.compute_backend = "for_loop"
-                    layer_cfg.moe.router._debug_force_load_balance = (
-                        debug.moe_force_load_balance
-                    )
-                    token_dispatcher_cfg = layer_cfg.moe.experts.token_dispatcher
-                    if isinstance(
-                        token_dispatcher_cfg,
-                        (
-                            DeepEPTokenDispatcher.Config,
-                            HybridEPTokenDispatcher.Config,
-                        ),
-                    ):
-                        if parallelism.expert_parallel_degree == 1:
-                            raise ValueError(
-                                f"{type(token_dispatcher_cfg).__qualname__} "
-                                "requires expert parallelism "
-                                "(expert_parallel_degree > 1)."
-                            )
 
             if parallelism.context_parallel_degree > 1 and not isinstance(
                 self.layers[0].attention.inner_attention,
