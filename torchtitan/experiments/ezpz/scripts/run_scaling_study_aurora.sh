@@ -33,17 +33,17 @@ set -o pipefail
 #   5. reactivate /tmp/.venv so subsequent ezpz launch uses local python
 # ---------------------------------------------------------------------------
 set +u
-# When this script is invoked via `qsub -- /bin/bash -c 'bash <this>'`, the
-# inner bash is NOT a login shell and `module` is undefined. Source
-# Aurora's lmod init explicitly. (Sourcing /etc/profile.d/*.sh alone
-# does NOT define `module` on Aurora — lmod lives at /usr/share/lmod/.)
-if ! command -v module >/dev/null 2>&1; then
-    if [[ -r /usr/share/lmod/lmod/init/bash ]]; then
+# When this script is invoked via `qsub -- /bin/bash -c 'bash <this>'`,
+# the inner bash is NOT a login shell, so module/MODULEPATH/lmod aren't
+# initialized. Source Aurora's Cray PE init (which defines `module` AND
+# populates MODULEPATH from /etc/cray-pe.d/cray-pe-configuration.sh).
+# `/etc/bash.bashrc.local` is what `#!/bin/bash --login` gets via
+# /etc/bash.bashrc -> /etc/bash.bashrc.local.
+if ! command -v module >/dev/null 2>&1 || [[ -z "${MODULEPATH:-}" ]]; then
+    if [[ -r /etc/bash.bashrc.local ]]; then
+        source /etc/bash.bashrc.local
+    elif [[ -r /usr/share/lmod/lmod/init/bash ]]; then
         source /usr/share/lmod/lmod/init/bash
-    else
-        for f in /etc/profile.d/*.sh; do
-            [[ -r "$f" ]] && source "$f" >/dev/null 2>&1 || true
-        done
     fi
 fi
 module load oneapi/release/2025.3.1 hdf5 pti-gpu
