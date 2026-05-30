@@ -24,7 +24,17 @@ set -o pipefail
 # Environment setup — production torch 2.13 .venv + ezpz yeet-env (matches
 # scripts/submit_agpt_2b_aurora_venv.sh so the LR-finder runs in the SAME
 # stack as the production chain it's calibrating).
+#
+# When this script is invoked via `qsub -- /bin/bash -c 'bash <this>'`, the
+# inner bash is NOT a login shell even though our #!shebang says --login
+# (the shebang only fires when invoked as ./script, not as `bash script`).
+# Source /etc/profile.d/*.sh manually so `module` is defined.
 # ---------------------------------------------------------------------------
+if ! command -v module >/dev/null 2>&1; then
+    for f in /etc/profile.d/*.sh; do
+        [[ -r "$f" ]] && source "$f" >/dev/null 2>&1 || true
+    done
+fi
 module load oneapi/release/2025.3.1 hdf5 pti-gpu
 export ZE_FLAT_DEVICE_HIERARCHY=FLAT
 export CCL_PROCESS_LAUNCHER=pmix
