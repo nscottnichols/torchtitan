@@ -1,4 +1,4 @@
-#!/usr/bin/bash
+#!/bin/bash --login
 # LR Finder sweep for agpt models across optimizers.
 # Runs LR finder for each (model, optimizer) combination.
 #

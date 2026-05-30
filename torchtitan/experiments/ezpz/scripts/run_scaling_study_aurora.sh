@@ -1,4 +1,4 @@
-#!/usr/bin/bash
+#!/bin/bash --login
 # Aurora scaling study benchmark for ezpz experiment configs.
 # Runs a configurable group of models for BENCH_STEPS iterations each,
 # parses metrics, and generates report.md + results.json for aggregation.
