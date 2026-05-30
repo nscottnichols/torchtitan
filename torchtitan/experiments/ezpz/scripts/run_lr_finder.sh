@@ -26,14 +26,18 @@ set -o pipefail
 # stack as the production chain it's calibrating).
 #
 # When this script is invoked via `qsub -- /bin/bash -c 'bash <this>'`, the
-# inner bash is NOT a login shell even though our #!shebang says --login
-# (the shebang only fires when invoked as ./script, not as `bash script`).
-# Source /etc/profile.d/*.sh manually so `module` is defined.
+# inner bash is NOT a login shell and `module` is undefined. Source
+# Aurora's lmod init explicitly. (Sourcing /etc/profile.d/*.sh alone
+# does NOT define `module` on Aurora — lmod lives at /usr/share/lmod/.)
 # ---------------------------------------------------------------------------
 if ! command -v module >/dev/null 2>&1; then
-    for f in /etc/profile.d/*.sh; do
-        [[ -r "$f" ]] && source "$f" >/dev/null 2>&1 || true
-    done
+    if [[ -r /usr/share/lmod/lmod/init/bash ]]; then
+        source /usr/share/lmod/lmod/init/bash
+    else
+        for f in /etc/profile.d/*.sh; do
+            [[ -r "$f" ]] && source "$f" >/dev/null 2>&1 || true
+        done
+    fi
 fi
 module load oneapi/release/2025.3.1 hdf5 pti-gpu
 export ZE_FLAT_DEVICE_HIERARCHY=FLAT
