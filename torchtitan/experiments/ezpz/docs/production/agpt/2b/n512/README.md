@@ -2,17 +2,16 @@
 
 > **This is the canonical 2B production chain.**
 >
-> **Status:** at step **27,106+ (8508753 R as of 2026-05-27 12:37)**,
-> loss **2.72** — sync-mode workaround for async-cascade continues to
-> hold across 3 more dispatches (~107 more ckpts persisted in
-> `8507199` + still-running `8508753` on 2026-05-26 → 2026-05-27;
-> `8507196` lost to a separate Aurora pals-RPC infra failure — see
-> [`Recovery`](#recovery)). The async-mode runs (`8505176` and earlier)
-> had been pinned at step-13,300 for two weeks because every dispatch
-> cleanly trained ~100 steps to the next save then died in the same
-> async-save cluster cascade. Switching `CHECKPOINT_ASYNC_MODE=disabled`
-> keeps the chain advancing — same fix that unblocked the 20B 512N
-> trajectory.
+> **Status:** chain at step **30,400** as of 2026-05-30 (last R was
+> `8508753` walltime-exit 2026-05-27, then `8509042` cont crashed in
+> `set_determinism std::bad_alloc` at 6,144 ranks — documented
+> intermittent). +1 continuation `8513545` (`afterany:8509042`) Q for
+> 512N slot since 2026-05-28 23:20 (>24h Q wait — Aurora capacity
+> tight on Fri/weekend). Chain advanced **+3,294 steps** since the
+> last README refresh (27,106 → 30,400), persisting ~33 ckpts at
+> 100-step intervals. Sync-mode workaround for async-cascade continues
+> to hold; the async-mode runs (`8505176` and earlier) had been pinned
+> at step-13,300 for two weeks. Loss **2.71** at step-30,400.
 >
 > **Eval scores:** see [`docs/evals/agpt/2b/`](../../../../evals/agpt/2b/README.md)
 > for the current v2 lm-eval results.

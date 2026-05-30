@@ -2,17 +2,20 @@
 
 > **This is the canonical 20B production chain.**
 >
-> **Status:** R 11:35h on `8509393` (12h walltime, ~25min headroom),
-> currently at step **4,400** (~442B tokens), loss **2.51**,
-> mfu ~16-17% — chain has persisted **+12 ckpts** (step-3,300 →
-> step-4,400) since 2026-05-27 resume. Sync-mode workaround still
-> holding cleanly across all dispatches. Next-up continuation
-> `8513546` is Q+H behind 8509393 (`afterany`), so chain survives
-> walltime hit. See [`Recovery`](#recovery) below.
+> **Status:** chain at step **4,400** (~442B tokens), loss **2.51** as
+> of 2026-05-30. `8509393` walltime-exited cleanly on 2026-05-29 12:01
+> at step 4,419 (step-4,400 ckpt durable; 19 in-memory steps past
+> ckpt save wasted). +1 continuation `8513546` auto-released H→Q;
+> still Q for 512N slot since 12:01 (>12h Q wait — Aurora capacity
+> tight on Fri/weekend). +2 continuation `8514610` H behind 8513546.
+> Chain persisted **+11 ckpts** (step-3,300 → step-4,400) since
+> 2026-05-27 resume. Sync-mode workaround still holding cleanly
+> across all dispatches. See [`Recovery`](#recovery) below.
 >
-> **Eval progression (step-4,300 just landed):**
-> HSn **0.6278** (+0.9pp from step-4,200), ARC-E 0.6646, ARC-C 0.3643,
-> Wino **0.5943** (+1.0pp). Steady climb continues.
+> **Latest eval (step-4,400, 2026-05-29):**
+> HSn **0.6346** (+0.7pp from step-4,300), ARC-E 0.6641 (flat),
+> ARC-C **0.3797** (+1.5pp jump), Wino 0.5864. Steady monotonic
+> climb continues with ARC-C breakout this step.
 >
 > **Eval scores:** see [`docs/evals/agpt/20b/`](../../../../evals/agpt/20b/README.md).
 > **🏁 The 20B 512N sync chain is now beating 2B 256N async per token

@@ -5,13 +5,15 @@
 
 ## v2 — 2B @ 256N — SophiaG LR=2.28e-5 (fp32 master)
 
-> Status: at step **49,666+ (8508020 R as of 2026-05-27 12:37)**, loss 2.68.
-> Chain advanced +13,138 steps across 3 more dispatches on
-> 2026-05-25 → 2026-05-27 (`8507195` + `8507198` + still-running
-> `8508020`, all 12h walltime, async mode), persisting ~114 more
-> ckpts (step-36800..step-48300, plus the live 8508020 run since
-> step-48400). Async-mode remains stable at 256N — only 512N+ hits
-> the async-save cluster cascade documented on the 2B/20B 512N pages.
+> Status: chain at step **55,000** as of 2026-05-30 (last R was `8508020`
+> walltime-exit 2026-05-27 21:33; `8508977` cont was pals-RPC infra
+> failure exit 127). +1 continuation `8513544` (`afterany:8508977`) Q
+> for 256N slot since 2026-05-28 23:20 (>24h Q wait — Aurora capacity
+> tight on Fri/weekend). Chain advanced **+5,334 steps** since the
+> last README refresh (49,666 → 55,000), persisting ~54 ckpts at
+> 100-step intervals. Async-mode remains stable at 256N — only 512N+
+> hits the async-save cluster cascade documented on the 2B/20B 512N
+> pages. Loss tracking flat ~2.67-2.68 (eval plateau in HSn 0.547-0.553).
 >
 > Earlier runs: 8459818 (initial, NODE_FAIL @ 2070), 8470100 / 8470101
 > (chain1/chain2 walltime to step ~10,723). Loss tracking the

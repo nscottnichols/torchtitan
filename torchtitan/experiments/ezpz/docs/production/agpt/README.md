@@ -1,21 +1,21 @@
 # Production Training — Dense (agpt) Models
 
-> Last updated: 2026-05-27
+> Last updated: 2026-05-30
 >
 > **Restarted in v2 clones on 2026-04-30** after the bf16-master
 > RMSNorm-freeze regression. All current production training is on
 > `dtype=float32` master weights. Historical bf16-tainted runs:
 > [`historical/v1-bf16/`](historical/v1-bf16/README.md).
 
-## Headline (2026-05-28)
+## Headline (2026-05-30)
 
-- **2B 256N async chain** at step **55,026** (loss 2.67, ~2.77T tokens, **59.3%** of target) — most recent dispatch 8508977 crashed at exit 127 (Aurora pals-RPC infra failure, not failover-recoverable). 8510692 Q for slot.
-- **2B 512N sync chain** at step **30,484** (loss 2.71, ~3.07T tokens, **65.7%** of target) — most recent dispatch 8508753 done cleanly at walltime; 8509042 cont crashed in `set_determinism` `std::bad_alloc` (documented intermittent at 6,144 ranks); 8510693 cont5 Q for slot.
-- **20B 512N sync chain** at step **3,806** (loss 2.60, ~382B tokens, **8.2%** of target) — 8508214 done cleanly at walltime; 8509393 cont4 Q (16+h, Aurora `small` queue congested).
-- **🏁 20B 512N now beats 2B 256N async on every benchmark per token.** Latest evals (step 3,800, ~382B tokens): HellaSwag `acc_norm` **0.611** (+32pp vs step-900 0.296), ARC-Easy `acc` **0.678**, ARC-C `acc_norm` **0.355**. Monotonic lift across 30+ consecutive ckpts.
+- **2B 256N async chain** at step **55,000** (loss ~2.67, ~2.77T tokens, **59.3%** of target) — chain idle since 8508977 pals-RPC exit 127. +1 continuation `8513544` Q for 256N slot >24h (Fri/weekend Aurora congestion).
+- **2B 512N sync chain** at step **30,400** (loss **2.71**, ~3.07T tokens, **65.7%** of target) — chain idle since 8509042 `set_determinism std::bad_alloc` crash. +1 continuation `8513545` Q for 512N slot >24h.
+- **20B 512N sync chain** at step **4,400** (loss **2.51**, ~442B tokens, **9.5%** of target) — `8509393` walltimed cleanly 2026-05-29 12:01 with step-4,400 ckpt durable (+11 ckpts since step-3,300). +1 `8513546` auto-released H→Q, +2 `8514610` H behind. Both Q for 512N slot >12h.
+- **🏁 20B 512N now beats 2B 256N async on every benchmark per token.** Latest evals (step-4,400, ~442B tokens): HellaSwag `acc_norm` **0.6346** (+34pp vs step-900 0.296), ARC-Easy `acc` **0.6641**, ARC-C `acc_norm` **0.3797** (+1.5pp jump at step-4,400). Monotonic lift across 35+ consecutive ckpts.
 - **80B 256N still completely blocked.** 11+ dispatches since 2026-05-11, zero ckpts persisted. The latest
-  (8505222) cascaded through 5 wrapper retries — every attempt hit SIGSEGV on a different bad node, 3 of them
-  from the x4101c5/c6 rack cluster. See
+  (8505222 on 2026-05-24) cascaded through 5 wrapper retries — every attempt hit SIGSEGV on a different bad node, 3 of them
+  from the x4101c5/c6 rack cluster. No new 80B dispatches since 5/24. See
   [`20260524-80b-256n-sigsegv-cascade-8505222.md`](../../experiments/agpt/aurora/20260524-80b-256n-sigsegv-cascade-8505222.md).
   Distinct from the 80B 8N smoke failure (data-pipeline race), documented in
   [`blendcorpus-eoferror-race.md`](../../guides/known-bugs/blendcorpus-eoferror-race.md).
@@ -45,10 +45,10 @@ extensions.
 | [`8507196`](2b/n512/README.md#log-8507196) | 2026-05-25 | 12h | ~14000–~17500 | ~2.77 → ~2.75 | Aurora pals-RPC launcher infra fail mid-run (exit 127), +76 ckpts still persisted. See [pals-RPC writeup](../../experiments/agpt/aurora/). |
 | **[`8507199`](2b/n512/README.md#log-8507199)** | 2026-05-25 | 12h | ~17500–~22500 | ~2.75 → ~2.73 | Sync-mode, +50 ckpts. |
 | **[`8508753`](2b/n512/README.md#log-8508753)** | 2026-05-26 → 2026-05-27 | 12h | ~22500–**30,484** | ~2.73 → **2.71** | Done (walltime exit -29). +80 ckpts step-22600..step-30400 persisted. |
-| `8509042` | 2026-05-27 | 12h | (cont.) | — | Queued (`afterany:8508753` released). |
-| `8510693` | 2026-05-27 | 12h | (cont.) | — | Held (`afterany:8509042`). |
+| `8509042` | 2026-05-27 | 12h | — | — | **Crashed** in `set_determinism std::bad_alloc` at 6,144 ranks (documented intermittent). |
+| `8513545` | 2026-05-28 | 12h | (cont.) | — | **Queued** (>24h, capacity-blocked in `small` queue; `afterany:8509042`). |
 
-**Latest cumulative**: step **27,100+** · loss **2.72** · **~2.73T tokens** (58.4% of 4.67T target — past the halfway mark).
+**Latest cumulative**: step **30,400** · loss **2.71** · **~3.07T tokens** (65.7% of 4.67T target).
 
 ### 2B per-token comparator chain (256N, async-mode)
 
@@ -59,10 +59,11 @@ extensions.
 | **[`8505252`](2b/n256/README.md#log-8505252)** | 2026-05-24 | 12h | (cont.) | — | Done. +57 ckpts. |
 | **[`8507195`](2b/n256/README.md#log-8507195)** | 2026-05-25 | 12h | (cont.) | — | Done. +57 ckpts. |
 | **[`8507198`](2b/n256/README.md#log-8507198)** | 2026-05-26 | 12h | (cont.) | — | Done. +57 ckpts. |
-| **[`8508020`](2b/n256/README.md#log-8508020)** | 2026-05-26 | 12h | ~48,300–**50,000+** | ~2.69 → **2.68** | **Running** (just crossed step-50,000 at 13:54). |
-| `8508977` | 2026-05-27 | 12h | (cont.) | — | Held (`afterany:8508020`). |
+| **[`8508020`](2b/n256/README.md#log-8508020)** | 2026-05-26 → 2026-05-27 | 12h | ~48,300–**~52,500** | ~2.69 → **2.68** | Done (walltime exit 2026-05-27 21:33). |
+| `8508977` | 2026-05-27 | 12h | (cont.) | — | **Failed** (Aurora pals-RPC infra exit 127, not failover-recoverable). |
+| `8513544` | 2026-05-28 | 12h | (cont.) | — | **Queued** (>24h, capacity-blocked in `small` queue; `afterany:8508977`). |
 
-**Latest cumulative (256N)**: step **49,900+** · loss **2.68** · **~2.50T tokens** (53.5% of 4.67T target). Eval plateau:
+**Latest cumulative (256N)**: step **55,000** · loss **2.67** · **~2.77T tokens** (59.3% of 4.67T target). Eval plateau:
 ARC-Easy ~0.645, HellaSwag acc_norm ~0.547.
 
 ### 20B canonical chain (512N, sync-mode)
@@ -80,14 +81,16 @@ ARC-Easy ~0.645, HellaSwag acc_norm ~0.547.
 | **[`8505259`](20b/n512/README.md#log-8505259)** | 2026-05-24 | 12h | (cont.) | — | Sync-mode, +6 ckpts. |
 | **[`8507197`](20b/n512/README.md#log-8507197)** | 2026-05-25 | 12h | (cont.) | — | Sync-mode, +6 ckpts. |
 | **[`8507200`](20b/n512/README.md#log-8507200)** | 2026-05-26 | 12h | ~2700–**3,270** | ~2.70 → **2.65** | Done (12h walltime end at 2026-05-27 03:43). +6 ckpts. |
-| `8508214` | 2026-05-27 | 12h | 3,270+ | — | **Queued** (~10h, capacity-blocked in `small` queue). |
-| `8509393` | 2026-05-27 | 12h | (cont.) | — | Held. |
+| **[`8508214`](20b/n512/README.md#log-8508214)** | 2026-05-28 | 12h | 3,270–~3,800 | 2.65 → **2.60** | Done (walltime). Sync-mode, ~5 ckpts. |
+| **[`8509393`](20b/n512/README.md#log-8509393)** | 2026-05-29 | 12h | 3,800–**4,419** | 2.60 → **2.51** | Done (walltime exit at 12:01). +6 ckpts (step-3,900..step-4,400). |
+| `8513546` | 2026-05-29 | 12h | (cont.) | — | **Queued** (>12h, capacity-blocked in `small` queue; auto-released from H when 8509393 exited). |
+| `8514610` | 2026-05-29 | 12h | (cont.) | — | Held (`afterany:8513546`). |
 
-**Latest cumulative**: step **3,270** · loss **2.65** · **~329B tokens** (7.0% of 4.67T target).
+**Latest cumulative**: step **4,400** · loss **2.51** · **~442B tokens** (9.5% of 4.67T target).
 
-**🏁 Eval headline (16 ckpts, step-900 → step-3200)**: ARC-Easy `acc` 0.463 → **0.665** (+20pp), HellaSwag `acc_norm`
-0.296 → **0.574** (+28pp), ARC-C `acc_norm` 0.224 → **0.322** (+10pp). **20B 512N sync now beats 2B 256N async on
-every benchmark per token.** Monotonic across 24+ consecutive ckpts. See
+**🏁 Eval headline (35+ ckpts, step-900 → step-4,400)**: ARC-Easy `acc` 0.463 → **0.664** (+20pp), HellaSwag `acc_norm`
+0.296 → **0.635** (+34pp), ARC-C `acc_norm` 0.224 → **0.380** (+16pp), Winogrande 0.493 → 0.586 (+9pp).
+**20B 512N sync now beats 2B 256N async on every benchmark per token.** Monotonic across 35+ consecutive ckpts. See
 [`evals/agpt/20b/`](../../evals/agpt/20b/README.md).
 
 ## Other jobs (independent ckpt trajectories)
