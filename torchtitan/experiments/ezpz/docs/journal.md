@@ -4,6 +4,25 @@ Running log of what's happening, session by session. Most recent first.
 
 ---
 
+## 2026-05-31 — 43rd upstream sync (interleaved dataloader, no-op replay)
+
+Merged 1 upstream commit (`221041490`, PR
+[#3063](https://github.com/pytorch/torchtitan/pull/3063) — weighted
+interleaved multi-source HF dataloader). Pure additions —
+`InterleavedHuggingFaceTextDataLoader`, `InterleavedChatDataLoader`,
+`HFDataSource`/`ChatDataSource`, an `InterleavedDataset` weighted
+sampler, plus tests. The existing `HuggingFaceTextDataLoader` and
+`DATASETS` that `experiments/ezpz/datasets.py` and
+`blendcorpus/blendcorpus_builder.py` import are unchanged. No
+replay; imports smoke green.
+
+`git log HEAD..upstream/main` listed 8 commits but only 1 was a
+genuine new patch — the other 7 were the patch-equivalent duplicates
+from 41st/42nd-sync bookkeeping flagged in the 42nd-sync entry.
+`git merge` handled the difference correctly.
+
+---
+
 ## 2026-05-29 — 42nd upstream sync (RoPE refactor + replays)
 
 Merged 6 upstream commits (`28483d0eb..065c2625d`). The headline is

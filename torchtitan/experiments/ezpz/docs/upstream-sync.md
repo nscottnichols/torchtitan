@@ -24,6 +24,28 @@ tests and checking against the saved baselines — see
 
 ---
 
+## 2026-05-31 (43rd sync — interleaved multi-source dataloader)
+
+Upstream merged in 1 commit (`221041490`).
+
+- **[`221041490` — \[data\] Add weighted interleaved multi-source dataloader (#3063)](https://github.com/pytorch/torchtitan/pull/3063).**
+  Pure additions: new `InterleavedHuggingFaceTextDataLoader`,
+  `InterleavedChatDataLoader`, `HFDataSource`/`ChatDataSource`
+  config wrappers, an `InterleavedDataset` weighted sampler under
+  `torchtitan/hf_datasets/interleaved.py`, plus tests. Existing
+  `HuggingFaceTextDataLoader` + `DATASETS` (both imported by
+  `experiments/ezpz/datasets.py` and
+  `experiments/ezpz/blendcorpus/blendcorpus_builder.py`) are
+  unchanged. **No ezpz replay needed.** Imports smoke-tested green.
+
+Side note: `git log HEAD..upstream/main` showed 8 unmerged commits,
+but `git cherry -v` flagged 7 as patch-equivalent duplicates from
+the 41st/42nd-sync bookkeeping (same situation we documented in
+the 42nd-sync entry). `git merge` correctly applied only #3063 as a
+file-changing commit and recorded the rest as a marker.
+
+---
+
 ## 2026-05-29 (42nd sync — RoPE refactor + 5 smaller commits)
 
 Upstream merged in 6 commits (`28483d0eb..065c2625d`).
