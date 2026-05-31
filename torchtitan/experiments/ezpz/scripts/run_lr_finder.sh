@@ -40,6 +40,11 @@ if ! command -v module >/dev/null 2>&1 || [[ -z "${MODULEPATH:-}" ]]; then
     fi
 fi
 module load oneapi/release/2025.3.1 hdf5 pti-gpu
+# /opt/pbs/bin must be on PATH so `sh.qstat` works inside `ezpz launch`
+# (ezpz.pbs.get_pbs_jobid_of_active_job calls `from sh import qstat`).
+# bash --login on login node has it via /etc/profile; this re-export
+# ensures it propagates through mpiexec --envall to compute nodes too.
+export PATH="/opt/pbs/bin:${PATH}"
 export ZE_FLAT_DEVICE_HIERARCHY=FLAT
 export CCL_PROCESS_LAUNCHER=pmix
 export CCL_OP_SYNC=1
