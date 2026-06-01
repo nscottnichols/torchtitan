@@ -4,6 +4,36 @@ Running log of what's happening, session by session. Most recent first.
 
 ---
 
+## 2026-06-01 — Error-propagation fixes + 44th upstream sync
+
+### Error-propagation fixes (from this morning's BlendCorpus debug)
+
+Two bugs surfaced when a rank crashed at init with the misleading
+`BlendCorpus dataset was requested but blendcorpus is not installed`
+message — when in fact `blendcorpus` was installed and the actual
+missing module was `deepspeed` (a transitive dep).
+
+- [`9eb680dbc`](https://github.com/saforem2/torchtitan/commit/9eb680dbc)
+  — `_import_blendcorpus_modules` now inspects `exc.name` and emits
+  one of two messages: "blendcorpus is not installed" vs "blendcorpus
+  IS installed but pulled in missing transitive dep `<name>`". Names
+  the actual culprit module so users don't chase the wrong fix.
+- [`2c5c7d597`](https://github.com/saforem2/torchtitan/commit/2c5c7d597)
+  — wrap `config.build()` in its own try/except in `train.py:main()`.
+  Rank 0 logs a single `RANK 0 ABORT during config.build():` line
+  followed by the full `__cause__`/`__context__` chain on failure.
+  mpiexec presents rank 0 output first, so this surfaces above the
+  per-rank `rank N exited with code 1` spam.
+
+### 44th upstream sync
+
+Merged 1 upstream commit (`b72d98648`, PR
+[#3403](https://github.com/pytorch/torchtitan/pull/3403)): 4-line
+addition to project-root `.claude/CLAUDE.md` recommending ≥10
+iterations for perf comparisons. No code change, no ezpz replay.
+
+---
+
 ## 2026-05-31 — 43rd upstream sync (interleaved dataloader, no-op replay)
 
 Merged 1 upstream commit (`221041490`, PR

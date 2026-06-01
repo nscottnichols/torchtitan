@@ -24,6 +24,20 @@ tests and checking against the saved baselines — see
 
 ---
 
+## 2026-06-01 (44th sync — CLAUDE.md perf-iters guidance)
+
+Upstream merged in 1 commit (`b72d98648`).
+
+- **[`b72d98648` — Have agents run perf runs with at least 10 iterations (#3403)](https://github.com/pytorch/torchtitan/pull/3403).**
+  4-line addition to project-root `.claude/CLAUDE.md`: a new
+  "Performance Testing" subsection instructing AI agents to use
+  ≥10 training steps (`--training.steps 10`) on perf comparisons,
+  so startup + warmup don't dominate. No code touched. No ezpz
+  replay needed. (Our own stats A/B work for the PR #3436 reply
+  already used 50-step runs; well within the guidance.)
+
+---
+
 ## 2026-05-31 (43rd sync — interleaved multi-source dataloader)
 
 Upstream merged in 1 commit (`221041490`).
