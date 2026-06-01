@@ -19,11 +19,32 @@ def _import_blendcorpus_modules():
         bc_sampler_mod = importlib.import_module("blendcorpus.data.data_samplers")
         bc_dataset_mod = importlib.import_module("blendcorpus.data.gpt_dataset")
     except ImportError as exc:
-        raise ImportError(
-            "BlendCorpus dataset was requested but `blendcorpus` is not installed. "
-            "Install it first (for example: `pip install blendcorpus`) or set "
-            "`--dataloader.dataset` to a non-blendcorpus dataset."
-        ) from exc
+        # exc.name is the module Python actually failed on. Distinguish
+        # "blendcorpus itself missing" from "blendcorpus IS installed but
+        # one of its transitive deps (e.g. deepspeed) isn't" — the two
+        # cases need different fixes and the same error message for both
+        # is actively misleading.
+        missing = getattr(exc, "name", None) or "<unknown>"
+        top = missing.split(".", 1)[0]
+        if top == "blendcorpus":
+            detail = (
+                f"BlendCorpus dataset was requested but the `blendcorpus` "
+                f"package is not installed (failed to import `{missing}`). "
+                "Install it (e.g. `pip install blendcorpus`) or set "
+                "`--dataloader.dataset` to a non-blendcorpus dataset."
+            )
+        else:
+            detail = (
+                f"BlendCorpus dataset was requested. `blendcorpus` itself "
+                f"is installed, but importing it pulled in a missing "
+                f"transitive dependency: `{missing}` (top-level module: "
+                f"`{top}`). Install the missing dependency in the active "
+                f"env (e.g. `pip install {top}`), or set "
+                f"`--dataloader.dataset` to a non-blendcorpus dataset to "
+                f"sidestep the import entirely. The original ImportError "
+                f"is chained below."
+            )
+        raise ImportError(detail) from exc
 
     bc_get_config = getattr(bc_config_mod, "get_config")
     bc_set_config = getattr(bc_config_mod, "set_config")
