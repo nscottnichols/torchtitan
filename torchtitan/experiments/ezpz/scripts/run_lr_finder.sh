@@ -59,6 +59,10 @@ set +u
 source <(curl -fsSL https://bit.ly/ezpz-utils) && ezpz_setup_job
 set -u
 
+# Must cd into the repo before sourcing .venv. PBS spawns scripts in
+# $HOME by default; without this, `source .venv/bin/activate` picks
+# up $HOME/.venv (if present) which has an incompatible torch, and
+# the subsequent `ezpz yeet-env` crashes silently.
 cd "${PBS_O_WORKDIR:-$(pwd)}"
 source .venv/bin/activate
 if [[ -f .venv.tar.gz ]]; then
