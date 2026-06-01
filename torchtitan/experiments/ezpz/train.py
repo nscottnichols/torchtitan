@@ -418,7 +418,27 @@ def main(args: list[str] | None = None) -> None:
             logger.info("Local tensor mode enabled - skipping training execution")
             return
 
-        trainer = config.build()
+        try:
+            trainer = config.build()
+        except Exception as build_exc:
+            # Build-time failures (import errors, config errors, missing
+            # tokenizer/dataset deps, etc.) come from inside config.build
+            # before the trainer's own exception handler runs. mpiexec's
+            # per-rank stderr is interleaved across 24+ ranks, so the root
+            # cause typically gets buried by `rank N exited with code 1`
+            # lines. Surface a single rank-0 ABORT line with the chained
+            # cause so the launcher summary makes the cause discoverable.
+            if ezpz.distributed.get_rank() == 0:
+                chain = []
+                cur = build_exc
+                while cur is not None:
+                    chain.append(f"{type(cur).__name__}: {cur}")
+                    cur = cur.__cause__ or cur.__context__
+                logger.error(
+                    "RANK 0 ABORT during config.build():\n  %s",
+                    "\n  caused by: ".join(chain),
+                )
+            raise
 
         # SophiaG requires a hessian EMA update each step before the param update
         if isinstance(trainer.optimizers, SophiaGOptimizersContainer):
