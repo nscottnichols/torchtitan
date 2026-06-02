@@ -378,6 +378,36 @@ def _ensure_rank_env() -> None:
         os.environ.setdefault("WORLD_SIZE", str(get_world_size()))
 
 
+def _log_rank0_abort_chain(phase: str, exc: BaseException) -> None:
+    """Emit a single rank-0 ABORT line with the chained cause of ``exc``.
+
+    Startup failures (import errors, missing tokenizer/dataset deps,
+    config errors) come from inside library code whose default exception
+    formatting is opaque. ``ConfigManager._load_config`` in particular
+    catches ``ImportError`` and re-raises with its own generic
+    ``"Cannot import config_registry"`` message, hiding the real
+    ``ModuleNotFoundError`` chain. mpiexec's per-rank stderr is
+    interleaved across 24+ ranks, so even when a useful chain is
+    propagated, the root cause typically gets buried by `rank N exited
+    with code 1` lines.
+
+    Walk ``__cause__`` then ``__context__`` and log a single rank-0
+    summary so the launcher tail makes the cause discoverable.
+    """
+    if ezpz.distributed.get_rank() != 0:
+        return
+    chain: list[str] = []
+    cur: BaseException | None = exc
+    while cur is not None:
+        chain.append(f"{type(cur).__name__}: {cur}")
+        cur = cur.__cause__ or cur.__context__
+    logger.error(
+        "RANK 0 ABORT during %s:\n  %s",
+        phase,
+        "\n  caused by: ".join(chain),
+    )
+
+
 def main(args: list[str] | None = None) -> None:
     init_logger()
 
@@ -398,7 +428,17 @@ def main(args: list[str] | None = None) -> None:
 
     logger.info(f"\n{json.dumps(parsed_args, indent=4, sort_keys=True)}")
     config_manager = ConfigManager()
-    config: Any = config_manager.parse_args(parsed_args)
+    try:
+        config: Any = config_manager.parse_args(parsed_args)
+    except Exception as parse_exc:
+        # ``ConfigManager._load_config`` catches ``ImportError`` from
+        # ``importlib.import_module(...config_registry)`` and re-raises a
+        # generic "Cannot import config_registry for module 'X'" message
+        # that hides the real ``ModuleNotFoundError`` chain. Surface the
+        # chain on rank 0 so the launcher tail names the actually missing
+        # module (e.g. ``ezpz``) instead of just the symptom.
+        _log_rank0_abort_chain("config_manager.parse_args()", parse_exc)
+        raise
 
     # Swap in the correct optimizer Config subclass if --optimizer was specified
     if optimizer_name is not None:
@@ -423,21 +463,8 @@ def main(args: list[str] | None = None) -> None:
         except Exception as build_exc:
             # Build-time failures (import errors, config errors, missing
             # tokenizer/dataset deps, etc.) come from inside config.build
-            # before the trainer's own exception handler runs. mpiexec's
-            # per-rank stderr is interleaved across 24+ ranks, so the root
-            # cause typically gets buried by `rank N exited with code 1`
-            # lines. Surface a single rank-0 ABORT line with the chained
-            # cause so the launcher summary makes the cause discoverable.
-            if ezpz.distributed.get_rank() == 0:
-                chain = []
-                cur = build_exc
-                while cur is not None:
-                    chain.append(f"{type(cur).__name__}: {cur}")
-                    cur = cur.__cause__ or cur.__context__
-                logger.error(
-                    "RANK 0 ABORT during config.build():\n  %s",
-                    "\n  caused by: ".join(chain),
-                )
+            # before the trainer's own exception handler runs.
+            _log_rank0_abort_chain("config.build()", build_exc)
             raise
 
         # SophiaG requires a hessian EMA update each step before the param update
