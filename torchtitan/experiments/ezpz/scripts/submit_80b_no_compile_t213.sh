@@ -43,18 +43,20 @@ export https_proxy="${https_proxy:-http://proxy.alcf.anl.gov:3128}"
 export ftp_proxy="${ftp_proxy:-http://proxy.alcf.anl.gov:3128}"
 export no_proxy="${no_proxy:-localhost,127.0.0.1,*.alcf.anl.gov,*.aurora.alcf.anl.gov}"
 
+# `ezpz_setup_job` overwrites $PBS_O_WORKDIR with the script's initial
+# cwd ($HOME under default qsub). Stash the real submit dir first.
+SUBMIT_DIR="${PBS_O_WORKDIR:-$(pwd)}"
+
 source <(curl -fsSL https://bit.ly/ezpz-utils) && ezpz_setup_job
 
-cd "${PBS_O_WORKDIR:-$(pwd)}"
+cd "${SUBMIT_DIR}"
 source .venv/bin/activate
 
-if [[ -f .venv.tar.gz ]]; then
-    log_message INFO "yeet-env via tarball: .venv.tar.gz"
-    ezpz yeet-env --src .venv.tar.gz
-else
-    log_message INFO "yeet-env via rsync (.venv.tar.gz not present)"
-    ezpz yeet-env
-fi
+# `ezpz yeet-env` is deprecated in ezpz 0.18.x; explicit tar-env + yeet
+# is the canonical sequence. Build the tarball fresh so the broadcast
+# reflects the active .venv.
+ezpz tar-env
+ezpz yeet .venv.tar.gz
 deactivate
 source /tmp/.venv/bin/activate
 
