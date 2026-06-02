@@ -24,6 +24,99 @@ tests and checking against the saved baselines — see
 
 ---
 
+## 2026-06-02 (45th sync — PR #3450 closes our PR #3436 thread)
+
+Upstream merged in 7 commits (`b72d98648..04a309858`).
+
+- **[`4c6f72d21` — \[MoE\] Using routing map instead of histc to count number_tokens_per_expert (#3450)](https://github.com/pytorch/torchtitan/pull/3450).**
+  **This is the upstream fix that supersedes our PR #3436.** Replaces
+  both `torch.histc` callsites (`models/common/moe.py:262` and
+  `models/common/token_dispatcher.py:92`) with a boolean
+  `routing_map_BLE` built via `scatter_` in the router, then
+  `routing_map.sum(...)` to derive `num_tokens_per_expert_E`. The
+  `routing_map` is computed once and reused across both router and
+  dispatcher. Same direction we recommended (`scatter_add_` over
+  `bincount`); the upstream approach goes one step further by
+  computing the map once and threading it through. Also lands a new
+  `torchtitan.ops.scatter_add.deterministic_scatter_add` op used in
+  the `combine()` path.
+
+  Router signature changed: `forward()` now returns a 4-tuple
+  `(topk_scores_BLK, topk_expert_ids_BLK, routing_map_BLE,
+  num_tokens_per_expert_E)` instead of 3.
+
+  `dispatch()` now takes a new `num_local_tokens_per_expert_E`
+  positional arg.
+
+  ezpz doesn't override these methods directly and doesn't unpack the
+  router output (the parent class does), so the API change inherits
+  cleanly. ezpz `set_moe_sharding_config` calls upstream's helper,
+  so the new `num_local_tokens_per_expert_E` sharding declaration is
+  also picked up automatically. **No ezpz replay needed.**
+
+  Closes our PR #3436 thread:
+  - https://github.com/pytorch/torchtitan/pull/3146 (incomplete fix
+    that landed only the `aten.topk.default` save)
+  - https://github.com/pytorch/torchtitan/pull/3436 (our targeted
+    histc → bincount swap, kept open in case #3450 stalled)
+  - https://github.com/pytorch/torchtitan/pull/3450 (this — the
+    clean fix done right)
+
+- **[`0acaaa1d7` — Enables HybridEP torch.compile support and adds eager integration tests (#3360)](https://github.com/pytorch/torchtitan/pull/3360).**
+  HybridEP-specific (`distributed/deepep/hybridep.py`) +
+  `deepseek_v3` config. XPU doesn't have DeepEP/HybridEP, so this
+  doesn't reach ezpz. No replay.
+
+- **[`3c4d47024` — \[Quantization\] Consolidate MXFP8 Linear and GroupedExperts converters (#3473)](https://github.com/pytorch/torchtitan/pull/3473).**
+  MXFP8 quantization consolidation in `components/quantization/`.
+  ezpz doesn't use MXFP8. No replay.
+
+- **[`faa96e7a6` — \[graph_trainer\] Fix DTensor shadow-node embedding OOB; re-enable 14 disabled tests (#3480)](https://github.com/pytorch/torchtitan/pull/3480).**
+  `graph_trainer` only. No-op for ezpz.
+
+- **[`8e64b62e0` — \[graph_trainer\] Skip tests broken by upstream PyTorch nightly regressions (#3432)](https://github.com/pytorch/torchtitan/pull/3432).**
+  `graph_trainer` test skips. No-op for ezpz.
+
+- **[`b598831dd` — \[CI\] Migrate H100 8-GPU integration test to OSDC (ARC) (#3464)](https://github.com/pytorch/torchtitan/pull/3464).**
+  CI plumbing only. No-op.
+
+- **[`04a309858` — \[CI\] Migrate GraphTrainer & RL H100 integration tests to OSDC (ARC) (#3479)](https://github.com/pytorch/torchtitan/pull/3479).**
+  CI plumbing only. No-op.
+
+### Smoke status
+
+**Imports + syntax check green** post-merge. **Live 2N smoke
+deferred**: the `.venv` symlink target
+(`/opt/aurora/26.26.0/spack/.../python-3.12.12-5zo3wzv/bin/python3`)
+isn't present on the Sunspot compute nodes I tried (allocs 12467805 +
+12467806). `ezpz_setup .venv` activates the env but the `ezpz` shim
+script's shebang still points at the broken target and falls back to
+`/usr/bin/python3`. Venv needs rebuilding before the per-the-journal
+`GroupedExperts`-touching smoke can run.
+
+### Smoke status
+
+**Imports + syntax check green** post-merge. **Live 2N smoke
+deferred to Aurora** — the project `.venv/bin/python` symlinks at
+`/opt/aurora/26.26.0/spack/.../python-3.12.12-5zo3wzv/bin/python3`
+which is an Aurora-only Spack build (Sunspot's nearest equivalent is
+`python-3.12.12-nvje3vk` — different hash). The
+`GroupedExperts`-touching smoke per the journal lesson should run
+on Aurora the next time a production alloc is available.
+
+### Action items
+
+- Close PR #3436 with a comment pointing at PR #3450 as the
+  upstream-canonical fix that landed.
+- Smoke `moe_2b_ep` per the journal's "always smoke after
+  `GroupedExperts` touches" lesson, once the venv invocation is
+  sorted.
+- Rebuild + re-yeet the `.venv` on a Sunspot compute node, then
+  smoke `moe_2b_ep` to validate the PR #3450 routing_map flow per
+  the journal lesson.
+
+---
+
 ## 2026-06-01 (44th sync — CLAUDE.md perf-iters guidance)
 
 Upstream merged in 1 commit (`b72d98648`).

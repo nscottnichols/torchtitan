@@ -4,6 +4,50 @@ Running log of what's happening, session by session. Most recent first.
 
 ---
 
+## 2026-06-02 — 45th upstream sync (PR #3450 closes the #3436 thread)
+
+Merged 7 upstream commits (`b72d98648..04a309858`). Headline is PR
+[#3450](https://github.com/pytorch/torchtitan/pull/3450) — the
+upstream-canonical `histc → routing_map` swap for MoE routing that
+finally lands the fix our [PR
+#3436](https://github.com/pytorch/torchtitan/pull/3436) was tracking.
+Approach: build a boolean `routing_map_BLE` via `scatter_` in the
+router, compute `num_tokens_per_expert_E = routing_map.sum(...)` once,
+thread the map through both router and dispatcher. Same direction we
+recommended (scatter-based), executed better (computed once, reused).
+
+API change at the boundary: router returns a 4-tuple now, `dispatch()`
+takes a new `num_local_tokens_per_expert_E` positional arg. ezpz
+doesn't override either method or unpack router output directly, so
+inherits cleanly. ezpz `set_moe_sharding_config` calls upstream's
+helper so the new shard declaration also lands automatically. **No
+ezpz replay needed.** Imports + syntax green.
+
+Other 6 commits: HybridEP compile support (#3360), MXFP8 consolidation
+(#3473), graph_trainer DTensor fix + test re-enables (#3480), graph_trainer
+test skips (#3432), and two CI migrations (#3464, #3479). None touch
+ezpz code paths.
+
+**Smoke status**: live 2N validation deferred to Aurora. The project
+`.venv/bin/python` symlinks at
+`/opt/aurora/26.26.0/spack/.../python-3.12.12-5zo3wzv/bin/python3`,
+which is an Aurora-only Spack build (`5zo3wzv` hash). Sunspot has
+the equivalent under a different hash (`nvje3vk`), so the symlink
+is broken on Sunspot compute nodes. The `GroupedExperts`-touching
+smoke per the prior journal lesson should run on Aurora next time
+there's an alloc.
+
+Also updated `~/.ezpz/utils.sh` from the bit.ly canonical (it now
+exposes the new unified `ezpz_setup` function; the old
+`ezpz_setup_job` / `ezpz_setup_xpu` split is superseded). Backup at
+`~/.ezpz/utils.sh-20260602-065437`.
+
+Open follow-ups:
+- Close PR #3436 with a comment pointing at PR #3450.
+- Smoke `moe_2b_ep` on Aurora to validate the routing_map flow.
+
+---
+
 ## 2026-06-01 — Error-propagation fixes + 44th upstream sync
 
 ### Error-propagation fixes (from this morning's BlendCorpus debug)
