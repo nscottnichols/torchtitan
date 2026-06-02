@@ -4,6 +4,48 @@ Running log of what's happening, session by session. Most recent first.
 
 ---
 
+## 2026-06-02 — 80B TP=2 4N smoke replay on Sunspot under xccl workaround
+
+Followed up the moe_2b_ep workaround validation with a second
+verification: that the new xccl_split_group_workaround
+([`8031d1d3a`](https://github.com/saforem2/torchtitan/commit/8031d1d3a))
+doesn't regress the working 80B TP=2 v2 config from the May 5
+Aurora baseline (job 12466025).
+
+Submitted 4N Sunspot smoke as job 12467825 using the same recipe
+(`agpt_80b`, TP=2, AC=full, compile=OFF, AdamW LR=1e-6, fp32-master)
+via the updated `submit_80b_no_compile_t213.sh` (now using SUBMIT_DIR
++ `ezpz tar-env`/`ezpz yeet`). Exit 0 in 902 s, 20 steps:
+
+|             | May 5 (Aurora 4N) | 2026-06-02 (Sunspot 4N) |
+|-------------|------------------:|------------------------:|
+| Δloss       | -2.52             | **-2.55**               |
+| Peak mem    | 88.94%            | **88.94%**              |
+| Steady MFU  | ~17.8%            | **~17.8%**              |
+| grad-norm peak | ~34 @ step 15-16 | **33.10 @ step 16** |
+
+Numerically equivalent within run-to-run noise. The workaround
+install line + `Successfully created meshes with active dimensions:
+['batch', 'loss', 'tp', 'efsdp', 'fsdp']` confirms 5 nested PGs
+built cleanly under the patched `_init_one_process_group`. The
+existing xccl-timeout shim also ran (`Applied train timeout
+0:01:40 to 5 xccl ProcessGroup(s)`).
+
+Full writeup:
+[`docs/experiments/agpt/sunspot/20260602-smoke-n4-80b-tp2-xccl-workaround.md`](experiments/agpt/sunspot/20260602-smoke-n4-80b-tp2-xccl-workaround.md).
+80B production page (`docs/production/agpt/80b/README.md`) updated
+with the Sunspot replay row.
+
+W&B: https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/a782sf8y
+
+Open follow-ups (unchanged):
+- Add 200-step linear warmup to 80B production config (grad-norm
+  climb to 33.10 by step 16 is the same shape as the May 5 run).
+- Mirror SUBMIT_DIR + ezpz yeet fixes into
+  `scripts/submit_agpt_80b_aurora_venv_failover.sh`.
+
+---
+
 ## 2026-06-02 — xccl split_group workaround for nested mesh init
 
 `moe_2b_ep` smoke on torch 2.13 on XPU was hitting:
