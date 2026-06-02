@@ -18,6 +18,34 @@ After each `git merge upstream/main`, check if the incoming commits touch:
 Add an entry below with the date, upstream commits, what changed, and what
 was required in ezpz.
 
+---
+
+## 2026-06-02 (46th sync — graph_trainer-only deltas, no ezpz replay)
+
+Pulled 2 commits (`04a309858..27aa49077`) from `upstream/main`. Both
+land entirely inside `torchtitan/experiments/graph_trainer/` —
+unrelated to `experiments/ezpz/`. No replay needed. No conflicts.
+Tree clean.
+
+- **[`27aa49077` — [graph_trainer] Add full recompute memory policy
+  (#3429)](https://github.com/pytorch/torchtitan/pull/3429).** Adds
+  a `FULL_RECOMPUTE` memory policy alongside the existing SAC
+  policies; +358 / -15 across `configs.py`, `memory_policy.py`,
+  `selective_activation_remat.py`, plus new `tests/test_passes.py`
+  and `tests/test_sac_peak_memory.py`. Touches nothing outside
+  `experiments/graph_trainer/`.
+- **[`051562e31` — [graph_trainer] Re-enable DSv3 eager bitwise
+  deterministic tests (#3482)](https://github.com/pytorch/torchtitan/pull/3482).**
+  Single-file test-toggle change in
+  `experiments/graph_trainer/tests/test_bitwise_deterministic.py`
+  (+10 / -10).
+
+Merge commit: `45a2b2568`. No ezpz code or doc changes triggered.
+
+### Action items
+
+(none from this sync.)
+
 After replaying, verify convergence didn't break by running both smoke
 tests and checking against the saved baselines — see
 [`baselines/README.md`](baselines/README.md).

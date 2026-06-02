@@ -4,6 +4,20 @@ Running log of what's happening, session by session. Most recent first.
 
 ---
 
+## 2026-06-02 — 46th upstream sync (graph_trainer-only, no ezpz replay)
+
+Pulled 2 new commits since the 45th sync (`04a309858..27aa49077`):
+
+- `27aa49077` [graph_trainer] Add full recompute memory policy (#3429)
+- `051562e31` [graph_trainer] Re-enable DSv3 eager bitwise deterministic tests (#3482)
+
+Both entirely inside `torchtitan/experiments/graph_trainer/`. Zero
+ezpz files touched, no replay needed, no conflicts. Merge commit
+`45a2b2568`. Full breakdown in
+[`upstream-sync.md`](upstream-sync.md) (46th-sync entry).
+
+---
+
 ## 2026-06-02 — 80B TP=2 4N smoke replay on Sunspot under xccl workaround
 
 Followed up the moe_2b_ep workaround validation with a second
