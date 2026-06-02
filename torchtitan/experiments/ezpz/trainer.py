@@ -483,6 +483,21 @@ class FaultTolerantTrainer(Trainer):
             ranks=global_ranks,
         )
 
+        # On XPU, ProcessGroupXCCL inherits Backend::supportsSplitting() ==
+        # false, but DeviceMesh._init_one_process_group still routes nested
+        # mesh PG creation through ``split_group`` whenever
+        # ``bound_device_id`` is set on the default group. That always blows
+        # up with "No backend for the parent process group or its backend
+        # does not support splitting", which kills every nested mesh
+        # construction the EP sparse mesh requires. Steer the gate to the
+        # ``new_group`` fallback for xccl until upstream lands the
+        # supportsSplitting override + split implementation.
+        from torchtitan.experiments.ezpz.xccl_split_group_workaround import (
+            maybe_install_xccl_split_group_workaround,
+        )
+
+        maybe_install_xccl_split_group_workaround()
+
         # FT addition: build FTManager
         self.ft_manager = config.fault_tolerance.build()
 
