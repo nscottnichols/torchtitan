@@ -1,6 +1,6 @@
 # Production Training — agpt 80B
 
-> Last updated: 2026-05-27
+> Last updated: 2026-06-02
 
 ## v2 status — STILL BLOCKED (11+ failed dispatches since 2026-05-11)
 
@@ -16,7 +16,12 @@ dispatch (and 9 follow-up retries) all failed before saving a single checkpoint.
 different bad node, 3 of them from the **x4101c5/c6 rack cluster**. The failover wrapper rotates spares correctly,
 but the bad-node hit-rate at 256N is high enough that 10 spares is not enough headroom.
 
-The 4N smoke 12466025 from 2026-05-05 remains the **only successful 80B training to date** (20 steps, loss 12.98 → 10.46).
+The 4N smoke 12466025 from 2026-05-05 (Aurora) was the **first successful 80B v2 training**
+(20 steps, loss 12.98 → 10.46). Replicated on Sunspot 4N as job 12467825 on
+2026-06-02 with the xccl_split_group workaround now in place (commit `8031d1d3a`):
+20 steps, loss 12.94 → 10.39, ~17.8% MFU, 88.94% memory — numerically equivalent
+to the May 5 baseline. The xccl workaround does NOT regress the working config.
+See [`20260602-smoke-n4-80b-tp2-xccl-workaround.md`](../../../experiments/agpt/sunspot/20260602-smoke-n4-80b-tp2-xccl-workaround.md).
 
 ### Next steps (from SIGSEGV writeup)
 
@@ -24,11 +29,12 @@ The 4N smoke 12466025 from 2026-05-05 remains the **only successful 80B training
 2. **File ALCF ticket** for the x4101c5/c6 rack — 3 of the 5 retry failures landed there.
 3. **Try 64N / 128N** to characterize whether the SIGSEGV rate scales with node count or is rack-specific.
 
-### Working config (smoke-only, 2026-05-05)
+### Working config (smoke-only)
 
 | Trajectory | Status | Cumulative steps | Loss | Tokens |
 |------------|--------|-----------------:|-----:|-------:|
-| 4N smoke (12466025) | Done (20 steps) | 20 | 12.98 → 10.46 | — |
+| 4N smoke 12466025 (Aurora, 2026-05-05) | Done (20 steps) | 20 | 12.98 → 10.46 | — |
+| 4N smoke 12467825 (Sunspot, 2026-06-02, xccl workaround in place) | Done (20 steps) | 20 | 12.94 → 10.39 | — |
 | [**v2 256N**](n512/README.md) (canonical chain attempt) | 11+ failed dispatches | 0 | — | — |
 | v2 512N | Not yet attempted | — | — | — |
 
