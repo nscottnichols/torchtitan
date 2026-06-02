@@ -115,6 +115,18 @@ on Aurora the next time a production alloc is available.
   smoke `moe_2b_ep` to validate the PR #3450 routing_map flow per
   the journal lesson.
 
+### Discovered during smoke attempt (2026-06-02)
+
+`moe_2b_ep` failed at `ParallelDims.build_mesh` with
+`RuntimeError: No backend for the parent process group or its backend
+does not support splitting`. Root cause: `ProcessGroupXCCL` never
+overrides `Backend::supportsSplitting()`. Workaround installed under
+[`experiments/ezpz/xccl_split_group_workaround.py`](../xccl_split_group_workaround.py)
+(monkey-patches `DeviceMesh._init_one_process_group` to fall back to
+`new_group` when the accelerator backend's `supports_splitting` is
+False). Full diagnosis in
+[`docs/upstream-issues/xccl_split_group_unsupported.md`](upstream-issues/xccl_split_group_unsupported.md).
+
 ---
 
 ## 2026-06-01 (44th sync — CLAUDE.md perf-iters guidance)

@@ -4,6 +4,73 @@ Running log of what's happening, session by session. Most recent first.
 
 ---
 
+## 2026-06-02 — xccl split_group workaround for nested mesh init
+
+`moe_2b_ep` smoke on torch 2.13 on XPU was hitting:
+
+```
+RuntimeError: No backend for the parent process group or its backend
+does not support splitting
+```
+
+at trainer init, inside `ParallelDims.build_mesh` → the EP-flavored
+sparse mesh `("pp", "dp_replicate", "efsdp", "ep")` (`parallel_dims.py:200`).
+
+**Root cause** (confirmed by reading upstream C++ headers via
+`gh search code`): `ProcessGroupXCCL` never declares
+`supportsSplitting() override`. It inherits the base
+`Backend::supportsSplitting()` from
+[`Backend.hpp`](https://github.com/pytorch/pytorch/blob/main/torch/csrc/distributed/c10d/Backend.hpp)
+which returns `false`. `ProcessGroupNCCL` overrides to `true` —
+xccl doesn't.
+
+`DeviceMesh._init_one_process_group` (torch 2.13, `device_mesh.py:550-562`)
+routes nested mesh PG creation through `split_group` whenever
+`bound_device_id` is set on the default group AND the accelerator is
+available AND the backend name matches. None of those rule out xccl;
+the ezpz eager-init path sets `bound_device_id` on XPU, so the gate
+always takes the broken branch.
+
+`split_group` itself (`distributed_c10d.py:5565-5570`) then reads
+`parent_backend.supports_splitting` (Python property bound to the C++
+method), sees `False`, and raises before ever calling
+`xcclCommSplit`. So the failure is purely at the gate — there's no
+xccl split implementation to even crash on yet.
+
+**Workaround**: monkey-patch `DeviceMesh._init_one_process_group`
+from a new module
+[`xccl_split_group_workaround.py`](../xccl_split_group_workaround.py).
+The wrapper:
+
+  1. No-ops on cuda/cpu builds (gates on `is_xccl_available() and
+     torch.xpu.is_available()`).
+  2. On xccl, inspects the default group's per-accelerator backend's
+     `supports_splitting`. If `True` (NCCL), calls upstream verbatim.
+  3. If `False` (xccl), temporarily clears `bound_device_id` on the
+     default group so the upstream gate's first clause goes `False`
+     and we fall through to the existing `new_group` loop. Restores
+     `bound_device_id` afterwards.
+
+Installed lazily from
+[`FaultTolerantTrainer.init_distributed`](../trainer.py) so it only
+fires when ezpz's trainer kicks off; never touches other torchtitan
+paths.
+
+Per Golden Rule #1, no upstream file was modified. Full diagnosis +
+removal criteria in
+[`docs/upstream-issues/xccl_split_group_unsupported.md`](upstream-issues/xccl_split_group_unsupported.md).
+
+**Smoke validation**: pending — needs a live alloc on Aurora to
+verify `moe_2b_ep` actually progresses past `init_distributed`.
+Will note results here in a follow-up entry.
+
+Open follow-ups:
+- Smoke `moe_2b_ep` on Aurora with the workaround installed.
+- File `pytorch/pytorch` issue with the two-part fix
+  (`ProcessGroupXCCL::supportsSplitting() override + working split()`).
+
+---
+
 ## 2026-06-02 — 45th upstream sync (PR #3450 closes the #3436 thread)
 
 Merged 7 upstream commits (`b72d98648..04a309858`). Headline is PR
