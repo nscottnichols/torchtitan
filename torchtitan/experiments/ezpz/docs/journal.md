@@ -60,12 +60,37 @@ Per Golden Rule #1, no upstream file was modified. Full diagnosis +
 removal criteria in
 [`docs/upstream-issues/xccl_split_group_unsupported.md`](upstream-issues/xccl_split_group_unsupported.md).
 
-**Smoke validation**: pending — needs a live alloc on Aurora to
-verify `moe_2b_ep` actually progresses past `init_distributed`.
-Will note results here in a follow-up entry.
+**Smoke validation** (2026-06-02, Sunspot 2N, job 12467823, exit 0
+in 103 s — see
+[`docs/experiments/moe/sunspot/20260602-smoke-n2-xccl-split-workaround.md`](experiments/moe/sunspot/20260602-smoke-n2-xccl-split-workaround.md)):
+
+- Workaround install line in the log:
+  `Installed xccl split_group workaround on DeviceMesh._init_one_process_group`.
+- EP sparse mesh built cleanly:
+  `Successfully created meshes with active dimensions: ['batch', 'loss', 'ep', 'efsdp', 'fsdp']`.
+- Loss 12.945 → 8.273 across 10 steps, peak 58.28 GiB, ~3,050 TPS.
+- The pre-existing xccl-timeout shim also ran:
+  `Applied train timeout 0:01:40 to 6 xccl ProcessGroup(s)`
+  (6 PGs = world + dense + sparse + efsdp + loss + batch — all the
+  meshes the EP path constructs).
+
+Two latent bugs in `scripts/submit_moe_smoke.sh` surfaced and were
+fixed during the smoke (both apply to the analogous production
+scripts under `scripts/submit_agpt_*_aurora_venv.sh`):
+
+1. **`ezpz_setup_job` overwrites `$PBS_O_WORKDIR`** with the script's
+   initial cwd (which is `$HOME` under default `qsub`). A naïve
+   `cd "${PBS_O_WORKDIR}"` after sourcing the utils ends up in
+   `/home/foremans` and `source .venv/bin/activate` resolves against
+   `~/.venv` (no `ezpz`). Fix: stash submit dir into `SUBMIT_DIR`
+   before sourcing utils.
+2. **`ezpz yeet-env` is deprecated** in ezpz 0.18.x in favour of
+   explicit `ezpz tar-env` + `ezpz yeet .venv.tar.gz`. Switched.
 
 Open follow-ups:
-- Smoke `moe_2b_ep` on Aurora with the workaround installed.
+- Mirror the `SUBMIT_DIR` + `ezpz yeet` fixes into
+  `scripts/submit_agpt_{2b,20b}_aurora_venv.sh` before the next
+  512N+ production launch.
 - File `pytorch/pytorch` issue with the two-part fix
   (`ProcessGroupXCCL::supportsSplitting() override + working split()`).
 
