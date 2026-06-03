@@ -55,15 +55,20 @@ export https_proxy="${https_proxy:-http://proxy.alcf.anl.gov:3128}"
 export ftp_proxy="${ftp_proxy:-http://proxy.alcf.anl.gov:3128}"
 export no_proxy="${no_proxy:-localhost,127.0.0.1,*.alcf.anl.gov,*.aurora.alcf.anl.gov}"
 
+# Must cd into the repo BEFORE ezpz_setup_job (and before sourcing .venv).
+# Reasons:
+#   1. PBS spawns scripts in $HOME, so `source .venv/bin/activate` (relative)
+#      would pick up $HOME/.venv if present, with incompatible torch.
+#   2. ezpz_setup_job's `WORKING_DIR=$(pwd)` runs at script start. Calling
+#      ezpz_setup_job before this cd captures WORKING_DIR=$HOME, then its
+#      "WORKING_DIR doesn't match PBS_O_WORKDIR" branch OVERWRITES
+#      PBS_O_WORKDIR with $HOME — defeating any subsequent cd.
+cd "${PBS_O_WORKDIR:-$(pwd)}"
+
 set +u
 source <(curl -fsSL https://bit.ly/ezpz-utils) && ezpz_setup_job
 set -u
 
-# Must cd into the repo before sourcing .venv. PBS spawns scripts in
-# $HOME by default; without this, `source .venv/bin/activate` picks
-# up $HOME/.venv (if present) which has an incompatible torch, and
-# the subsequent `ezpz yeet-env` crashes silently.
-cd "${PBS_O_WORKDIR:-$(pwd)}"
 source .venv/bin/activate
 if [[ -f .venv.tar.gz ]]; then
     log_message INFO "lr-finder: yeet-env via tarball (.venv.tar.gz)"
