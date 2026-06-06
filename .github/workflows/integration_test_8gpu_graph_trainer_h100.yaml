@@ -68,9 +68,9 @@ jobs:
         # Pre-install torch's pure-python deps from the in-cluster pypi-cache for speed.
         python -m pip install filelock typing-extensions "setuptools<82" sympy networkx jinja2 fsspec numpy
         # Clear PIP_EXTRA_INDEX_URL so the default cpu index can't supply a +cpu torch.
-        PIP_EXTRA_INDEX_URL= python -m pip install --force-reinstall --pre \
+        python -m pip uninstall -y torch
+        PIP_EXTRA_INDEX_URL= python -m pip install --pre \
           torch --index-url ${{ matrix.index-url }}
-        python -m pip install torchdata==0.12.0.dev20260327 --extra-index-url https://download.pytorch.org/whl/nightly/cpu
         python -m pip install git+https://github.com/meta-pytorch/autoparallel.git
 
         mkdir -p "$RUNNER_TEMP/artifacts-to-be-uploaded"
