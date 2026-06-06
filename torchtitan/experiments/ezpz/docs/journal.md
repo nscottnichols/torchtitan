@@ -4,6 +4,61 @@ Running log of what's happening, session by session. Most recent first.
 
 ---
 
+## 2026-06-06 — 47th upstream sync (RoPE refactor replayed; optimizer refactor still TODO)
+
+Started in worktree `ezpz-46th-47th-sync` (kept off `ezpz` so the
+working branch stays usable until the sync is complete).
+
+Pulled 34 commits since the 46th sync. Two structural refactors hit
+ezpz:
+
+1. **PR #3458 (RoPE refactor) — REPLAYED + VERIFIED.** Splits
+   `RoPE.Config` into `ComplexRoPE.Config` / `CosSinRoPE.Config`,
+   moves rope ownership from top-level model config down to per-layer
+   `Attention.Config`, removes the `apply_rotary_emb_*` helpers in
+   favour of `self.rope = config.rope.build()` +
+   `q, k = self.rope(q, k, positions)`. Replayed across
+   `agpt/__init__.py`, `agpt/config_registry.py`, `moe/__init__.py`,
+   and `moe/model.py` in commit `02dd1e7fe`. Verified end-to-end:
+   all three agpt configs (debugmodel, 2B, 80B) and all 10 moe
+   flavors build cleanly under the torch 2.13 venv. Numerics
+   smoke against pre-merge baselines not yet run.
+
+2. **PR #3269 (mixed-optimizer refactor) — NOT YET STARTED.**
+   Replaces the flat `OptimizersContainer.Config(lr=8e-4)` shape
+   with a `param_groups=[ParamGroupConfig(pattern, optimizer_name,
+   optimizer_kwargs={"lr":...})]` shape. Discovered when
+   `agpt_2b_real()` failed to build with the unexpected-kwarg
+   error. Affects 4 ezpz surfaces:
+   `agpt/config_registry.py:163`, `moe/config_registry.py:98`,
+   `competition/configs.py` (~10 callsites), and the 8 custom
+   container subclasses in `optimizer/containers.py`. Punted to
+   its own session because it's a larger lift than the RoPE replay.
+
+Full breakdown of both halves + the other 32 upstream commits in
+[`upstream-sync.md`](upstream-sync.md) (47th-sync entry).
+
+Side notes from the merge:
+
+- Installed `spmd_types==0.2.1` into `.venv` via `uv pip install`
+  (no torch deps). Upstream's new `components/loss.py` does
+  `import spmd_types as spmd` at module load — already listed in
+  upstream `requirements.txt` but absent from the venv we'd been
+  using.
+- Worktree branch tip is `02dd1e7fe`. Original `ezpz` branch is
+  untouched and remains the runnable production branch.
+
+Open follow-ups:
+
+- Replay PR #3269 across the 4 optimizer surfaces.
+- After both halves land, smoke `moe_2b_ep` (2N) and `agpt_80b @ TP=2`
+  (4N) against the 2026-06-02 baselines before merging the worktree
+  branch into `ezpz`.
+- Audit the 4 RL commits in this sync — ezpz/rl/ may need attention
+  if they touch shared surfaces.
+
+---
+
 ## 2026-06-02 — 46th upstream sync (graph_trainer-only, no ezpz replay)
 
 Pulled 2 new commits since the 45th sync (`04a309858..27aa49077`):

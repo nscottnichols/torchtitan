@@ -20,6 +20,122 @@ was required in ezpz.
 
 ---
 
+## 2026-06-06 (47th sync — RoPE refactor replayed; OPTIMIZER REFACTOR STILL TODO)
+
+**Status: IN PROGRESS — sitting in worktree `ezpz-46th-47th-sync`.**
+The RoPE half is replayed and verified. The optimizer half (PR #3269)
+is not yet started. Don't merge this worktree branch back into `ezpz`
+until the optimizer side is done — `ezpz` is currently usable and we
+don't want to break it mid-sync.
+
+Pulled 34 commits (`27aa49077..641b5f6b8`) from `upstream/main`.
+
+### Replayed (RoPE refactor, PR #3458)
+
+[`02d24f017` — Move centralized freqs_cis to each transform
+layer](https://github.com/pytorch/torchtitan/pull/3458). Three
+structural changes:
+
+1. `RoPE.Config` split into `ComplexRoPE.Config` and `CosSinRoPE.Config`
+   — `backend="complex"|"cos_sin"` field gone, backend encoded in
+   type.
+2. Top-level `Model.Config.rope` removed; each layer's
+   `Attention.Config` owns a `rope: RoPE.Config`. `decoder.forward`
+   no longer threads `freqs_cis`.
+3. `apply_rotary_emb_{complex,cos_sin,single_complex}` removed.
+   Caller pattern: `self.rope = config.rope.build()` then
+   `q, k = self.rope(q, k, positions)`.
+
+Replayed across 4 ezpz files in commit `02dd1e7fe`:
+
+* `agpt/__init__.py`: `_build_agpt_layers(rope=RoPE.Config)` plumbing;
+  `rope_backend` kept as a back-compat keyword that selects the
+  subclass internally; dropped top-level `AgptModel.Config(rope=...)`.
+* `agpt/config_registry.py`: `_set_rope_backend` rewritten to swap
+  each per-layer `attention.rope` to a fresh `ComplexRoPE.Config` /
+  `CosSinRoPE.Config`, carrying forward all other fields via
+  `dataclasses.fields()`.
+* `moe/__init__.py`: `_make_moe_attn_config(rope=...)` +
+  `_build_moe_layers(rope=...)` plumbing; all 11 config functions
+  push their `ComplexRoPE.Config` from `moeModel.Config(...)` into
+  `_build_moe_layers(rope=...)`. `_small` keeps its outlier
+  `theta=50000` / `max_seq_len=256128`.
+* `moe/model.py`: `Attention.Config` drops the legacy
+  `rope_{factor,max_seq_len,original_seq_len}` triple, gains
+  `rope: RoPE.Config`. `Attention.__init__` reads
+  `config.rope.{max_seq_len, original_seq_len, rope_factor}`, builds
+  `self.rope`. `Attention.forward` drops `freqs_cis` and replaces
+  two `apply_rotary_emb_single_complex` calls with one
+  `self.rope(q_pe, k_pe.unsqueeze(2), positions)` returning both
+  rotated tensors. `moeTransformerBlock.forward` drops `freqs_cis`.
+  `moeModel.Config.update_from_config` drops the now-redundant
+  rope-sync block.
+
+**Verified end-to-end** under torch 2.13 venv (login node import test):
+agpt configs `debugmodel` / `2B` / `80B` and all 10 moe flavors
+`debugmodel` / `500M` / `2B` / `small` / `4B` / `7B` / `16B` / `236B`
+/ `10B_2B` / `10B_2B_sdpa` all build cleanly. Numerics-equivalence
+smoke against pre-merge baselines NOT yet run.
+
+### Still to do (PR #3269 mixed-optimizer refactor)
+
+[`632f67f12` — [optimizer] support mixed
+optimizers](https://github.com/pytorch/torchtitan/pull/3269). Replaces
+the flat `OptimizersContainer.Config(lr=8e-4)` with a per-group
+shape:
+
+```python
+OptimizersContainer.Config(
+    param_groups=[ParamGroupConfig(pattern=r".*", optimizer_name="AdamW",
+                                   optimizer_kwargs={"lr": 8e-4})],
+    implementation="fused",
+)
+```
+
+Discovered when `agpt_2b_real()` build failed with `TypeError:
+OptimizersContainer.Config.__init__() got an unexpected keyword
+argument 'lr'`. Affects:
+
+* `agpt/config_registry.py:163` + `moe/config_registry.py:98` —
+  baseline `OptimizersContainer.Config(lr=8e-4)` callsites.
+* `competition/configs.py` — ~10 `<Custom>OptimizersContainer.Config(lr=X)`
+  callsites for Muon / SophiaG / Mano / SPAM / ADOPT.
+* `optimizer/containers.py` — 8 custom container subclasses
+  (`MuonOptimizersContainer`, `SophiaGOptimizersContainer`, etc.)
+  each define `class Config(OptimizersContainer.Config)` and a
+  `_build_optimizer_kwargs` method. Both likely need to fit the new
+  ParamGroupConfig shape.
+* `lr_finder.py:205` — light reference to container names.
+
+This is a larger surface than the RoPE replay. Punted to its own
+session.
+
+### Other commits in this sync (no ezpz replay required)
+
+- `641b5f6b8` / `fec0c175d` / `c0428bb18` — spmd_types backend
+  config + manual loss parallel CE. Adds a runtime dep on
+  `spmd_types==0.2.1` (already in upstream `requirements.txt`).
+  Installed into `.venv` via `uv pip install`.
+- `06d4a35e2` — Qwen3 30B-A3B config. ezpz doesn't have a qwen3
+  folder; n/a.
+- 10 graph_trainer-only commits; n/a.
+- 4 RL commits — possibly need attention if ezpz/rl/ shares the
+  same surface; not yet audited.
+- 6 CI / ROCm / Monarch / checkout infra commits; n/a.
+
+### Action items
+
+- Replay PR #3269 (mixed-optimizer refactor) across the 4 ezpz
+  surfaces listed above.
+- After both halves are replayed, run a numerics smoke
+  (`moe_2b_ep`, `agpt_80b @ TP=2`) against the 2026-06-02 baselines
+  before merging this worktree branch into `ezpz`.
+- Audit RL commits.
+
+Merge commit: `fb1c5a319` (in worktree, not on `ezpz`).
+
+---
+
 ## 2026-06-02 (46th sync — graph_trainer-only deltas, no ezpz replay)
 
 Pulled 2 commits (`04a309858..27aa49077`) from `upstream/main`. Both
