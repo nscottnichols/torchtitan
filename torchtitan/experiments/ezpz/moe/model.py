@@ -18,7 +18,7 @@ from torchtitan.models.common.attention import (
 )
 from torchtitan.models.common.decoder import Decoder, TransformerBlock
 from torchtitan.models.common.nn_modules import Linear, RMSNorm
-from torchtitan.models.common.rope import apply_rotary_emb_single_complex
+from torchtitan.models.common.rope import RoPE
 from torchtitan.models.utils import get_moe_model_nparams_and_flops
 from torchtitan.protocols.module import Module
 from torchtitan.tools.logging import logger
@@ -49,12 +49,10 @@ class Attention(BaseAttention):
         qk_nope_head_dim: int = 128
         qk_rope_head_dim: int = 64
         v_head_dim: int = 128
+        rope: RoPE.Config
         inner_attention: Module.Config
         mask_type: str = "causal"
         mscale: float = 1.0
-        rope_factor: float = 1.0
-        rope_max_seq_len: int = 4096
-        rope_original_seq_len: int = 4096
 
     def __init__(self, config: Config):
         super().__init__()
@@ -86,16 +84,16 @@ class Attention(BaseAttention):
         self.wo = config.wo.build()
         self.softmax_scale = self.qk_head_dim**-0.5
 
-        if config.rope_max_seq_len > config.rope_original_seq_len:
-            mscale = 0.1 * config.mscale * math.log(config.rope_factor) + 1.0
+        if config.rope.max_seq_len > config.rope.original_seq_len:
+            mscale = 0.1 * config.mscale * math.log(config.rope.rope_factor) + 1.0
             self.softmax_scale = self.softmax_scale * mscale * mscale
 
         self.inner_attention = config.inner_attention.build()
+        self.rope = config.rope.build()
 
     def forward(
         self,
         x: torch.Tensor,
-        freqs_cis: torch.Tensor,
         attention_masks: AttentionMasksType | None,
         positions: torch.Tensor | None = None,
     ):
@@ -111,14 +109,16 @@ class Attention(BaseAttention):
         q_nope, q_pe = torch.split(
             q, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1
         )
-        q_pe = apply_rotary_emb_single_complex(q_pe, freqs_cis, positions)
-        q = torch.cat([q_nope, q_pe], dim=-1)
 
         # Key-value projection
         kv = self.wkv_a(x)
         kv, k_pe = torch.split(kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
 
-        k_pe = apply_rotary_emb_single_complex(k_pe.unsqueeze(2), freqs_cis, positions)
+        # PR #3458 (RoPE refactor): rope module now owns its cache and
+        # rotates q+k in one call; freqs_cis no longer threaded through
+        # forward.
+        q_pe, k_pe = self.rope(q_pe, k_pe.unsqueeze(2), positions)
+        q = torch.cat([q_nope, q_pe], dim=-1)
 
         kv = self.wkv_b(self.kv_norm(kv))
         kv = kv.view(bsz, seqlen, -1, self.qk_nope_head_dim + self.v_head_dim)
@@ -173,13 +173,10 @@ class moeTransformerBlock(TransformerBlock):  # noqa: N801
     def forward(
         self,
         x: torch.Tensor,
-        freqs_cis: torch.Tensor,
         attention_masks: AttentionMasksType | None,
         positions: torch.Tensor | None = None,
     ):
-        x = x + self.attention(
-            self.attention_norm(x), freqs_cis, attention_masks, positions
-        )
+        x = x + self.attention(self.attention_norm(x), attention_masks, positions)
         if self.moe_enabled:
             x = x + self.moe(self.ffn_norm(x))
         else:
@@ -203,28 +200,14 @@ class moeModel(Decoder):  # noqa: N801
             config,
             **kwargs,
         ) -> None:
-            # Run Decoder.Config's validation + rope sync + MoE/TP/EP
-            # checks first. After PR #3395 (42nd sync) these moved from
+            # Run Decoder.Config's validation + MoE/TP/EP checks first.
+            # After PR #3395 (42nd sync) base validation moved from
             # per-model overrides into the shared Decoder.Config helper.
+            # After PR #3458 (47th sync) per-layer rope sync is no longer
+            # needed: each Attention.Config carries its own RoPE.Config
+            # instance instead of inheriting fields from self.rope.
             Decoder.Config.update_from_config(self, config=config, **kwargs)
             parallelism = config.parallelism
-
-            from torchtitan.trainer import Trainer
-
-            # Sync rope fields to attention for all layers. Mirrors
-            # upstream deepseek_v3 — needed because our Attention.Config
-            # holds rope_* fields separately from self.rope. Skipped for
-            # non-trainer callers (e.g. RL generator) since they don't
-            # set training.seq_len.
-            if isinstance(config, Trainer.Config):
-                seq_len = config.training.seq_len
-                for layer_cfg in self.layers:
-                    assert isinstance(layer_cfg.attention, Attention.Config)
-                    layer_cfg.attention.rope_max_seq_len = seq_len
-                    layer_cfg.attention.rope_factor = self.rope.rope_factor
-                    layer_cfg.attention.rope_original_seq_len = (
-                        self.rope.original_seq_len
-                    )
 
             # for_loop fallback when CUDA SM90+ grouped_mm is unavailable
             # (notably on XPU). Upstream Decoder.Config doesn't know about

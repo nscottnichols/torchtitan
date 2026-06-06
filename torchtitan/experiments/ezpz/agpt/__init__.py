@@ -15,7 +15,9 @@ import torch.nn.functional as F
 
 from torchtitan.experiments.ezpz.agpt.parallelize import parallelize_llama
 from torchtitan.models.common import (
+    ComplexRoPE,
     compute_ffn_hidden_dim,
+    CosSinRoPE,
     Embedding,
     Linear,
     RMSNorm,
@@ -238,10 +240,10 @@ def _build_agpt_layers(
     dim: int,
     n_heads: int,
     hidden_dim: int,
+    rope: RoPE.Config,
     n_kv_heads: int | None = None,
     fuse_qkv: bool = False,
     attn_backend: str = "sdpa",
-    rope_backend: Literal["complex", "cos_sin"] = "complex",
     qk_norm: bool = False,
     logit_softcap: float | None = None,
     relu_squared: bool = False,
@@ -296,7 +298,7 @@ def _build_agpt_layers(
                     inner_attention=inner_attention,
                     fuse_qkv=fuse_qkv,
                     mask_type=mask_type,
-                    rope_backend=rope_backend,
+                    rope=rope,
                     qk_norm=qk_norm_config,
                 ),
                 feed_forward=ffn_config,
@@ -323,6 +325,21 @@ def _build_agpt_config(
     logit_softcap: float | None = None,
     relu_squared: bool = False,
 ) -> AgptModel.Config:
+    # PR #3458 (RoPE refactor): RoPE.Config split into ComplexRoPE.Config /
+    # CosSinRoPE.Config; the backend= field is gone (backend is encoded in
+    # the type). Top-level Model.Config.rope is gone too — each layer's
+    # Attention.Config owns its own rope. ``rope_backend`` keyword on this
+    # builder is kept for back-compat with existing config callers, but
+    # internally it now selects a concrete subclass.
+    rope_cls: type[RoPE.Config] = (
+        ComplexRoPE.Config if rope_backend == "complex" else CosSinRoPE.Config
+    )
+    rope_cfg = rope_cls(
+        dim=dim // n_heads,
+        max_seq_len=max_seq_len,
+        theta=rope_theta,
+        scaling=scaling,
+    )
     return AgptModel.Config(
         dim=dim,
         vocab_size=vocab_size,
@@ -335,13 +352,6 @@ def _build_agpt_config(
             out_features=vocab_size,
             param_init=_output_linear_init(dim),
         ),
-        rope=RoPE.Config(
-            dim=dim // n_heads,
-            max_seq_len=max_seq_len,
-            theta=rope_theta,
-            backend=rope_backend,
-            scaling=scaling,
-        ),
         layers=_build_agpt_layers(
             n_layers=n_layers,
             dim=dim,
@@ -350,7 +360,7 @@ def _build_agpt_config(
             hidden_dim=hidden_dim,
             fuse_qkv=fuse_qkv,
             attn_backend=attn_backend,
-            rope_backend=rope_backend,
+            rope=rope_cfg,
             qk_norm=qk_norm,
             logit_softcap=logit_softcap,
             relu_squared=relu_squared,
