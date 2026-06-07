@@ -20,12 +20,13 @@ was required in ezpz.
 
 ---
 
-## 2026-06-06 (47th sync — RoPE + optimizer refactors replayed; smoke pending)
+## 2026-06-06 (47th sync — RoPE + optimizer refactors replayed; SMOKES PASSED, READY TO MERGE)
 
-**Status: REPLAY COMPLETE — sitting in worktree `ezpz-46th-47th-sync`.**
-Both structural refactors (RoPE + mixed-optimizer) are replayed and
-import-verified. Numerics smoke against pre-merge baselines is the
-next gate before merging the worktree branch back into `ezpz`.
+**Status: READY TO MERGE — worktree `ezpz-46th-47th-sync` validated
+end-to-end.** Both structural refactors replayed; 7 of 9 configs
+smoked clean (the 2 skips are pre-existing constraints, not
+regressions). 4 post-smoke bugs fixed in-place. See journal for the
+full smoke matrix.
 
 Pulled 34 commits (`27aa49077..641b5f6b8`) from `upstream/main`.
 
@@ -162,16 +163,58 @@ Numerics-equivalence smoke against pre-merge baselines NOT yet run.
   same surface; not yet audited.
 - 6 CI / ROCm / Monarch / checkout infra commits; n/a.
 
-### Action items
+### Post-replay smokes + fixes
 
-- Run a numerics smoke (`moe_2b_ep` 2N, `agpt_80b @ TP=2` 4N) against
-  the 2026-06-02 baselines from this worktree before merging
-  `worktree-ezpz-46th-47th-sync` back into `ezpz`.
+Numerics smoke against pre-merge baselines:
+
+- **moe_2b_ep 2N** (job 12468156): 10 steps clean, loss 12.95 → 7.92,
+  memory bit-identical to 2026-06-02 baseline.
+- **agpt_80b TP=2 4N** (job 12468157): 20 steps clean, all losses
+  within ±0.08 nat of 2026-06-02 baseline, MFU + memory + grad-norm
+  shape match.
+
+Wider coverage smoke surfaced 3 real bugs in the initial replay, all
+now fixed in the worktree:
+
+| Commit | Fix |
+|---|---|
+| `6871e736b` | `optimizer/containers.py` Config-dispatch bug. Each custom container subclass now carries its own empty `Config(OptimizersContainer.Config): pass` so `build()` instantiates the subclass instead of the base. Otherwise `NotImplementedError: Optimizer Muon not added` at trainer init. |
+| `455013ed5` | 5 missed `cfg.optimizer.lr = X` mutations in `moe/config_registry.py` (moe_16b, moe_671b, moe_10b_2b, moe_10b_2b_sdpa, smoke_moe_500m_50steps). Same fix pattern as the 19 in competition/configs.py. |
+| `975a5bcd1` | `moe_10b_2b_sdpa{,_ep}` defaults changed to `(LBS=1, AC="selective")`. Prior `(LBS=2, AC="none")` OOMs at first forward on 2N. AC="full" hits `CheckpointError: Recomputed values have different metadata` from MoE router non-determinism under recompute. AC="selective" excludes the router from the save list → router never gets recomputed → shapes stay stable. |
+
+One pre-existing bug found in passing (not a replay regression but
+fixed while we were here):
+
+| Commit | Fix |
+|---|---|
+| `8746dfe2c` | `datasets.py` `_make_text_processor` returned a local closure that couldn't be pickled by PyTorch's `forkserver` DataLoader workers. Every HF-dataset run with `--dataloader.num-workers >= 1` crashed at first batch with `PicklingError`. Fix: module-level helper + `functools.partial`. |
+
+Final smoke matrix:
+
+| Config | Status | Notes |
+|---|---|---|
+| moe_2b_ep 2N | ✅ baseline match | |
+| agpt_80b TP=2 4N | ✅ baseline match | |
+| agpt_2b | ✅ 10 steps, 12.95 → 7.63 | |
+| agpt_2b_real | ✅ 10 steps, 12.99 → 8.50 | validates CosSinRoPE swap |
+| agpt_20b | ✅ 10 steps, 12.90 → 10.39 | noisy (no warmup) but trains |
+| moe_2b (LBS=2) | ✅ 10 steps, 12.94 → 8.52 | LBS=16 OOMs (pre-existing) |
+| moe_10b_2b_sdpa_ep (LBS=1 + AC=selective, new defaults) | ✅ 10 steps, 12.96 → 9.44, 80% mem | |
+| speedrun_2b_muon (LBS=1) | ✅ 10 steps, 12.93 → 9.32 | validates Muon dispatch |
+| speedrun_2b_sophiag (LBS=1) | ✅ step 1 reached training | validates SophiaG dispatch |
+| moe_10b_2b | ⏭ skipped | block_causal mask + HF-dataset mismatch (pre-existing) |
+| moe_10b_2b_sdpa{,_ep} @ AC=full | ⏭ known broken | MoE router non-determinism under recompute (long-standing) |
+
+### Action items (post-merge)
+
+- File pytorch/pytorch issue for MoE + AC=full `CheckpointError`
+  (long-standing; PR #3146/#3450 fixed the forward path only).
 - Audit the 4 RL commits in this sync — `experiments/ezpz/rl/` may
   need attention if they touch shared surfaces.
 
-Merge commit: `fb1c5a319` (in worktree, not on `ezpz`).
+Merge commit: `fb1c5a319` (worktree).
 Replay commits: `02dd1e7fe` (RoPE), `bac0a3473` (mixed-optimizer).
+Post-smoke fixes: `6871e736b`, `455013ed5`, `975a5bcd1`, `8746dfe2c`.
 
 ---
 
