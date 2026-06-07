@@ -43,12 +43,27 @@ from typing import Optional
 import ezpz
 import ezpz.distributed
 
-from torchtitan.experiments.ezpz.rl.tasks import get_task
+from torchtitan.experiments.ezpz.rl.tasks import TASK_REGISTRY, get_task
 
 log = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "argonne_private/AuroraGPT-7B"
 FALLBACK_MODEL = "Qwen/Qwen3-0.6B"
+
+
+def _task_help() -> str:
+    """Render a one-line help string listing every registered task.
+
+    Importing tasks/__init__.py populates TASK_REGISTRY via per-module
+    register_task() side effects, so by the time this dataclass is
+    constructed the registry is fully populated. The choices+help
+    are kept in sync automatically — adding a new task module is the
+    only step needed to expose it in --help.
+    """
+    if not TASK_REGISTRY:
+        return "Task name (registry is empty — no tasks imported?)."
+    rows = "; ".join(f"{n}: {t.description}" for n, t in sorted(TASK_REGISTRY.items()))
+    return f"Task name from torchtitan.experiments.ezpz.rl.tasks registry. Choices: {rows}"
 
 
 @dataclass
@@ -57,7 +72,10 @@ class EzpzGRPOArgs:
 
     task: str = field(
         default="sum_digits",
-        metadata={"help": "Task name from torchtitan.experiments.ezpz.rl.tasks registry."},
+        metadata={
+            "help": _task_help(),
+            "choices": sorted(TASK_REGISTRY) or None,
+        },
     )
     model_name_or_path: str = field(
         default="",
