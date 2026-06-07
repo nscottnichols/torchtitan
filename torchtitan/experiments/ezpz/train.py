@@ -4,7 +4,6 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-import dataclasses
 import datetime
 import json
 import os
@@ -21,7 +20,7 @@ import torch
 import torch.distributed
 from torch.distributed import get_rank, get_world_size, is_initialized
 
-from torchtitan.components.optimizer import OptimizersContainer
+from torchtitan.components.optimizer import default_adamw, OptimizersContainer
 from torchtitan.config import ConfigManager
 from torchtitan.experiments.ezpz.logging import init_logger
 from torchtitan.experiments.ezpz.optimizer import (
@@ -33,6 +32,14 @@ from torchtitan.experiments.ezpz.optimizer import (
     SPAMOptimizersContainer,
     SophiaGOptimizersContainer,
     TorchMuonOptimizersContainer,
+    default_adopt,
+    default_mano,
+    default_muon,
+    default_muon_clip,
+    default_schedule_free,
+    default_sophiag,
+    default_spam,
+    default_torch_muon,
 )
 from torchtitan.tools.logging import logger
 
@@ -87,17 +94,24 @@ _FLAVOR_TO_CONFIG = {
     "llama3-8b": "ezpz_agpt_8b",
 }
 
-_OPTIMIZER_CONFIGS: dict[str, type[OptimizersContainer.Config]] = {
-    "adamw": OptimizersContainer.Config,
-    "adam": OptimizersContainer.Config,
-    "adopt": ADOPTOptimizersContainer.Config,
-    "mano": ManoOptimizersContainer.Config,
-    "muon": MuonOptimizersContainer.Config,
-    "muonclip": MuonClipOptimizersContainer.Config,
-    "schedulefree": ScheduleFreeOptimizersContainer.Config,
-    "sophiag": SophiaGOptimizersContainer.Config,
-    "spam": SPAMOptimizersContainer.Config,
-    "torchmuon": TorchMuonOptimizersContainer.Config,
+# PR #3269 ("[optimizer] support mixed optimizers") removed the flat
+# `lr` / `beta1` / etc. fields from OptimizersContainer.Config and
+# moved them into ParamGroupConfig.optimizer_kwargs. The
+# ``--optimizer name --optimizer.lr=...`` CLI swap path now goes
+# through one of these default_<name>(lr=..., **kwargs) factories,
+# each of which returns an OptimizersContainer.Config with a single
+# catch-all ParamGroupConfig naming the right optimizer.
+_OPTIMIZER_FACTORIES: dict[str, Any] = {
+    "adamw": default_adamw,
+    "adam": default_adamw,  # base only registers Adam + AdamW
+    "adopt": default_adopt,
+    "mano": default_mano,
+    "muon": default_muon,
+    "muonclip": default_muon_clip,
+    "schedulefree": default_schedule_free,
+    "sophiag": default_sophiag,
+    "spam": default_spam,
+    "torchmuon": default_torch_muon,
 }
 
 
@@ -208,8 +222,8 @@ def _extract_optimizer_args(
     if optimizer_name is None:
         raise ValueError("--optimizer flag found but no name provided")
 
-    if optimizer_name not in _OPTIMIZER_CONFIGS:
-        available = ", ".join(sorted(_OPTIMIZER_CONFIGS.keys()))
+    if optimizer_name not in _OPTIMIZER_FACTORIES:
+        available = ", ".join(sorted(_OPTIMIZER_FACTORIES.keys()))
         raise ValueError(
             f"Unknown optimizer '{optimizer_name}'. Available: {available}"
         )
@@ -217,70 +231,53 @@ def _extract_optimizer_args(
     return optimizer_name, overrides, remaining
 
 
+def _coerce_override(raw: str) -> Any:
+    """Coerce a string CLI override to bool / int / float / str.
+
+    The old PR #3269 code walked dataclass fields for type info; the new
+    factories accept ``**kwargs`` so types are inferred here from the
+    raw string. Common cases:
+      - ``"true"`` / ``"false"`` → bool
+      - ``"42"`` → int
+      - ``"2.4e-3"`` → float
+      - everything else → raw string
+    """
+    low = raw.lower()
+    if low in ("true", "false"):
+        return low == "true"
+    try:
+        return int(raw)
+    except ValueError:
+        pass
+    try:
+        return float(raw)
+    except ValueError:
+        pass
+    return raw
+
+
 def _build_optimizer_config(
     name: str,
     base: OptimizersContainer.Config,
     overrides: dict[str, str],
 ) -> OptimizersContainer.Config:
-    """Build optimizer Config from name, base config, and CLI overrides."""
-    config_cls = _OPTIMIZER_CONFIGS[name]
-    base_cls = OptimizersContainer.Config
+    """Build optimizer Config from name + CLI overrides via the default_<name> factory.
+
+    Post PR #3269, OptimizersContainer.Config no longer has flat
+    ``lr`` / ``beta1`` / etc. fields — instead it holds
+    ``param_groups: list[ParamGroupConfig]``. The ``--optimizer name``
+    CLI flag now dispatches to a ``default_<name>(lr=..., **kwargs)``
+    factory that builds a single-ParamGroupConfig setup naming the
+    requested optimizer. ``base`` (the value already in the registry)
+    is ignored — the user asked to switch optimizers, so we build a
+    fresh setup keyed off the registered ``default_<name>`` defaults
+    plus their ``--optimizer.*`` overrides.
+    """
+    factory = _OPTIMIZER_FACTORIES[name]
     kwargs: dict[str, Any] = {}
-
-    # Collect base class field defaults so we can detect subclass overrides
-    base_field_defaults: dict[str, Any] = {
-        f.name: f.default
-        for f in dataclasses.fields(base_cls)
-        if f.default is not dataclasses.MISSING
-    }
-
-    for field in dataclasses.fields(config_cls):
-        if not hasattr(base, field.name):
-            continue  # subclass-only field — let its own default apply
-
-        base_default = base_field_defaults.get(field.name, dataclasses.MISSING)
-        sub_default = (
-            field.default
-            if field.default is not dataclasses.MISSING
-            else dataclasses.MISSING
-        )
-
-        if (
-            base_default is not dataclasses.MISSING
-            and sub_default is not dataclasses.MISSING
-            and base_default != sub_default
-        ):
-            # Subclass intentionally overrode this default (e.g. name="Muon",
-            # beta1=0.95) — keep the subclass value, don't clobber with base
-            kwargs[field.name] = sub_default
-        else:
-            # Shared field with same default — copy from base so config
-            # registry values (lr, weight_decay, etc.) propagate
-            kwargs[field.name] = getattr(base, field.name)
-
-    # Apply CLI overrides with type coercion
     for raw_key, raw_value in overrides.items():
-        field_name = raw_key.replace("-", "_")
-        # Find the matching field for type info
-        matching = [f for f in dataclasses.fields(config_cls) if f.name == field_name]
-        if not matching:
-            available = [f.name for f in dataclasses.fields(config_cls)]
-            raise ValueError(
-                f"Unknown optimizer field '{field_name}' for {name}. "
-                f"Available: {available}"
-            )
-        field = matching[0]
-        # Coerce string to field type
-        if field.type is bool or field.type == "bool":
-            kwargs[field_name] = raw_value.lower() in ("true", "1", "yes")
-        elif field.type is int or field.type == "int":
-            kwargs[field_name] = int(raw_value)
-        elif field.type is float or field.type == "float":
-            kwargs[field_name] = float(raw_value)
-        else:
-            kwargs[field_name] = raw_value
-
-    return config_cls(**kwargs)
+        kwargs[raw_key.replace("-", "_")] = _coerce_override(raw_value)
+    return factory(**kwargs)
 
 
 def _canonicalize_option(option: str) -> str:
