@@ -306,8 +306,22 @@ def moe_10b_2b() -> FaultTolerantTrainer.Config:
 
 
 def moe_10b_2b_sdpa() -> FaultTolerantTrainer.Config:
-    cfg = moe("10B_2B_sdpa", local_batch_size=2,
-              activation_checkpoint_mode="none")
+    # LBS=1 + AC=selective is the empirically-working combo on 2N
+    # Sunspot. The prior (LBS=2, AC="none") default OOMs at first
+    # forward; flipping to AC="full" hits PyTorch's
+    # ``CheckpointError: Recomputed values have different metadata``
+    # because MoE token-routing isn't bit-exact under recompute (the
+    # router selects one fewer/more token in a few experts → saved
+    # shape (N, hidden) vs recomputed (N±1, hidden)). AC="selective"
+    # only checkpoints the SAC save-list — which excludes the router
+    # — so the non-deterministic op never gets recomputed and the
+    # shape stays stable. PR #3146/#3450 made the routing's ``histc``
+    # → ``bincount`` swap deterministic in the *forward* path, but
+    # AC=full still recomputes a different routing each pass; the
+    # shape divergence is fundamental until AC saves the routing
+    # result instead of recomputing it.
+    cfg = moe("10B_2B_sdpa", local_batch_size=1,
+              activation_checkpoint_mode="selective")
     cfg.optimizer.param_groups[0].optimizer_kwargs["lr"] = 2.2e-4
     cfg.lr_scheduler.decay_type = "cosine"
     cfg.lr_scheduler.min_lr_factor = 0.1
