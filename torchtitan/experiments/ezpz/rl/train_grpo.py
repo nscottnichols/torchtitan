@@ -13,10 +13,21 @@
 # TRL.
 #
 # Usage:
+#   # Plain DDP (every rank holds the full model)
 #   ezpz launch python3 -m torchtitan.experiments.ezpz.rl.train_grpo \
 #       --task multiply --model_name_or_path AuroraGPT-2B-sophiag-gs138650 \
 #       --max_steps 20 --per_device_train_batch_size 1
 #
+#   # Real FSDP (model + grads + optimizer state sharded across all ranks)
+#   # Mirrors ezpz.examples.hf.py's explicit-plugin pattern by bootstrapping
+#   # the FSDP_/ACCELERATE_USE_FSDP env vars before GRPOTrainer.__init__.
+#   ezpz launch python3 -m torchtitan.experiments.ezpz.rl.train_grpo \
+#       --task multiply --model_name_or_path AuroraGPT-2B-sophiag-gs138650 \
+#       --per_device_train_batch_size 2 --fsdp full_shard \
+#       --fsdp_transformer_layer_cls_to_wrap LlamaDecoderLayer \
+#       --gradient_checkpointing --bf16 --beta 0.0
+#
+#   # vLLM rollouts
 #   ezpz launch python3 -m torchtitan.experiments.ezpz.rl.train_grpo \
 #       --task sum_digits --beta 0.04 --num_generations 8 \
 #       --use_vllm --vllm_gpu_memory_utilization 0.5
@@ -24,7 +35,6 @@
 # Note: HfArgumentParser uses ``snake_case`` flags (e.g.
 # ``--per_device_train_batch_size``), not the hyphenated form.
 
-import dataclasses
 import logging
 import os
 from dataclasses import dataclass, field
@@ -65,6 +75,40 @@ class EzpzGRPOArgs:
     no_save: bool = field(
         default=False,
         metadata={"help": "Skip the final trainer.save_model() call."},
+    )
+    # --- FSDP knobs (ezpz-managed; mirrors ezpz.examples.hf.py) ---------------
+    # HF Trainer / GRPOTrainer construct their internal accelerate.Accelerator
+    # from a tangle of env vars. Under ``ezpz launch`` (mpiexec) none of these
+    # env vars are set by default, so passing TRL's --fsdp full_shard is a
+    # silent no-op — every rank ends up holding the full model. These knobs
+    # populate the FSDP_/ACCELERATE_USE_FSDP env vars before GRPOTrainer init
+    # so the internal Accelerator builds a real FullyShardedDataParallelPlugin
+    # the same way ezpz.examples.hf.py does.
+    #
+    # NOTE: We deliberately do NOT add a top-level ``--fsdp`` flag here
+    # because TrainingArguments already owns that name; instead we read the
+    # value of ``config.fsdp`` after parsing. The companion knobs below ARE
+    # ezpz-owned (TrainingArguments doesn't have them as scalar fields).
+    fsdp_transformer_layer_cls_to_wrap: str = field(
+        default="LlamaDecoderLayer",
+        metadata={
+            "help": (
+                "Transformer block class name to auto-wrap for FSDP. Defaults "
+                "to LlamaDecoderLayer (correct for the AuroraGPT-* family). "
+                "Set to e.g. Qwen3DecoderLayer for Qwen-family models. Has no "
+                "effect unless --fsdp is set."
+            )
+        },
+    )
+    fsdp_cpu_ram_efficient_loading: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Load model on rank 0 only and broadcast shards. Slower init "
+                "but avoids OOM during model loading on small-memory tiles. "
+                "Has no effect unless --fsdp is set."
+            )
+        },
     )
 
 
@@ -132,6 +176,84 @@ def _resolve_model(name: str) -> str:
         return FALLBACK_MODEL
 
 
+_FSDP_STRATEGY_MAP = {
+    "full_shard": "FULL_SHARD",
+    "shard_grad_op": "SHARD_GRAD_OP",
+    "no_shard": "NO_SHARD",
+    "hybrid_shard": "HYBRID_SHARD",
+    "hybrid_shard_zero2": "HYBRID_SHARD_ZERO2",
+}
+
+
+def _bootstrap_fsdp_env(
+    fsdp: str,
+    *,
+    transformer_layer_cls_to_wrap: str,
+    cpu_ram_efficient_loading: bool,
+    bf16: bool,
+) -> None:
+    """Populate the FSDP_/ACCELERATE_USE_FSDP env vars that HF Trainer's
+    internal Accelerator reads at __init__ time.
+
+    Mirrors ezpz.examples.hf.py's explicit-FSDP-plugin pattern but adapted
+    to GRPOTrainer (which builds its own Accelerator internally rather
+    than letting us pass one). We set env vars BEFORE GRPOTrainer.__init__
+    runs; Accelerator picks them up via
+    accelerate.utils.dataclasses.FullyShardedDataParallelPlugin.__post_init__.
+
+    The ``fsdp`` argument is the value of TrainingArguments.fsdp after
+    parsing — TRL/HF accept either a string ('full_shard', 'shard_grad_op',
+    ...) or a list of FSDPOption enums. We coerce both shapes here.
+    """
+    # TrainingArguments.fsdp accepts str | list[FSDPOption] | None
+    if not fsdp:
+        return  # plain DDP — leave env alone
+    if isinstance(fsdp, (list, tuple)):
+        # CLI like --fsdp "full_shard auto_wrap" parses into a list of enums
+        strategy_key = " ".join(str(x).lower() for x in fsdp).split()[0]
+    else:
+        strategy_key = str(fsdp).strip().split()[0].lower()
+
+    if strategy_key not in _FSDP_STRATEGY_MAP:
+        raise ValueError(
+            f"--fsdp must start with one of {sorted(_FSDP_STRATEGY_MAP)}; "
+            f"got {fsdp!r}"
+        )
+
+    # Required by Accelerator() to actually build an FSDP plugin
+    os.environ.setdefault("ACCELERATE_USE_FSDP", "true")
+    # Sharding strategy (FSDP1 vocabulary; FSDP2 reshard_after_forward is bool)
+    os.environ.setdefault(
+        "FSDP_SHARDING_STRATEGY", _FSDP_STRATEGY_MAP[strategy_key]
+    )
+    # Auto-wrap policy — without this the whole model wraps as a single FSDP
+    # unit, defeating the point.
+    os.environ.setdefault("FSDP_AUTO_WRAP_POLICY", "TRANSFORMER_BASED_WRAP")
+    os.environ.setdefault(
+        "FSDP_TRANSFORMER_CLS_TO_WRAP", transformer_layer_cls_to_wrap
+    )
+    # Match ezpz.examples.hf.py's plugin defaults
+    os.environ.setdefault("FSDP_BACKWARD_PREFETCH", "BACKWARD_PRE")
+    os.environ.setdefault("FSDP_USE_ORIG_PARAMS", "true")
+    # Sharded state dict avoids the rank-0-gathers-everything OOM at save time
+    os.environ.setdefault("FSDP_STATE_DICT_TYPE", "SHARDED_STATE_DICT")
+    # Mixed precision under bf16
+    if bf16:
+        os.environ.setdefault("ACCELERATE_MIXED_PRECISION", "bf16")
+    # Optional cpu_ram_efficient_loading (load on rank 0 + broadcast)
+    if cpu_ram_efficient_loading:
+        os.environ.setdefault("FSDP_CPU_RAM_EFFICIENT_LOADING", "true")
+        # Required companion: sync module states after broadcast
+        os.environ.setdefault("FSDP_SYNC_MODULE_STATES", "true")
+
+    log.info(
+        "[FSDP] enabled via env: strategy=%s wrap_cls=%s cpu_eff_load=%s",
+        _FSDP_STRATEGY_MAP[strategy_key],
+        transformer_layer_cls_to_wrap,
+        cpu_ram_efficient_loading,
+    )
+
+
 def main() -> None:
     from trl import GRPOTrainer
     from transformers import AutoTokenizer, HfArgumentParser
@@ -143,6 +265,16 @@ def main() -> None:
     EzpzGRPOConfig = _ezpz_grpo_config_cls()
     parser = HfArgumentParser((EzpzGRPOArgs, EzpzGRPOConfig))
     ezpz_args, config = parser.parse_args_into_dataclasses()
+
+    # Bootstrap FSDP env vars BEFORE GRPOTrainer.__init__ — its internal
+    # accelerate.Accelerator only reads them once at construction time.
+    # Mirrors the explicit-FSDP-plugin pattern in ezpz.examples.hf.py.
+    _bootstrap_fsdp_env(
+        config.fsdp,
+        transformer_layer_cls_to_wrap=ezpz_args.fsdp_transformer_layer_cls_to_wrap,
+        cpu_ram_efficient_loading=ezpz_args.fsdp_cpu_ram_efficient_loading,
+        bf16=config.bf16,
+    )
 
     rank = ezpz.distributed.get_rank()
     device_type = ezpz.distributed.get_torch_device_type()
@@ -174,7 +306,7 @@ def main() -> None:
         f"bsz={config.per_device_train_batch_size} "
         f"num_gens={config.num_generations} beta={config.beta} "
         f"grad_ckpt={config.gradient_checkpointing} use_vllm={config.use_vllm} "
-        f"device={device_type}"
+        f"fsdp={config.fsdp or 'off'} device={device_type}"
     )
 
     # W&B tracking via ezpz (rank 0 only)
@@ -191,6 +323,12 @@ def main() -> None:
                 "beta": config.beta,
                 "gradient_checkpointing": config.gradient_checkpointing,
                 "use_vllm": config.use_vllm,
+                "fsdp": str(config.fsdp) if config.fsdp else "off",
+                "fsdp_transformer_layer_cls_to_wrap": (
+                    ezpz_args.fsdp_transformer_layer_cls_to_wrap
+                    if config.fsdp
+                    else None
+                ),
                 "device_type": device_type,
             },
         )
