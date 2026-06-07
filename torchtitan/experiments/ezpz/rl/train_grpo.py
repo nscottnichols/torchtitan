@@ -226,6 +226,67 @@ def _resolve_model(name: str) -> str:
         return FALLBACK_MODEL
 
 
+# Mapping of HF model_type → the canonical decoder-block class name
+# FSDP should auto-wrap. Used when the user hasn't explicitly set
+# --fsdp_transformer_layer_cls_to_wrap. Add new families here as the
+# zoo grows. Falls back to the user-provided value (default
+# LlamaDecoderLayer) if model_type isn't in the map.
+_DEFAULT_WRAP_CLS_BY_MODEL_TYPE = {
+    "llama": "LlamaDecoderLayer",
+    "llama4": "Llama4DecoderLayer",
+    "qwen2": "Qwen2DecoderLayer",
+    "qwen3": "Qwen3DecoderLayer",
+    "mistral": "MistralDecoderLayer",
+    "mixtral": "MixtralDecoderLayer",
+    "gemma": "GemmaDecoderLayer",
+    "gemma2": "Gemma2DecoderLayer",
+    "phi": "PhiDecoderLayer",
+    "phi3": "Phi3DecoderLayer",
+    "gpt_neox": "GPTNeoXLayer",
+    "gpt2": "GPT2Block",
+    "deepseek_v3": "DeepseekV3DecoderLayer",
+    "olmo": "OlmoDecoderLayer",
+    "olmo2": "Olmo2DecoderLayer",
+}
+
+
+def _autodetect_wrap_cls(model_name: str, user_provided: str) -> str:
+    """Pick the right FSDP auto-wrap class for *model_name*.
+
+    If the user explicitly passed --fsdp_transformer_layer_cls_to_wrap
+    with a non-default value, respect it. Otherwise look up the
+    model's HF model_type in _DEFAULT_WRAP_CLS_BY_MODEL_TYPE.
+
+    Falls back to the user-provided value (default LlamaDecoderLayer)
+    if model_type is unknown — the FSDP plugin's lookup will then
+    raise a clear ValueError naming the missing class, which is the
+    same behavior as before this helper existed.
+    """
+    # If the user opted in to a non-default class, don't override
+    if user_provided != "LlamaDecoderLayer":
+        return user_provided
+
+    try:
+        from transformers import AutoConfig
+        cfg = AutoConfig.from_pretrained(model_name)
+        model_type = getattr(cfg, "model_type", None)
+        if model_type and model_type in _DEFAULT_WRAP_CLS_BY_MODEL_TYPE:
+            cls = _DEFAULT_WRAP_CLS_BY_MODEL_TYPE[model_type]
+            if cls != user_provided:
+                log.info(
+                    f"[FSDP] auto-detected wrap class {cls!r} for "
+                    f"model_type={model_type!r} (override with "
+                    f"--fsdp_transformer_layer_cls_to_wrap)"
+                )
+            return cls
+    except Exception as e:
+        log.warning(
+            f"[FSDP] model_type autodetect failed ({e!r}); falling back "
+            f"to user-provided wrap class {user_provided!r}"
+        )
+    return user_provided
+
+
 def _prefetch_and_broadcast_model(model_name: str, rank: int) -> str:
     """Resolve + prefetch model files on rank 0, then barrier so all
     ranks load from a populated HF cache.
@@ -380,19 +441,6 @@ def main() -> None:
     parser = HfArgumentParser((EzpzGRPOArgs, EzpzGRPOConfig))
     ezpz_args, config = parser.parse_args_into_dataclasses()
 
-    # Bootstrap FSDP env vars BEFORE GRPOTrainer.__init__ — its internal
-    # accelerate.Accelerator only reads them once at construction time.
-    # Mirrors the explicit-FSDP-plugin pattern in ezpz.examples.hf.py.
-    _bootstrap_fsdp_env(
-        config.fsdp,
-        transformer_layer_cls_to_wrap=ezpz_args.fsdp_transformer_layer_cls_to_wrap,
-        cpu_ram_efficient_loading=ezpz_args.fsdp_cpu_ram_efficient_loading,
-        bf16=config.bf16,
-    )
-
-    # (FSDP + gradient_checkpointing migration happens in
-    # EzpzGRPOConfig.__post_init__ — see _ezpz_grpo_config_cls.)
-
     rank = ezpz.distributed.get_rank()
     device_type = ezpz.distributed.get_torch_device_type()
 
@@ -401,6 +449,27 @@ def main() -> None:
     # concurrent HEAD requests (which trips per-IP rate limits, see
     # HTTP 429 retries with 200s+ backoffs).
     model_name = _prefetch_and_broadcast_model(ezpz_args.model_name_or_path, rank)
+
+    # Auto-detect the right FSDP wrap class for this model family if
+    # the user didn't override it. Runs AFTER prefetch so the config
+    # is in the local HF cache (no per-rank network hits).
+    wrap_cls = _autodetect_wrap_cls(
+        model_name, ezpz_args.fsdp_transformer_layer_cls_to_wrap
+    )
+    ezpz_args.fsdp_transformer_layer_cls_to_wrap = wrap_cls
+
+    # Bootstrap FSDP env vars BEFORE GRPOTrainer.__init__ — its internal
+    # accelerate.Accelerator only reads them once at construction time.
+    # Mirrors the explicit-FSDP-plugin pattern in ezpz.examples.hf.py.
+    _bootstrap_fsdp_env(
+        config.fsdp,
+        transformer_layer_cls_to_wrap=wrap_cls,
+        cpu_ram_efficient_loading=ezpz_args.fsdp_cpu_ram_efficient_loading,
+        bf16=config.bf16,
+    )
+
+    # (FSDP + gradient_checkpointing migration happens in
+    # EzpzGRPOConfig.__post_init__ — see _ezpz_grpo_config_cls.)
 
     # Fill in output_dir sentinel from task
     if config.output_dir is None:
