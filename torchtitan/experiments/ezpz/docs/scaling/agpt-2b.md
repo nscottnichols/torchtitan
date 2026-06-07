@@ -1,56 +1,78 @@
 # AuroraGPT-2B Scaling
 
-## Aurora Weak Scaling (torch 2.13 + `ezpz yeet-env` tarball, 2026-05-29)
+## Aurora Weak Scaling (torch 2.13 + `ezpz yeet-env` tarball)
 
 > Single sweep across 4 → 256 nodes with `ezpz yeet-env` tarball
 > broadcast (the production env-setup pattern). All entries are 20-step
-> bench runs with `BENCH_STEPS=20 SCALING_GROUP=light LBS=2`.
+> bench runs (`BENCH_STEPS=20 SCALING_GROUP=light`).
 > **Config:** FSDP-only (TP=1), `compile=on`, AC=full, seq_len=8192,
-> LBS=2 (GBS = N × 12 × 2 = production-matched).
+> `LBS=2` to match the production submit script (GBS = N × 12 × 2).
 
-| Nodes | GPUs | GBS    | TPS/GPU | Total TPS  | MFU    | Efficiency vs 4N |
-|-------|------|--------|---------|------------|--------|------------------|
-| 4     | 48   | 96     | 7,344   | 352,512    | 27.55% | 100.0%           |
-| 8     | 96   | 192    | 7,291   | 699,936    | 27.36% | 99.3%            |
-| 16    | 192  | 384    | 6,803   | 1,306,176  | 25.53% | 92.6%            |
-| 32    | 384  | 768    | 6,984   | 2,681,856  | 26.20% | 95.1%            |
-| 64    | 768  | 1,536  | CRASH   | —          | —      | —                |
-| 128   | 1,536| 3,072  | CRASH   | —          | —      | —                |
-| 256   | 3,072| 6,144  | 5,002   | 15,366,144 | 18.77% | 68.1%            |
-| 512   | 6,144| 12,288 | NO_OUTPUT| —         | —      | —                |
-| 1,024 | 12,288| 24,576| NO_OUTPUT| —         | —      | —                |
-| 2,048 | 24,576| 49,152| NO_OUTPUT| —         | —      | —                |
-| 4,096 | 49,152| 98,304| NO_OUTPUT| —         | —      | —                |
+| Nodes | GPUs | GBS    | TPS/GPU | Total TPS  | MFU    | Efficiency vs 4N | Job |
+|-------|------|--------|---------|------------|--------|------------------|-----|
+| 4     | 48   | 96     | 7,344   | 352,512    | 27.55% | 100.0%           | 2026-05-29 sweep |
+| 8     | 96   | 192    | 7,291   | 699,936    | 27.36% | 99.3%            | 2026-05-29 sweep |
+| 16    | 192  | 384    | 6,803   | 1,306,176  | 25.53% | 92.6%            | 2026-05-29 sweep |
+| 32    | 384  | 768    | 6,984   | 2,681,856  | 26.20% | 95.1%            | 2026-05-29 sweep |
+| 64    | 768  | 768†   | 5,062   | 3,887,616  | 18.99% | 68.9%            | [8528805](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/cids97r8) (2026-06-06, LBS=1) |
+| 128   | 1,536| 1,536† | 4,300   | 6,604,800  | 16.13% | 58.5%            | [8528834](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/sy6gomvy) (2026-06-06, LBS=1) |
+| 256   | 3,072| 6,144  | 5,002   | 15,366,144 | 18.77% | 68.1%            | 2026-05-29 sweep |
+| 512   | 6,144| 12,288 | —       | —          | —      | —                | Pending (needs prod queue) |
+| 1,024 | 12,288| 24,576| —       | —          | —      | —                | Blocked: `set_determinism` init crash, see [project_1024n_init_crash](.) |
+| 2,048 | 24,576| 49,152| —       | —          | —      | —                | Blocked: same as 1,024 |
+| 4,096 | 49,152| 98,304| —       | —          | —      | —                | Blocked: same as 1,024 |
 
-**Headline:** With the production `ezpz yeet-env` setup applied to the
-scaling sweep, small-N (4–32) lands cleanly at **~27% MFU** (matching
-the torch-2.13 Sunspot target and well above the torch-2.10 Sunspot
-baseline below). At **N=256** with one successful sweep, throughput
-dropped to 18.77% MFU (≈68% efficiency vs 4N).
+† 64N + 128N were re-run on 2026-06-06 after a multi-week block. The
+script default at the time was still `LBS=1`, so their GBS is half what
+it should be for apples-to-apples with the rest of the table. The
+script default is now `LBS=2` (commit `4ceffb31e`); these two cells
+should be re-run for a clean comparison.
 
-**Known failure modes blocking the missing N:**
+**Headline:** Small-N (4–32) lands at **~27% MFU** (matches the torch
+2.13 Sunspot target and well above the torch-2.10 Sunspot baseline
+below). At N=256 throughput drops to 18.77% MFU (≈68% efficiency vs
+4N). 64N + 128N at LBS=1 sit at 18–19% / 16% MFU; expect ~25–27% once
+re-run at LBS=2.
 
-- `n=64` and `n=128` retries all CRASH with `from sh import qstat`
-  ImportError. Root cause: when the scaling job is launched via
-  `qsub -- /bin/bash -c '...'` (non-login subshell), `module` is
-  undefined → `module load oneapi/release/2025.3.1` silently fails
-  → oneAPI MPI binaries (incl. `mpiexec`, `qstat`) are not on PATH
-  → `ezpz launch` → `get_active_jobid()` → `from sh import qstat`
-  → ImportError. Fixed across multiple commits ending at `2b0073170`
-  (source `/etc/bash.bashrc.local` to define `module` + `MODULEPATH`
-  the same way `bash --login` does). Pending validation on a fresh
-  submission.
-- `n=512`+ NO_OUTPUT: distinct from sh.qstat. At 6,144 ranks the
-  failure mode is XCCL communicator init segfault (or
-  `set_determinism std::bad_alloc` at 12,288 + 49,152 ranks); see
-  [`memory/project_1024n_init_crash.md`](.). The yeet helped at
-  N=256 but doesn't fully fix the larger-N init scaling wall.
+### Historical: the n=64 / n=128 CRASH era (2026-05-29 → 2026-06-06)
 
-**Raw sweep dirs aggregated** (for `aggregate_scaling.py`):
-- `outputs/scaling_2b_aurora/20260529_081759/` (n=4/8/16/32 OK, n=64
-  most-recent CRASH; n=128/256 retries CRASH from sh.qstat bug)
-- `outputs/scaling_2b_aurora/20260529_075349/` (n=256 OK, the one
-  clean N=256 result this week)
+The 64N / 128N cells used to read `CRASH` because of five stacked
+bugs in the scaling wrapper. All resolved by 2026-06-06:
+
+1. **`.venv.tar.gz` rebuild lost `.venv/bin/`** (empty in tarball
+   even though present in source venv). Rebuilt manually.
+2. **Wrapper's trailing `"$@"`** on the inner `ezpz launch python3 -m
+   torchtitan...train` invocation leaked PBS `-v` CLI args straight
+   into the training entry point, causing instant arg-parse failure
+   (NO_OUTPUT wall <60s). Removed (commit `6c6235fdf`).
+3. **blendcorpus segfault at ≥768 ranks** in
+   `blendcorpus_builder.py:275 __init__`. Bypassed by adding a
+   `SCALING_DATASET` env knob so the sweep can run against an HF
+   streaming dataset (sweeps now default to
+   `eliplutchok/fineweb-small-sample`).
+4. **`qsub -- /bin/bash -c "..."` swallowed the `#!/bin/bash --login`
+   shebang**, leaving `module` undefined on the PBS-spawned shell →
+   `module load oneapi/release/2025.3.1` silently failed → oneAPI MPI
+   binaries (`mpiexec`, `qstat`) not on PATH →
+   `from sh import qstat` ImportError. Fix: submit the script
+   directly (`qsub <script>`), not via `bash -c`.
+5. **PATH-order race** propagated rank-N `python3` ahead of
+   `/tmp/.venv/bin`, so the rank-N `python3 -m torchtitan...train`
+   imported a system Python with no ezpz. Pinned the inner command to
+   `${VIRTUAL_ENV:-/tmp/.venv}/bin/python3`.
+
+512N+ NO_OUTPUT is a distinct failure mode: at ≥6,144 ranks the
+init wall is an XCCL communicator segfault or `set_determinism
+std::bad_alloc`; see [`memory/project_1024n_init_crash.md`](.). The
+yeet helped at N=256 but doesn't fully clear the larger-N init
+scaling wall.
+
+**Raw run dirs:**
+
+- `outputs/scaling_2b_aurora/20260529_081759/` (n=4/8/16/32 OK)
+- `outputs/scaling_2b_aurora/20260529_075349/` (n=256 OK)
+- `outputs/scaling_study_aurora/20260606_170634/n64/` (LBS=1 OK)
+- `outputs/scaling_study_aurora/20260606_175221/n128/` (LBS=1 OK)
 
 ## Sunspot Weak Scaling (torch 2.10, 1–64 nodes, April 2026)
 

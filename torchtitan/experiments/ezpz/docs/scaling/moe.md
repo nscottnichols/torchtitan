@@ -33,6 +33,19 @@ Memory usage grows with node count (all-to-all communication buffers).
 moe_7b OOMs at 32+ nodes. See [TODO — MoE throughput optimization](../TODO.md#3-moe-throughput-optimization)
 for planned experiments (EP, TP, float8).
 
+## Aurora torch 2.13 — NOT RUNNING
+
+| Nodes | Status | Notes |
+|-------|--------|-------|
+| 64 | NO_OUTPUT | 8528805 (2026-06-06), 251s wall |
+| 128 | CRASH | 8528834 (2026-06-06), 163s wall |
+
+Likely the upstream `edp_mesh=None` SIGABRT regression noted in
+CLAUDE.md "MoE SIGABRT". Open diagnosis task: re-run on Aurora torch
+2.13 was attempted as part of the 2026-06-06 scaling unblock; logs
+preserved at
+`outputs/scaling_study_aurora/20260606_{170634,175221}/n{64,128}/light/moe_2b.log`.
+
 ## Results Directory
 
 - Sunspot: `outputs/scaling_study/20260412_091635/`

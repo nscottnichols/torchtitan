@@ -16,14 +16,16 @@
 
 ## Aurora Weak Scaling (torch 2.13, 2–4096 nodes) — In Progress
 
-| Nodes | GPUs | GBS | TPS/GPU | TFLOPS | MFU | Memory | Loss (final) | Status |
-|-------|------|-----|---------|--------|-----|--------|--------------|--------|
-| 2 | 24 | 24 | 440 | 65.3 | 22.0% | 32.07 GiB (50%) | 9.43 | Complete |
-| 4 | 48 | — | — | — | — | — | — | Pending |
-| 8 | 96 | — | — | — | — | — | — | Pending |
-| 16 | 192 | — | — | — | — | — | — | Pending |
-| 32 | 384 | 768 | 4,500 | 50.3 | 16.9% | 43.96 GiB (69%) | 12.91 | Complete |
-| 64–4096 | — | — | — | — | — | — | — | Pending |
+| Nodes | GPUs | GBS | TPS/GPU | TFLOPS | MFU | Memory | Loss (final) | Status | Job |
+|-------|------|-----|---------|--------|-----|--------|--------------|--------|-----|
+| 2 | 24 | 24 | 440 | 65.3 | 22.0% | 32.07 GiB (50%) | 9.43 | Complete | 2026-04 |
+| 4 | 48 | — | — | — | — | — | — | Pending | |
+| 8 | 96 | — | — | — | — | — | — | Pending | |
+| 16 | 192 | — | — | — | — | — | — | Pending | |
+| 32 | 384 | 768 | 4,500 | 50.3 | 16.9% | 43.96 GiB (69%) | 12.91 | Complete | 2026-04 |
+| 64 | 768 | 1,536 | 453 | 67.34 | 22.58% | 28.86 GiB (45%) | — | Complete | [8521698](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/3pm3admv) + [8528805](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/i0gra8by) (2026-06-06) |
+| 128 | 1,536 | 3,072 | 417 | 62.12 | 20.83% | 28.73 GiB (45%) | — | Complete | [8528834](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/5kpt6al1) (2026-06-06) |
+| 256–4096 | — | — | — | — | — | — | — | Pending | |
 
 **Config:** SophiaG LR=2.28e-5, compile=on, seq_len=8192, olmo-mix-1124
 
@@ -35,9 +37,9 @@
 |------------|-------|----------|
 | 2 | debug | 1h |
 | 4–256 | debug-scaling | 1h |
-| 256–1024 | prod → small | 6h |
-| 1025–1919 | prod → medium | 6h |
-| 1920+ | prod → large | 6h |
+| 256–1024 | prod → small | 12h |
+| 1025–1919 | prod → medium | 12h |
+| 1920+ | prod → large | 12h |
 
 ## Results Directory
 
