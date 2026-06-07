@@ -20,6 +20,24 @@ was required in ezpz.
 
 ---
 
+## 2026-06-06 (48th sync — 1-commit follow-up to spmd_types/AC story; no ezpz replay)
+
+Pulled 1 commit (`641b5f6b8..21c77d165`) immediately after the 47th sync:
+
+- **[`21c77d165` — disable autograd multithreading
+  (#3565)](https://github.com/pytorch/torchtitan/pull/3565).** 5-line
+  add to `torchtitan/distributed/utils.py:init_distributed`:
+  ``torch.autograd.set_multithreading_enabled(False)``. Needed for
+  AC functionality with the new spmd_types backend: multi-threaded
+  autograd means BWD recompute threads can't access PGs (e.g.
+  ``current_mesh().get_group("tp")``) for collectives. Touches only
+  core `distributed/utils.py`. ezpz inherits the new behavior via
+  `dist_utils.init_distributed(config.comm, ...)` in
+  `FaultTolerantTrainer.init_distributed`. No replay needed; no
+  conflicts.
+
+---
+
 ## 2026-06-06 (47th sync — RoPE + optimizer refactors replayed; SMOKES PASSED, READY TO MERGE)
 
 **Status: READY TO MERGE — worktree `ezpz-46th-47th-sync` validated
