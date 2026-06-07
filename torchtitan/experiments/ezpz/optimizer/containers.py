@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 import torch
@@ -50,6 +51,14 @@ __all__ = [
 
 
 class ADOPTOptimizersContainer(OptimizersContainer):
+    # Empty Config subclass so OptimizersContainer.Config.build() instantiates
+    # THIS class (which has the ADOPT-registering _resolve_optimizer_cls)
+    # instead of the base. Without this override, .build() builds the base
+    # OptimizersContainer, whose _resolve_optimizer_cls only knows Adam/AdamW.
+    @dataclass(kw_only=True, slots=True)
+    class Config(OptimizersContainer.Config):
+        pass
+
     @staticmethod
     def _resolve_optimizer_cls(name: str) -> type:
         if name == "ADOPT":
@@ -58,6 +67,10 @@ class ADOPTOptimizersContainer(OptimizersContainer):
 
 
 class SophiaGOptimizersContainer(OptimizersContainer):
+    @dataclass(kw_only=True, slots=True)
+    class Config(OptimizersContainer.Config):
+        pass
+
     @staticmethod
     def _resolve_optimizer_cls(name: str) -> type:
         if name == "SophiaG":
@@ -72,6 +85,10 @@ class SophiaGOptimizersContainer(OptimizersContainer):
 
 
 class MuonOptimizersContainer(OptimizersContainer):
+    @dataclass(kw_only=True, slots=True)
+    class Config(OptimizersContainer.Config):
+        pass
+
     @staticmethod
     def _resolve_optimizer_cls(name: str) -> type:
         if name == "Muon":
@@ -80,6 +97,10 @@ class MuonOptimizersContainer(OptimizersContainer):
 
 
 class MuonClipOptimizersContainer(MuonOptimizersContainer):
+    @dataclass(kw_only=True, slots=True)
+    class Config(MuonOptimizersContainer.Config):
+        pass
+
     @staticmethod
     def _resolve_optimizer_cls(name: str) -> type:
         if name == "MuonClip":
@@ -88,6 +109,10 @@ class MuonClipOptimizersContainer(MuonOptimizersContainer):
 
 
 class ManoOptimizersContainer(OptimizersContainer):
+    @dataclass(kw_only=True, slots=True)
+    class Config(OptimizersContainer.Config):
+        pass
+
     @staticmethod
     def _resolve_optimizer_cls(name: str) -> type:
         if name == "Mano":
@@ -101,6 +126,10 @@ class ScheduleFreeOptimizersContainer(OptimizersContainer):
     Requires .train() before training and .eval() before evaluation/checkpointing.
     Based on: https://github.com/facebookresearch/schedule_free
     """
+
+    @dataclass(kw_only=True, slots=True)
+    class Config(OptimizersContainer.Config):
+        pass
 
     @staticmethod
     def _resolve_optimizer_cls(name: str) -> type:
@@ -120,6 +149,10 @@ class ScheduleFreeOptimizersContainer(OptimizersContainer):
 
 
 class SPAMOptimizersContainer(OptimizersContainer):
+    @dataclass(kw_only=True, slots=True)
+    class Config(OptimizersContainer.Config):
+        pass
+
     @staticmethod
     def _resolve_optimizer_cls(name: str) -> type:
         if name == "SPAM":
@@ -192,8 +225,12 @@ class TorchMuonOptimizersContainer(OptimizersContainer):
     optimizer_kwargs.
     """
 
+    @dataclass(kw_only=True, slots=True)
+    class Config(OptimizersContainer.Config):
+        pass
+
     def __init__(
-        self, config: OptimizersContainer.Config, *, model_parts: list[nn.Module]
+        self, config: Config, *, model_parts: list[nn.Module]
     ) -> None:
         import torch.optim
 
@@ -292,7 +329,7 @@ def default_adopt(
         def clip_lambda(step: int, _power: float = power) -> float:  # noqa: F811
             return step**_power
 
-    return OptimizersContainer.Config(
+    return ADOPTOptimizersContainer.Config(
         param_groups=[
             ParamGroupConfig(
                 pattern=r".*",
@@ -314,7 +351,7 @@ def default_adopt(
 
 def default_sophiag(lr: float = 3e-4, **kwargs: Any) -> OptimizersContainer.Config:
     """One-group SophiaG config."""
-    return OptimizersContainer.Config(
+    return SophiaGOptimizersContainer.Config(
         param_groups=[
             ParamGroupConfig(
                 pattern=r".*",
@@ -333,7 +370,7 @@ def default_sophiag(lr: float = 3e-4, **kwargs: Any) -> OptimizersContainer.Conf
 
 def default_muon(lr: float = 2.4e-3, **kwargs: Any) -> OptimizersContainer.Config:
     """One-group Muon config."""
-    return OptimizersContainer.Config(
+    return MuonOptimizersContainer.Config(
         param_groups=[
             ParamGroupConfig(
                 pattern=r".*",
@@ -362,7 +399,7 @@ def default_muon_clip(
     **kwargs: Any,
 ) -> OptimizersContainer.Config:
     """One-group MuonClip config."""
-    return OptimizersContainer.Config(
+    return MuonClipOptimizersContainer.Config(
         param_groups=[
             ParamGroupConfig(
                 pattern=r".*",
@@ -388,7 +425,7 @@ def default_muon_clip(
 
 def default_mano(lr: float = 3e-4, **kwargs: Any) -> OptimizersContainer.Config:
     """One-group Mano config."""
-    return OptimizersContainer.Config(
+    return ManoOptimizersContainer.Config(
         param_groups=[
             ParamGroupConfig(
                 pattern=r".*",
@@ -411,7 +448,7 @@ def default_schedule_free(
     weight_lr_power: float = 2.0, **kwargs: Any,
 ) -> OptimizersContainer.Config:
     """One-group AdamWScheduleFree config."""
-    return OptimizersContainer.Config(
+    return ScheduleFreeOptimizersContainer.Config(
         param_groups=[
             ParamGroupConfig(
                 pattern=r".*",
@@ -440,7 +477,7 @@ def default_spam(
     **kwargs: Any,
 ) -> OptimizersContainer.Config:
     """One-group SPAM config."""
-    return OptimizersContainer.Config(
+    return SPAMOptimizersContainer.Config(
         param_groups=[
             ParamGroupConfig(
                 pattern=r".*",
@@ -473,7 +510,7 @@ def default_torch_muon(
     ignored — it exists only to carry the kwargs into the container's
     bespoke __init__.
     """
-    return OptimizersContainer.Config(
+    return TorchMuonOptimizersContainer.Config(
         param_groups=[
             ParamGroupConfig(
                 pattern=r".*",
