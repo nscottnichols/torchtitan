@@ -16,7 +16,14 @@ from torchtitan.experiments.ezpz.agpt import (
     _default_inner_attention,
     _ezpz_get_attention_config,
 )
-from torchtitan.models.common import Embedding, Linear, RMSNorm, RoPE, TransformerBlock
+from torchtitan.models.common import (
+    ComplexRoPE,
+    Embedding,
+    Linear,
+    RMSNorm,
+    RoPE,
+    TransformerBlock,
+)
 from torchtitan.models.common.config_utils import (
     make_experts_config,
     make_ffn_config,
@@ -119,6 +126,7 @@ def _make_moe_attn_config(
     qk_nope_head_dim: int,
     qk_rope_head_dim: int,
     v_head_dim: int,
+    rope: RoPE.Config,
     mscale: float = 1.0,
     attn_backend: str = "sdpa",
 ) -> Attention.Config:
@@ -187,6 +195,7 @@ def _make_moe_attn_config(
         ),
         inner_attention=_inner,
         mask_type=_mask,
+        rope=dataclasses.replace(rope),
     )
 
 
@@ -216,6 +225,7 @@ def _build_moe_layers(
     attn_backend: str = "sdpa",
     moe_comm_backend: str = "standard",
     compute_backend: ExpertComputeBackend = "grouped_mm",
+    rope: RoPE.Config,
 ) -> list[TransformerBlock.Config]:
     """Build the list of per-layer TransformerBlock configs.
 
@@ -238,6 +248,7 @@ def _build_moe_layers(
             v_head_dim=v_head_dim,
             mscale=mscale,
             attn_backend=attn_backend,
+            rope=rope,
         )
 
         if layer_id < n_dense_layers:
@@ -325,6 +336,16 @@ def _debugmodel() -> moeModel.Config:
         router_top_k=3,
         router_score_func="softmax",
         score_before_experts=False,
+        rope=ComplexRoPE.Config(
+            dim=rope_dim,
+            max_seq_len=4096 * 4,
+            theta=10000.0,
+            scaling="yarn",
+            rope_factor=40.0,
+            beta_fast=32.0,
+            beta_slow=1.0,
+            original_seq_len=4096,
+        ),
     )
     return moeModel.Config(
         vocab_size=vocab_size,
@@ -337,17 +358,6 @@ def _debugmodel() -> moeModel.Config:
             in_features=dim,
             out_features=vocab_size,
             param_init=_output_linear_init(dim),
-        ),
-        rope=RoPE.Config(
-            dim=rope_dim,
-            max_seq_len=4096 * 4,
-            theta=10000.0,
-            backend="complex",
-            scaling="yarn",
-            rope_factor=40.0,
-            beta_fast=32.0,
-            beta_slow=1.0,
-            original_seq_len=4096,
         ),
         layers=layers,
     )
@@ -384,6 +394,16 @@ def _debugmodel_flex_attn() -> moeModel.Config:
         router_score_func="softmax",
         score_before_experts=False,
         attn_backend="flex",
+        rope=ComplexRoPE.Config(
+            dim=rope_dim,
+            max_seq_len=4096 * 4,
+            theta=10000.0,
+            scaling="yarn",
+            rope_factor=40.0,
+            beta_fast=32.0,
+            beta_slow=1.0,
+            original_seq_len=4096,
+        ),
     )
     return moeModel.Config(
         vocab_size=vocab_size,
@@ -396,17 +416,6 @@ def _debugmodel_flex_attn() -> moeModel.Config:
             in_features=dim,
             out_features=vocab_size,
             param_init=_output_linear_init(dim),
-        ),
-        rope=RoPE.Config(
-            dim=rope_dim,
-            max_seq_len=4096 * 4,
-            theta=10000.0,
-            backend="complex",
-            scaling="yarn",
-            rope_factor=40.0,
-            beta_fast=32.0,
-            beta_slow=1.0,
-            original_seq_len=4096,
         ),
         layers=layers,
     )
@@ -445,6 +454,16 @@ def _small() -> moeModel.Config:
         router_route_scale=1.0,
         score_before_experts=False,
         attn_backend="flex",
+        rope=ComplexRoPE.Config(
+            dim=rope_dim,
+            max_seq_len=256128,
+            theta=50000.0,
+            scaling="yarn",
+            rope_factor=40.0,
+            beta_fast=32.0,
+            beta_slow=1.0,
+            original_seq_len=4096,
+        ),
     )
     return moeModel.Config(
         vocab_size=vocab_size,
@@ -457,17 +476,6 @@ def _small() -> moeModel.Config:
             in_features=dim,
             out_features=vocab_size,
             param_init=_output_linear_init(dim),
-        ),
-        rope=RoPE.Config(
-            dim=rope_dim,
-            max_seq_len=256128,
-            theta=50000.0,
-            backend="complex",
-            scaling="yarn",
-            rope_factor=40.0,
-            beta_fast=32.0,
-            beta_slow=1.0,
-            original_seq_len=4096,
         ),
         layers=layers,
     )
@@ -504,6 +512,16 @@ def _16b() -> moeModel.Config:
         router_score_func="softmax",
         score_before_experts=False,
         attn_backend="flex",
+        rope=ComplexRoPE.Config(
+            dim=rope_dim,
+            max_seq_len=4096 * 4,
+            theta=10000.0,
+            scaling="yarn",
+            rope_factor=40.0,
+            beta_fast=32.0,
+            beta_slow=1.0,
+            original_seq_len=4096,
+        ),
     )
     return moeModel.Config(
         vocab_size=vocab_size,
@@ -516,17 +534,6 @@ def _16b() -> moeModel.Config:
             in_features=dim,
             out_features=vocab_size,
             param_init=_output_linear_init(dim),
-        ),
-        rope=RoPE.Config(
-            dim=rope_dim,
-            max_seq_len=4096 * 4,
-            theta=10000.0,
-            backend="complex",
-            scaling="yarn",
-            rope_factor=40.0,
-            beta_fast=32.0,
-            beta_slow=1.0,
-            original_seq_len=4096,
         ),
         layers=layers,
     )
@@ -567,6 +574,16 @@ def _236b() -> moeModel.Config:
         router_route_scale=16.0,
         score_before_experts=False,
         attn_backend="flex",
+        rope=ComplexRoPE.Config(
+            dim=rope_dim,
+            max_seq_len=4096 * 4,
+            theta=10000.0,
+            scaling="yarn",
+            rope_factor=40.0,
+            beta_fast=32.0,
+            beta_slow=1.0,
+            original_seq_len=4096,
+        ),
     )
     return moeModel.Config(
         vocab_size=vocab_size,
@@ -579,17 +596,6 @@ def _236b() -> moeModel.Config:
             in_features=dim,
             out_features=vocab_size,
             param_init=_output_linear_init(dim),
-        ),
-        rope=RoPE.Config(
-            dim=rope_dim,
-            max_seq_len=4096 * 4,
-            theta=10000.0,
-            backend="complex",
-            scaling="yarn",
-            rope_factor=40.0,
-            beta_fast=32.0,
-            beta_slow=1.0,
-            original_seq_len=4096,
         ),
         layers=layers,
     )
@@ -631,6 +637,16 @@ def _671b() -> moeModel.Config:
         router_route_norm=True,
         score_before_experts=False,
         attn_backend="flex",
+        rope=ComplexRoPE.Config(
+            dim=rope_dim,
+            max_seq_len=4096 * 4,
+            theta=10000.0,
+            scaling="yarn",
+            rope_factor=40.0,
+            beta_fast=32.0,
+            beta_slow=1.0,
+            original_seq_len=4096,
+        ),
     )
     return moeModel.Config(
         vocab_size=vocab_size,
@@ -643,17 +659,6 @@ def _671b() -> moeModel.Config:
             in_features=dim,
             out_features=vocab_size,
             param_init=_output_linear_init(dim),
-        ),
-        rope=RoPE.Config(
-            dim=rope_dim,
-            max_seq_len=4096 * 4,
-            theta=10000.0,
-            backend="complex",
-            scaling="yarn",
-            rope_factor=40.0,
-            beta_fast=32.0,
-            beta_slow=1.0,
-            original_seq_len=4096,
         ),
         layers=layers,
     )
@@ -690,6 +695,16 @@ def _500m() -> moeModel.Config:
         router_top_k=3,
         router_score_func="softmax",
         score_before_experts=False,
+        rope=ComplexRoPE.Config(
+            dim=rope_dim,
+            max_seq_len=4096 * 4,
+            theta=10000.0,
+            scaling="yarn",
+            rope_factor=40.0,
+            beta_fast=32.0,
+            beta_slow=1.0,
+            original_seq_len=4096,
+        ),
     )
     return moeModel.Config(
         vocab_size=vocab_size,
@@ -702,17 +717,6 @@ def _500m() -> moeModel.Config:
             in_features=dim,
             out_features=vocab_size,
             param_init=_output_linear_init(dim),
-        ),
-        rope=RoPE.Config(
-            dim=rope_dim,
-            max_seq_len=4096 * 4,
-            theta=10000.0,
-            backend="complex",
-            scaling="yarn",
-            rope_factor=40.0,
-            beta_fast=32.0,
-            beta_slow=1.0,
-            original_seq_len=4096,
         ),
         layers=layers,
     )
@@ -749,6 +753,16 @@ def _2b() -> moeModel.Config:
         router_top_k=3,
         router_score_func="softmax",
         score_before_experts=False,
+        rope=ComplexRoPE.Config(
+            dim=rope_dim,
+            max_seq_len=4096 * 4,
+            theta=10000.0,
+            scaling="yarn",
+            rope_factor=40.0,
+            beta_fast=32.0,
+            beta_slow=1.0,
+            original_seq_len=4096,
+        ),
     )
     return moeModel.Config(
         vocab_size=vocab_size,
@@ -761,17 +775,6 @@ def _2b() -> moeModel.Config:
             in_features=dim,
             out_features=vocab_size,
             param_init=_output_linear_init(dim),
-        ),
-        rope=RoPE.Config(
-            dim=rope_dim,
-            max_seq_len=4096 * 4,
-            theta=10000.0,
-            backend="complex",
-            scaling="yarn",
-            rope_factor=40.0,
-            beta_fast=32.0,
-            beta_slow=1.0,
-            original_seq_len=4096,
         ),
         layers=layers,
     )
@@ -811,6 +814,16 @@ def _4b() -> moeModel.Config:
         router_top_k=3,
         router_score_func="softmax",
         score_before_experts=False,
+        rope=ComplexRoPE.Config(
+            dim=rope_dim,
+            max_seq_len=4096 * 4,
+            theta=10000.0,
+            scaling="yarn",
+            rope_factor=40.0,
+            beta_fast=32.0,
+            beta_slow=1.0,
+            original_seq_len=4096,
+        ),
     )
     return moeModel.Config(
         vocab_size=vocab_size,
@@ -823,17 +836,6 @@ def _4b() -> moeModel.Config:
             in_features=dim,
             out_features=vocab_size,
             param_init=_output_linear_init(dim),
-        ),
-        rope=RoPE.Config(
-            dim=rope_dim,
-            max_seq_len=4096 * 4,
-            theta=10000.0,
-            backend="complex",
-            scaling="yarn",
-            rope_factor=40.0,
-            beta_fast=32.0,
-            beta_slow=1.0,
-            original_seq_len=4096,
         ),
         layers=layers,
     )
@@ -874,6 +876,16 @@ def _7b() -> moeModel.Config:
         router_top_k=3,
         router_score_func="softmax",
         score_before_experts=False,
+        rope=ComplexRoPE.Config(
+            dim=rope_dim,
+            max_seq_len=4096 * 4,
+            theta=10000.0,
+            scaling="yarn",
+            rope_factor=40.0,
+            beta_fast=32.0,
+            beta_slow=1.0,
+            original_seq_len=4096,
+        ),
     )
     return moeModel.Config(
         vocab_size=vocab_size,
@@ -886,17 +898,6 @@ def _7b() -> moeModel.Config:
             in_features=dim,
             out_features=vocab_size,
             param_init=_output_linear_init(dim),
-        ),
-        rope=RoPE.Config(
-            dim=rope_dim,
-            max_seq_len=4096 * 4,
-            theta=10000.0,
-            backend="complex",
-            scaling="yarn",
-            rope_factor=40.0,
-            beta_fast=32.0,
-            beta_slow=1.0,
-            original_seq_len=4096,
         ),
         layers=layers,
     )
@@ -933,6 +934,16 @@ def _10b_2b() -> moeModel.Config:
         router_score_func="softmax",
         score_before_experts=False,
         attn_backend="flex",
+        rope=ComplexRoPE.Config(
+            dim=rope_dim,
+            max_seq_len=4096 * 4,
+            theta=10000.0,
+            scaling="yarn",
+            rope_factor=40.0,
+            beta_fast=32.0,
+            beta_slow=1.0,
+            original_seq_len=4096,
+        ),
     )
     return moeModel.Config(
         vocab_size=vocab_size,
@@ -945,17 +956,6 @@ def _10b_2b() -> moeModel.Config:
             in_features=dim,
             out_features=vocab_size,
             param_init=_output_linear_init(dim),
-        ),
-        rope=RoPE.Config(
-            dim=rope_dim,
-            max_seq_len=4096 * 4,
-            theta=10000.0,
-            backend="complex",
-            scaling="yarn",
-            rope_factor=40.0,
-            beta_fast=32.0,
-            beta_slow=1.0,
-            original_seq_len=4096,
         ),
         layers=layers,
     )

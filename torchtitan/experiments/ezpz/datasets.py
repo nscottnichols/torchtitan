@@ -23,6 +23,7 @@
 
 from __future__ import annotations
 
+import functools
 import logging
 from collections.abc import Callable
 from typing import Any
@@ -115,13 +116,27 @@ def register_local_dataset(
     return config
 
 
+def _extract_text_column(sample: dict[str, Any], text_column: str) -> str:
+    """Module-level helper for ``_make_text_processor``.
+
+    Defined at module scope (not as a nested closure) so it can be
+    pickled by ``multiprocessing.reduction`` when ``--dataloader.num-workers
+    > 0`` causes the PyTorch DataLoader to fork worker processes via
+    forkserver. Pickling a local closure here previously raised
+    ``PicklingError: Can't pickle local object _make_text_processor.<locals>._process``
+    and crashed every HF-dataset run with ``num_workers > 0``.
+    """
+    return sample[text_column]
+
+
 def _make_text_processor(text_column: str = "text") -> Callable:
-    """Build a sample processor that extracts text from a given column."""
+    """Build a sample processor that extracts text from a given column.
 
-    def _process(sample: dict[str, Any]) -> str:
-        return sample[text_column]
-
-    return _process
+    Uses ``functools.partial`` over ``_extract_text_column`` (module-scope)
+    instead of returning a local closure so the resulting callable is
+    pickleable for DataLoader worker processes.
+    """
+    return functools.partial(_extract_text_column, text_column=text_column)
 
 
 def register_hf_dataset(

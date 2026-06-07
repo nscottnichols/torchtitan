@@ -97,6 +97,136 @@ historical-v1-bf16 + evals figure dirs.
 
 ---
 
+## 2026-06-06 — 47th upstream sync (replays + smokes + post-smoke fixes; READY TO MERGE)
+
+Pulled 34 commits since the 46th sync. Two structural refactors hit
+ezpz; both replayed, smoked against baselines, and validated.
+
+### Replays (initial)
+
+1. **PR #3458 (RoPE refactor) — commit `02dd1e7fe`.** Splits
+   `RoPE.Config` into `ComplexRoPE.Config` / `CosSinRoPE.Config`,
+   moves rope ownership from top-level model config down to per-layer
+   `Attention.Config`, removes the `apply_rotary_emb_*` helpers in
+   favour of `self.rope = config.rope.build()` +
+   `q, k = self.rope(q, k, positions)`. Replayed across
+   `agpt/__init__.py`, `agpt/config_registry.py`, `moe/__init__.py`,
+   and `moe/model.py`.
+
+2. **PR #3269 (mixed-optimizer refactor) — commit `bac0a3473`.**
+   Replaces the flat `OptimizersContainer.Config(lr=8e-4)` shape
+   with `param_groups=[ParamGroupConfig(pattern, optimizer_name,
+   optimizer_kwargs={"lr":...})]`. Custom-container subclasses are
+   now thin wrappers registering their optimizer via
+   `_resolve_optimizer_cls`; added 8 `default_<name>(lr=..., **kwargs)`
+   factories mirroring upstream's `default_adamw`. Replayed across
+   `optimizer/containers.py`, `optimizer/__init__.py`, both
+   `config_registry.py`'s, `competition/configs.py` (28 callsites +
+   19 in-place LR mutations), and `train.py`'s `--optimizer` CLI
+   swap helper.
+
+Full breakdown of both halves + the other 32 upstream commits in
+[`upstream-sync.md`](upstream-sync.md).
+
+### Baseline numerics smoke (against the 2026-06-02 baselines)
+
+| Config        | Job      | Outcome                                            |
+|---------------|----------|----------------------------------------------------|
+| `moe_2b_ep` 2N | 12468156 | 10 steps clean, loss 12.95 → 7.92, mem 58.28 GiB matches baseline |
+| `agpt_80b TP=2` 4N | 12468157 | 20 steps clean, all within ±0.08 nat of baseline, mem + MFU bit-identical |
+
+### Coverage smokes — full registry sweep
+
+Then ran a wider smoke sweep to exercise the rest of the registry.
+This caught 3 real bugs in the initial replay, all now fixed:
+
+| Config | Outcome | Notes |
+|---|---|---|
+| `agpt_2b` | ✅ 10 steps, 12.95 → 7.63, ~20% MFU | |
+| `agpt_2b_real` | ✅ 10 steps, 12.99 → 8.50 | validates CosSinRoPE swap path through rewritten `_set_rope_backend` |
+| `agpt_20b` | ✅ 10 steps, 12.90 → 10.39 | loss noisy (no warmup, hot LR) but trains |
+| `moe_2b` (LBS=2) | ✅ 10 steps, 12.94 → 8.52 | (default LBS=16 OOMs, pre-existing) |
+| `moe_10b_2b_sdpa_ep` (LBS=1, AC=selective) | ✅ 10 steps, 12.96 → 9.44, mem 51.12 GiB / 80% | new default — see fix #3 below |
+| `speedrun_2b_muon` (LBS=1) | ✅ 10 steps, 12.93 → 9.32, ~3,000 tps | validates Muon dispatch — see fix #1 below |
+| `speedrun_2b_sophiag` (LBS=1) | ✅ step 1 reached training | validates SophiaG dispatch via fix #1 |
+| `moe_10b_2b` | ⏭ skipped | block_causal mask + HF-dataset mismatch (pre-existing, unrelated to sync) |
+| `moe_10b_2b_sdpa{,_ep}` @ AC=full | ⏭ known broken | `CheckpointError: Recomputed values have different metadata` — MoE token routing isn't bit-exact across recompute (failure exists since at least 2026-05-12; PR #3146/#3450 fixed the forward path only) |
+
+### Post-smoke fixes
+
+1. **`optimizer/containers.py` — Config-dispatch bug (commit `6871e736b`).**
+   The initial replay collapsed each custom container into a thin
+   wrapper but the `default_<name>(...)` factories returned
+   `OptimizersContainer.Config(...)` whose `_owner` is the base
+   class. So `cfg.optimizer.build()` constructed the base
+   container, whose `_resolve_optimizer_cls` only knows Adam/AdamW —
+   any custom optimizer name (`Muon`, `SophiaG`, ...) raised
+   `NotImplementedError: Optimizer Muon not added`. Caught by
+   `speedrun_2b_muon` + `speedrun_2b_sophiag` smokes. Fix: add an
+   empty `class Config(OptimizersContainer.Config): pass` to each
+   of the 8 subclasses (so `_owner` binds to the subclass), and
+   update each `default_<name>` factory to return the subclass's
+   Config.
+2. **`moe/config_registry.py` — 5 missed `cfg.optimizer.lr` mutations
+   (commit `455013ed5`).** The optimizer refactor caught the 19
+   such mutations in `competition/configs.py` but missed five in
+   `moe/config_registry.py` (`moe_16b`, `moe_671b`, `moe_10b_2b`,
+   `moe_10b_2b_sdpa`, `smoke_moe_500m_50steps`). Same fix as
+   competition: write through `cfg.optimizer.param_groups[0].optimizer_kwargs["lr"]`
+   instead of `cfg.optimizer.lr`. Caught when smoking
+   `moe_10b_2b`.
+3. **`moe/config_registry.py` — `moe_10b_2b_sdpa{,_ep}` defaults
+   changed to LBS=1 + AC="selective" (commit `975a5bcd1`).** Prior
+   default `(LBS=2, AC="none")` OOMs at first forward on 2N Sunspot
+   (level_zero `UR_RESULT_ERROR_OUT_OF_RESOURCES`). Production
+   scripts already overrode LBS=1 on the CLI, so this brings the
+   registry in line. AC="full" can't be the answer — it hits the
+   long-standing `CheckpointError` from non-deterministic MoE
+   routing under recompute. AC="selective" only checkpoints the
+   SAC save list (excludes the router), so the non-deterministic
+   op never gets recomputed and shapes stay stable. Verified on
+   job 12468186: 10 steps clean, peak 51.12 GiB / 79.9% (vs OOM
+   at LBS=2).
+4. **`datasets.py` — pickle fix for HF datasets + `num_workers >= 1`
+   (commit `8746dfe2c`).** `_make_text_processor` returned a local
+   closure that couldn't be pickled by PyTorch's `forkserver`
+   DataLoader workers. Crashed every HF-dataset run with
+   `num_workers > 0` (e.g. `agpt_2b ... --dataloader.dataset eliplutchok/fineweb-small-sample --dataloader.num-workers=2`).
+   Pre-existing bug, not a replay regression. Fix: move `_process`
+   to module scope as `_extract_text_column` + use `functools.partial`.
+
+### Side notes from the merge
+
+- Installed `spmd_types==0.2.1` into `.venv` via `uv pip install`
+  (upstream `components/loss.py` requires it after PR #3466/#3467/#3560).
+- Worktree symlinks (`.venv`, `.venv.tar.gz`, `assets/hf`) added
+  by hand so submitted jobs find them — git ignores them.
+
+### Final branch state
+
+```
+8746dfe2c datasets pickle fix
+975a5bcd1 moe 10b_2b_sdpa{,_ep} → LBS=1/AC=selective default
+455013ed5 moe registry 5 cfg.optimizer.lr fixes
+6871e736b optimizer Config-dispatch fix
+bc89aa85e docs (optimizer half done)
+bac0a3473 optimizer refactor replay
+3748b9e9c docs (RoPE half done)
+02dd1e7fe RoPE replay
+fb1c5a319 merge upstream/main
+```
+
+### Open follow-ups
+
+- File pytorch/pytorch issue for MoE + AC-full `CheckpointError`
+  (router non-determinism across recompute). Long-standing — the
+  fix requires AC to save the routing decision instead of
+  recomputing it.
+- Audit the 4 RL commits in this sync — `experiments/ezpz/rl/`
+  may need attention if they touch shared surfaces.
+
+---
+
 ## 2026-06-02 — 46th upstream sync (graph_trainer-only, no ezpz replay)
 
 Pulled 2 new commits since the 45th sync (`04a309858..27aa49077`):

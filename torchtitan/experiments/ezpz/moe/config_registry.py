@@ -16,7 +16,7 @@ from torchtitan.components.checkpoint import CheckpointManager
 from torchtitan.components.loss import CrossEntropyLoss
 from torchtitan.components.lr_scheduler import LRSchedulersContainer
 from torchtitan.components.metrics import MetricsProcessor
-from torchtitan.components.optimizer import OptimizersContainer
+from torchtitan.components.optimizer import default_adamw, OptimizersContainer
 from torchtitan.components.quantization.float8 import (
     Float8GroupedExpertsConverter,
     Float8LinearConverter,
@@ -95,7 +95,7 @@ def _base_config(flavor: str) -> FaultTolerantTrainer.Config:
         model_spec=model_registry(flavor),
         tokenizer=EZPZTokenizer.Config(backend="hf"),
         loss=CrossEntropyLoss.Config(),
-        optimizer=OptimizersContainer.Config(lr=8e-4),
+        optimizer=default_adamw(lr=8e-4),
         lr_scheduler=LRSchedulersContainer.Config(
             warmup_steps=200,
             decay_ratio=0.8,
@@ -225,7 +225,7 @@ def moe_16b() -> FaultTolerantTrainer.Config:
         local_batch_size=4,
         hf_assets_path="./assets/hf/deepseek-moe-16b-base",
     )
-    cfg.optimizer.lr = 2.2e-4
+    cfg.optimizer.param_groups[0].optimizer_kwargs["lr"] = 2.2e-4
     cfg.lr_scheduler.decay_type = "cosine"
     cfg.lr_scheduler.min_lr_factor = 0.1
     cfg.lr_scheduler.warmup_steps = 200
@@ -242,7 +242,7 @@ def moe_671b() -> FaultTolerantTrainer.Config:
         local_batch_size=4,
         hf_assets_path="./assets/hf/DeepSeek-V3.1-Base",
     )
-    cfg.optimizer.lr = 2.2e-4
+    cfg.optimizer.param_groups[0].optimizer_kwargs["lr"] = 2.2e-4
     cfg.lr_scheduler.warmup_steps = 2000
     cfg.lr_scheduler.decay_type = "cosine"
     cfg.lr_scheduler.min_lr_factor = 0.1
@@ -297,7 +297,7 @@ def moe_2b_ep() -> FaultTolerantTrainer.Config:
 
 def moe_10b_2b() -> FaultTolerantTrainer.Config:
     cfg = moe("10B_2B", local_batch_size=1)
-    cfg.optimizer.lr = 2.2e-4
+    cfg.optimizer.param_groups[0].optimizer_kwargs["lr"] = 2.2e-4
     cfg.lr_scheduler.decay_type = "cosine"
     cfg.lr_scheduler.min_lr_factor = 0.1
     cfg.training.steps = 1000
@@ -306,9 +306,23 @@ def moe_10b_2b() -> FaultTolerantTrainer.Config:
 
 
 def moe_10b_2b_sdpa() -> FaultTolerantTrainer.Config:
-    cfg = moe("10B_2B_sdpa", local_batch_size=2,
-              activation_checkpoint_mode="none")
-    cfg.optimizer.lr = 2.2e-4
+    # LBS=1 + AC=selective is the empirically-working combo on 2N
+    # Sunspot. The prior (LBS=2, AC="none") default OOMs at first
+    # forward; flipping to AC="full" hits PyTorch's
+    # ``CheckpointError: Recomputed values have different metadata``
+    # because MoE token-routing isn't bit-exact under recompute (the
+    # router selects one fewer/more token in a few experts → saved
+    # shape (N, hidden) vs recomputed (N±1, hidden)). AC="selective"
+    # only checkpoints the SAC save-list — which excludes the router
+    # — so the non-deterministic op never gets recomputed and the
+    # shape stays stable. PR #3146/#3450 made the routing's ``histc``
+    # → ``bincount`` swap deterministic in the *forward* path, but
+    # AC=full still recomputes a different routing each pass; the
+    # shape divergence is fundamental until AC saves the routing
+    # result instead of recomputing it.
+    cfg = moe("10B_2B_sdpa", local_batch_size=1,
+              activation_checkpoint_mode="selective")
+    cfg.optimizer.param_groups[0].optimizer_kwargs["lr"] = 2.2e-4
     cfg.lr_scheduler.decay_type = "cosine"
     cfg.lr_scheduler.min_lr_factor = 0.1
     cfg.training.steps = 1000
@@ -337,7 +351,7 @@ def smoke_moe_500m_50steps() -> FaultTolerantTrainer.Config:
     cfg.dataloader.dataset_path = None
     cfg.training.steps = 50
     cfg.checkpoint.enable = False
-    cfg.optimizer.lr = 8e-4
+    cfg.optimizer.param_groups[0].optimizer_kwargs["lr"] = 8e-4
     cfg.lr_scheduler.warmup_steps = 5
     cfg.lr_scheduler.decay_ratio = 0.0
     cfg.metrics.log_freq = 1

@@ -8,6 +8,14 @@ from torchtitan.experiments.ezpz.optimizer.containers import (
     SPAMOptimizersContainer,
     SophiaGOptimizersContainer,
     TorchMuonOptimizersContainer,
+    default_adopt,
+    default_mano,
+    default_muon,
+    default_muon_clip,
+    default_schedule_free,
+    default_sophiag,
+    default_spam,
+    default_torch_muon,
 )
 from torchtitan.experiments.ezpz.optimizer.mano import Mano
 from torchtitan.experiments.ezpz.optimizer.muon import Muon, MuonClip, QKInputRecorder
@@ -28,4 +36,14 @@ __all__ = [
     "SPAMOptimizersContainer",
     "SophiaG",
     "SophiaGOptimizersContainer",
+    "ScheduleFreeOptimizersContainer",
+    "TorchMuonOptimizersContainer",
+    "default_adopt",
+    "default_mano",
+    "default_muon",
+    "default_muon_clip",
+    "default_schedule_free",
+    "default_sophiag",
+    "default_spam",
+    "default_torch_muon",
 ]

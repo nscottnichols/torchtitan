@@ -9,7 +9,7 @@ from torchtitan.components.checkpoint import CheckpointManager
 from torchtitan.components.loss import ChunkedCELoss, CrossEntropyLoss
 from torchtitan.components.lr_scheduler import LRSchedulersContainer
 from torchtitan.components.metrics import MetricsProcessor
-from torchtitan.components.optimizer import OptimizersContainer
+from torchtitan.components.optimizer import default_adamw, OptimizersContainer
 from torchtitan.experiments.ezpz.validator import EzpzValidator
 from torchtitan.config import ActivationCheckpointConfig, CommConfig, TrainingConfig
 from torchtitan.config.configs import CompileConfig
@@ -45,15 +45,27 @@ def _set_rope_backend(
 ) -> FaultTolerantTrainer.Config:
     """Switch every RoPE callsite in the model spec to ``backend``.
 
-    Both the model-level rope.backend and each layer's
-    attention.rope_backend need to flip — they're independent fields
-    in the config tree (the model owns the freqs cache; each
-    GQAttention reads its own rope_backend at forward time).
+    PR #3458 (RoPE refactor) split ``RoPE.Config`` into
+    ``ComplexRoPE.Config`` / ``CosSinRoPE.Config`` and dropped the
+    ``backend`` string field — backend is now encoded in the type.
+    The top-level ``Model.Config.rope`` field is also gone; each
+    layer's ``Attention.Config`` owns its own rope. So flipping the
+    backend means rebuilding each layer's ``attention.rope`` as a
+    fresh instance of the target subclass, copying over all other
+    fields (dim / max_seq_len / theta / scaling / yarn params).
     """
+    from dataclasses import fields
+
+    from torchtitan.models.common import ComplexRoPE, CosSinRoPE
+
+    target_cls = ComplexRoPE.Config if backend == "complex" else CosSinRoPE.Config
     model = cfg.model_spec.model
-    model.rope.backend = backend
     for layer in model.layers:
-        layer.attention.rope_backend = backend
+        old_rope = layer.attention.rope
+        if old_rope is None:
+            continue
+        kwargs = {f.name: getattr(old_rope, f.name) for f in fields(old_rope)}
+        layer.attention.rope = target_cls(**kwargs)
     return cfg
 
 
@@ -148,7 +160,7 @@ def _base_config(flavor: str) -> FaultTolerantTrainer.Config:
         model_spec=model_registry(flavor),
         tokenizer=EZPZTokenizer.Config(backend="hf"),
         loss=CrossEntropyLoss.Config(),
-        optimizer=OptimizersContainer.Config(lr=8e-4),
+        optimizer=default_adamw(lr=8e-4),
         lr_scheduler=LRSchedulersContainer.Config(
             warmup_steps=200,
             decay_ratio=0.8,

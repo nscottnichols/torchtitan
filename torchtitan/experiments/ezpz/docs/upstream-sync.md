@@ -20,6 +20,204 @@ was required in ezpz.
 
 ---
 
+## 2026-06-06 (47th sync — RoPE + optimizer refactors replayed; SMOKES PASSED, READY TO MERGE)
+
+**Status: READY TO MERGE — worktree `ezpz-46th-47th-sync` validated
+end-to-end.** Both structural refactors replayed; 7 of 9 configs
+smoked clean (the 2 skips are pre-existing constraints, not
+regressions). 4 post-smoke bugs fixed in-place. See journal for the
+full smoke matrix.
+
+Pulled 34 commits (`27aa49077..641b5f6b8`) from `upstream/main`.
+
+### Replayed (RoPE refactor, PR #3458)
+
+[`02d24f017` — Move centralized freqs_cis to each transform
+layer](https://github.com/pytorch/torchtitan/pull/3458). Three
+structural changes:
+
+1. `RoPE.Config` split into `ComplexRoPE.Config` and `CosSinRoPE.Config`
+   — `backend="complex"|"cos_sin"` field gone, backend encoded in
+   type.
+2. Top-level `Model.Config.rope` removed; each layer's
+   `Attention.Config` owns a `rope: RoPE.Config`. `decoder.forward`
+   no longer threads `freqs_cis`.
+3. `apply_rotary_emb_{complex,cos_sin,single_complex}` removed.
+   Caller pattern: `self.rope = config.rope.build()` then
+   `q, k = self.rope(q, k, positions)`.
+
+Replayed across 4 ezpz files in commit `02dd1e7fe`:
+
+* `agpt/__init__.py`: `_build_agpt_layers(rope=RoPE.Config)` plumbing;
+  `rope_backend` kept as a back-compat keyword that selects the
+  subclass internally; dropped top-level `AgptModel.Config(rope=...)`.
+* `agpt/config_registry.py`: `_set_rope_backend` rewritten to swap
+  each per-layer `attention.rope` to a fresh `ComplexRoPE.Config` /
+  `CosSinRoPE.Config`, carrying forward all other fields via
+  `dataclasses.fields()`.
+* `moe/__init__.py`: `_make_moe_attn_config(rope=...)` +
+  `_build_moe_layers(rope=...)` plumbing; all 11 config functions
+  push their `ComplexRoPE.Config` from `moeModel.Config(...)` into
+  `_build_moe_layers(rope=...)`. `_small` keeps its outlier
+  `theta=50000` / `max_seq_len=256128`.
+* `moe/model.py`: `Attention.Config` drops the legacy
+  `rope_{factor,max_seq_len,original_seq_len}` triple, gains
+  `rope: RoPE.Config`. `Attention.__init__` reads
+  `config.rope.{max_seq_len, original_seq_len, rope_factor}`, builds
+  `self.rope`. `Attention.forward` drops `freqs_cis` and replaces
+  two `apply_rotary_emb_single_complex` calls with one
+  `self.rope(q_pe, k_pe.unsqueeze(2), positions)` returning both
+  rotated tensors. `moeTransformerBlock.forward` drops `freqs_cis`.
+  `moeModel.Config.update_from_config` drops the now-redundant
+  rope-sync block.
+
+**Verified end-to-end** under torch 2.13 venv (login node import test):
+agpt configs `debugmodel` / `2B` / `80B` and all 10 moe flavors
+`debugmodel` / `500M` / `2B` / `small` / `4B` / `7B` / `16B` / `236B`
+/ `10B_2B` / `10B_2B_sdpa` all build cleanly. Numerics-equivalence
+smoke against pre-merge baselines NOT yet run.
+
+### Replayed (mixed-optimizer refactor, PR #3269)
+
+[`632f67f12` — [optimizer] support mixed
+optimizers](https://github.com/pytorch/torchtitan/pull/3269) replaces
+the flat `OptimizersContainer.Config(lr=8e-4)` shape with a per-group
+shape:
+
+```python
+OptimizersContainer.Config(
+    param_groups=[ParamGroupConfig(pattern=r".*", optimizer_name="AdamW",
+                                   optimizer_kwargs={"lr": 8e-4})],
+    implementation="fused",
+)
+```
+
+`OptimizersContainer.__init__` walks model params first-match-wins,
+batches by `optimizer_name`, and instantiates one optimizer per
+`(model_part, optimizer_name)` pair. Subclasses register additional
+optimizer types via `_resolve_optimizer_cls(name)`. The flat `lr` /
+`beta1` / `beta2` / `eps` / `weight_decay` / `name` fields are gone
+from `OptimizersContainer.Config`; users supply them through
+`ParamGroupConfig.optimizer_kwargs`.
+
+Replayed across 6 ezpz surfaces in commit `bac0a3473`:
+
+* `optimizer/containers.py`: each custom container subclass is now
+  thin — just overrides `_resolve_optimizer_cls(name)` to register
+  its optimizer class name. Dropped the flat-field Config classes
+  and `_build_optimizer_kwargs` helpers. Added matching
+  `default_<name>(lr=..., **kwargs)` factories
+  (`default_muon`, `default_sophiag`, `default_mano`,
+  `default_spam`, `default_adopt`, `default_muon_clip`,
+  `default_schedule_free`, `default_torch_muon`) mirroring
+  upstream's `default_adamw`. Kept the runtime extras
+  (`SophiaG.update_hessian`, `ScheduleFree.train_mode/eval_mode`,
+  `_CompositeOptimizer`, `register_muonclip_qk_pairs`).
+  `TorchMuonOptimizersContainer` keeps its bespoke `__init__`
+  (shape-based split doesn't fit pattern grouping) but reads its
+  kwargs from `param_groups[0].optimizer_kwargs`.
+* `optimizer/__init__.py`: re-export 8 new `default_<name>`
+  factories + the previously-missing `ScheduleFree` / `TorchMuon`
+  container symbols.
+* `agpt/config_registry.py`, `moe/config_registry.py`: swap
+  baseline `OptimizersContainer.Config(lr=8e-4)` to
+  `default_adamw(lr=8e-4)`.
+* `competition/configs.py`: 28 `<Custom>OptimizersContainer.Config(lr=X)`
+  callsites swapped to `default_<name>(lr=X)`. 19 post-construction
+  `cfg.optimizer.lr = X` mutations rewritten to
+  `cfg.optimizer.param_groups[0].optimizer_kwargs["lr"] = X`.
+* `train.py`: rewrote the `_build_optimizer_config` swap helper
+  (`--optimizer <name> --optimizer.<key>=<val>`). The old version
+  walked `dataclasses.fields(OptimizersContainer.Config)` for
+  `lr`/`beta1`/etc. — those fields no longer exist. New version
+  is a thin dispatch through `_OPTIMIZER_FACTORIES[name](**overrides)`
+  with a `_coerce_override` helper for bool/int/float/str string
+  coercion. Dropped the now-unused `dataclasses` import.
+
+**Verified end-to-end** under torch 2.13 venv (login node import test):
+
+- agpt configs (debugmodel, 2B, 20B, 80B) — all build, all
+  show `param_groups=1 first_pg=AdamW/0.0008`.
+- moe registry (10 flavors) + baseline configs
+  (`moe_2b`, `moe_2b_ep`, `moe_debugmodel`) — all build.
+- All **48 of 48** competition configs build cleanly (after fixing
+  19 `cfg.optimizer.lr = X` mutations).
+- All 9 `--optimizer <name>` swap paths exercised through
+  `_build_optimizer_config` with single + multi-kwarg overrides.
+
+`lr_finder.py:205` only reads container class names for output
+directory layout — no code change needed.
+
+Numerics-equivalence smoke against pre-merge baselines NOT yet run.
+
+### Other commits in this sync (no ezpz replay required)
+
+- `641b5f6b8` / `fec0c175d` / `c0428bb18` — spmd_types backend
+  config + manual loss parallel CE. Adds a runtime dep on
+  `spmd_types==0.2.1` (already in upstream `requirements.txt`).
+  Installed into `.venv` via `uv pip install`.
+- `06d4a35e2` — Qwen3 30B-A3B config. ezpz doesn't have a qwen3
+  folder; n/a.
+- 10 graph_trainer-only commits; n/a.
+- 4 RL commits — possibly need attention if ezpz/rl/ shares the
+  same surface; not yet audited.
+- 6 CI / ROCm / Monarch / checkout infra commits; n/a.
+
+### Post-replay smokes + fixes
+
+Numerics smoke against pre-merge baselines:
+
+- **moe_2b_ep 2N** (job 12468156): 10 steps clean, loss 12.95 → 7.92,
+  memory bit-identical to 2026-06-02 baseline.
+- **agpt_80b TP=2 4N** (job 12468157): 20 steps clean, all losses
+  within ±0.08 nat of 2026-06-02 baseline, MFU + memory + grad-norm
+  shape match.
+
+Wider coverage smoke surfaced 3 real bugs in the initial replay, all
+now fixed in the worktree:
+
+| Commit | Fix |
+|---|---|
+| `6871e736b` | `optimizer/containers.py` Config-dispatch bug. Each custom container subclass now carries its own empty `Config(OptimizersContainer.Config): pass` so `build()` instantiates the subclass instead of the base. Otherwise `NotImplementedError: Optimizer Muon not added` at trainer init. |
+| `455013ed5` | 5 missed `cfg.optimizer.lr = X` mutations in `moe/config_registry.py` (moe_16b, moe_671b, moe_10b_2b, moe_10b_2b_sdpa, smoke_moe_500m_50steps). Same fix pattern as the 19 in competition/configs.py. |
+| `975a5bcd1` | `moe_10b_2b_sdpa{,_ep}` defaults changed to `(LBS=1, AC="selective")`. Prior `(LBS=2, AC="none")` OOMs at first forward on 2N. AC="full" hits `CheckpointError: Recomputed values have different metadata` from MoE router non-determinism under recompute. AC="selective" excludes the router from the save list → router never gets recomputed → shapes stay stable. |
+
+One pre-existing bug found in passing (not a replay regression but
+fixed while we were here):
+
+| Commit | Fix |
+|---|---|
+| `8746dfe2c` | `datasets.py` `_make_text_processor` returned a local closure that couldn't be pickled by PyTorch's `forkserver` DataLoader workers. Every HF-dataset run with `--dataloader.num-workers >= 1` crashed at first batch with `PicklingError`. Fix: module-level helper + `functools.partial`. |
+
+Final smoke matrix:
+
+| Config | Status | Notes |
+|---|---|---|
+| moe_2b_ep 2N | ✅ baseline match | |
+| agpt_80b TP=2 4N | ✅ baseline match | |
+| agpt_2b | ✅ 10 steps, 12.95 → 7.63 | |
+| agpt_2b_real | ✅ 10 steps, 12.99 → 8.50 | validates CosSinRoPE swap |
+| agpt_20b | ✅ 10 steps, 12.90 → 10.39 | noisy (no warmup) but trains |
+| moe_2b (LBS=2) | ✅ 10 steps, 12.94 → 8.52 | LBS=16 OOMs (pre-existing) |
+| moe_10b_2b_sdpa_ep (LBS=1 + AC=selective, new defaults) | ✅ 10 steps, 12.96 → 9.44, 80% mem | |
+| speedrun_2b_muon (LBS=1) | ✅ 10 steps, 12.93 → 9.32 | validates Muon dispatch |
+| speedrun_2b_sophiag (LBS=1) | ✅ step 1 reached training | validates SophiaG dispatch |
+| moe_10b_2b | ⏭ skipped | block_causal mask + HF-dataset mismatch (pre-existing) |
+| moe_10b_2b_sdpa{,_ep} @ AC=full | ⏭ known broken | MoE router non-determinism under recompute (long-standing) |
+
+### Action items (post-merge)
+
+- File pytorch/pytorch issue for MoE + AC=full `CheckpointError`
+  (long-standing; PR #3146/#3450 fixed the forward path only).
+- Audit the 4 RL commits in this sync — `experiments/ezpz/rl/` may
+  need attention if they touch shared surfaces.
+
+Merge commit: `fb1c5a319` (worktree).
+Replay commits: `02dd1e7fe` (RoPE), `bac0a3473` (mixed-optimizer).
+Post-smoke fixes: `6871e736b`, `455013ed5`, `975a5bcd1`, `8746dfe2c`.
+
+---
+
 ## 2026-06-02 (46th sync — graph_trainer-only deltas, no ezpz replay)
 
 Pulled 2 commits (`04a309858..27aa49077`) from `upstream/main`. Both
