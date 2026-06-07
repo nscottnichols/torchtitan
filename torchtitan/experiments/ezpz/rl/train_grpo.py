@@ -208,15 +208,25 @@ def _bootstrap_fsdp_env(
     # TrainingArguments.fsdp accepts str | list[FSDPOption] | None
     if not fsdp:
         return  # plain DDP — leave env alone
-    if isinstance(fsdp, (list, tuple)):
-        # CLI like --fsdp "full_shard auto_wrap" parses into a list of enums
-        strategy_key = " ".join(str(x).lower() for x in fsdp).split()[0]
-    else:
-        strategy_key = str(fsdp).strip().split()[0].lower()
 
-    if strategy_key not in _FSDP_STRATEGY_MAP:
+    def _opt_name(x) -> str:
+        # FSDPOption is a str enum; its .value is e.g. 'full_shard'.
+        # Plain strings come through unchanged.
+        return getattr(x, "value", str(x)).lower()
+
+    if isinstance(fsdp, (list, tuple)):
+        # CLI like --fsdp "full_shard auto_wrap" parses into a list of
+        # FSDPOption enums; we only care about the sharding-strategy slot.
+        tokens = [_opt_name(x) for x in fsdp]
+    else:
+        tokens = _opt_name(fsdp).split()
+
+    strategy_key = next(
+        (t for t in tokens if t in _FSDP_STRATEGY_MAP), None
+    )
+    if strategy_key is None:
         raise ValueError(
-            f"--fsdp must start with one of {sorted(_FSDP_STRATEGY_MAP)}; "
+            f"--fsdp must include one of {sorted(_FSDP_STRATEGY_MAP)}; "
             f"got {fsdp!r}"
         )
 
@@ -275,6 +285,21 @@ def main() -> None:
         cpu_ram_efficient_loading=ezpz_args.fsdp_cpu_ram_efficient_loading,
         bf16=config.bf16,
     )
+
+    # When FSDP is on, prefer FSDP's native activation checkpointing over
+    # HF Trainer's gradient_checkpointing — the latter inserts a redundant
+    # AllGather in backward (transformers issue #30404). We migrate the
+    # user's --gradient_checkpointing into fsdp_config["activation_checkpointing"]
+    # and clear the Trainer-side flag.
+    if config.fsdp and config.gradient_checkpointing:
+        fsdp_cfg = dict(config.fsdp_config) if config.fsdp_config else {}
+        fsdp_cfg.setdefault("activation_checkpointing", True)
+        config.fsdp_config = fsdp_cfg
+        config.gradient_checkpointing = False
+        log.info(
+            "[FSDP] migrated --gradient_checkpointing → "
+            "fsdp_config.activation_checkpointing=True"
+        )
 
     rank = ezpz.distributed.get_rank()
     device_type = ezpz.distributed.get_torch_device_type()
