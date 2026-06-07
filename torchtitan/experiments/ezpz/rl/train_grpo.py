@@ -193,7 +193,11 @@ def _ezpz_grpo_config_cls():
 
 
 def _resolve_model(name: str) -> str:
-    """Try to load tokenizer for *name*; fall back if it doesn't exist."""
+    """Try to load tokenizer for *name*; fall back if it doesn't exist.
+
+    Only rank 0 should call this. Other ranks should receive the
+    resolved name via broadcast (see _prefetch_and_broadcast_model).
+    """
     from transformers import AutoTokenizer
 
     try:
@@ -202,6 +206,60 @@ def _resolve_model(name: str) -> str:
     except Exception:
         log.warning(f"Model {name!r} not available, falling back to {FALLBACK_MODEL!r}")
         return FALLBACK_MODEL
+
+
+def _prefetch_and_broadcast_model(model_name: str, rank: int) -> str:
+    """Resolve + prefetch model files on rank 0, then barrier so all
+    ranks load from a populated HF cache.
+
+    HF Hub rate-limits per-IP HEAD requests; 48 ranks doing
+    ``AutoConfig.from_pretrained`` / ``AutoTokenizer.from_pretrained``
+    / ``AutoModel.from_pretrained`` concurrently against the same
+    repo hits 429s and stalls every retry by 200+s. Pre-warming the
+    cache from rank 0 collapses that to a single sequence of
+    requests, then all ranks read from disk after the barrier.
+
+    Returns the resolved model name (broadcast from rank 0 so all
+    ranks see the same fallback decision).
+    """
+    import torch.distributed as dist
+    from transformers import AutoConfig, AutoTokenizer
+
+    if rank == 0:
+        # First: resolve fallback (tokenizer HEAD; populates cache too)
+        resolved = _resolve_model(model_name) if model_name else _resolve_model(DEFAULT_MODEL)
+        log.info(f"[prefetch] rank 0 resolved model={resolved!r}; warming HF cache...")
+        # Force the config + tokenizer + weights HEAD/GET to populate
+        # the on-disk cache. Weights pulled here so worker ranks just
+        # mmap them later instead of each issuing their own HEAD.
+        try:
+            AutoConfig.from_pretrained(resolved)
+            AutoTokenizer.from_pretrained(resolved)
+            # snapshot_download pulls weight shards into the cache
+            from huggingface_hub import snapshot_download
+            snapshot_download(repo_id=resolved, allow_patterns=[
+                "*.json", "*.txt", "*.model", "tokenizer*",
+                "*.safetensors", "*.bin",
+            ])
+            log.info(f"[prefetch] rank 0 cache warm for {resolved!r}")
+        except Exception as e:
+            # Non-fatal: per-rank loads will still hit network. Log
+            # and move on — the user might be using a local path
+            # (no snapshot_download needed) or be intentionally offline.
+            log.warning(f"[prefetch] rank 0 cache warm failed: {e}; continuing")
+    else:
+        resolved = ""
+
+    # Broadcast the resolved name from rank 0 so worker ranks pick
+    # up the same fallback choice. object_list broadcast handles
+    # arbitrary Python types.
+    if dist.is_initialized():
+        names = [resolved]
+        dist.broadcast_object_list(names, src=0)
+        resolved = names[0]
+        dist.barrier()  # don't let workers hit the cache until rank 0 finishes writing
+
+    return resolved
 
 
 _FSDP_STRATEGY_MAP = {
@@ -320,8 +378,11 @@ def main() -> None:
     rank = ezpz.distributed.get_rank()
     device_type = ezpz.distributed.get_torch_device_type()
 
-    # Resolve model: CLI override → default with fallback
-    model_name = ezpz_args.model_name_or_path or _resolve_model(DEFAULT_MODEL)
+    # Resolve + pre-warm HF cache on rank 0, then barrier so worker
+    # ranks read from cache instead of hammering HF Hub with 48
+    # concurrent HEAD requests (which trips per-IP rate limits, see
+    # HTTP 429 retries with 200s+ backoffs).
+    model_name = _prefetch_and_broadcast_model(ezpz_args.model_name_or_path, rank)
 
     # Fill in output_dir sentinel from task
     if config.output_dir is None:
