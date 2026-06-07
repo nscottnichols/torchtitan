@@ -116,6 +116,15 @@ DFL_PARENT="torchtitan/experiments/ezpz/data-lists/$(ezpz_get_machine_name)"
 DFL_NAME="${DFL_NAME:-olmo-mix-1124}"
 DFL="${DFL_PARENT}/${DFL_NAME}.txt"
 
+# DATASET selects the dataloader path. Two shapes:
+#   blendcorpus (default)                  → uses BlendCorpus with $DFL data-list
+#   <hf-org>/<repo> e.g. eliplutchok/...    → uses HuggingFace streaming
+# blendcorpus is the production default (deterministic mix per data-list).
+# HF streaming is useful for ad-hoc runs that don't need a curated mix
+# (e.g. moving the working 80B config to a machine without the canonical
+# olmo-mix-1124 data list, or smoke-testing before that list is built).
+DATASET="${DATASET:-blendcorpus}"
+
 # CKPT_KEEP_LATEST_K is HARDCODED to 0 (= keep all). DO NOT change.
 # Setting this > 0 causes torchtitan's _purge_stale_checkpoints() to
 # delete every prior step-* dir on every save, irreversibly. Lost ~334
@@ -130,7 +139,15 @@ if [[ -n "${CKPT_KEEP_LATEST_K:-}" && "${CKPT_KEEP_LATEST_K}" != "0" ]]; then
 fi
 CKPT_KEEP_LATEST_K=0
 CKPT_INTERVAL="${CKPT_INTERVAL:-100}"
-CKPT_DIR="${CKPT_DIR:-checkpoints/agpt-${MODEL}-${OPTIMIZER}-${DFL_NAME}-n${NNODES}-gbs${GBS}}"
+# For HF-streamed datasets the ckpt dir uses the dataset name (sanitized
+# for path-safety) instead of DFL_NAME, so different datasets get distinct
+# ckpt chains and don't clobber each other.
+if [[ "${DATASET}" == "blendcorpus" ]]; then
+    _CKPT_DATASET_SLUG="${DFL_NAME}"
+else
+    _CKPT_DATASET_SLUG="$(echo "${DATASET}" | tr '/' '-')"
+fi
+CKPT_DIR="${CKPT_DIR:-checkpoints/agpt-${MODEL}-${OPTIMIZER}-${_CKPT_DATASET_SLUG}-n${NNODES}-gbs${GBS}}"
 DATA_CACHE_PATH="${CKPT_DIR}/.cache/${DFL_NAME}/index-cache"
 
 log_message INFO "==========================================="
@@ -145,6 +162,7 @@ log_message INFO "OPTIMIZER: ${OPTIMIZER}"
 log_message INFO "LR: ${LR}"
 log_message INFO "TP: ${TP}, AC: ${ACKPT_MODE}, compile: OFF"
 log_message INFO "GBS: ${GBS}"
+log_message INFO "DATASET: ${DATASET}"
 log_message INFO "Checkpoint directory: ${CKPT_DIR}"
 log_message INFO "==========================================="
 
@@ -155,6 +173,23 @@ log_message INFO "==========================================="
 #   --activation-checkpoint.mode=full     (required to fit in memory)
 #   --compile.no-enable                    (compile crashes on torch 2.13)
 #   --parallelism.expert-parallel-degree=1 (dense, no MoE)
+
+# Build dataloader flag set based on DATASET shape (see DATASET= comment
+# above). BlendCorpus needs the data-list path + index cache; HF streaming
+# takes neither.
+if [[ "${DATASET}" == "blendcorpus" ]]; then
+    DATALOADER_FLAGS=(
+        "--dataloader.dataset=blendcorpus"
+        "--dataloader.dataset-path=${DFL}"
+        "--dataloader.data-cache-path=${DATA_CACHE_PATH}"
+        "--dataloader.num-workers=2"
+    )
+else
+    DATALOADER_FLAGS=(
+        "--dataloader.dataset=${DATASET}"
+        "--dataloader.num-workers=2"
+    )
+fi
 
 # ---- Preflight: catch bad nodes BEFORE 30+ min of model init ----
 # Run a tiny single-rank-per-node ezpz.examples.test through failover_run so
@@ -186,10 +221,7 @@ failover_run ezpz launch python3 -m torchtitan.experiments.ezpz.train \
     --checkpoint.keep-latest-k="${CKPT_KEEP_LATEST_K}" \
     --checkpoint.no-last-save-model-only \
     --checkpoint.async-mode="${CHECKPOINT_ASYNC_MODE:-async}" \
-    --dataloader.dataset=blendcorpus \
-    --dataloader.dataset-path="${DFL}" \
-    --dataloader.data-cache-path="${DATA_CACHE_PATH}" \
-    --dataloader.num-workers=2 \
+    "${DATALOADER_FLAGS[@]}" \
     --debug.print-config \
     --optimizer="${OPTIMIZER}" \
     --optimizer.lr="${LR}" \
