@@ -257,17 +257,15 @@ cc @H-Huang @awgu @wanchaol @fegin @fduwjj @wz337 @wconstab @d4l3k @pragupta @ms
 - [x] **Repro verified end-to-end** (job 12468191, Sunspot 1N,
       2026-06-07). Both layers print `REPRODUCED`; the run log
       pasted above is the actual output, not predicted.
-- [ ] Run `python -m torch.utils.collect_env` on the same node and
-      paste into the **Versions** section.
-- [ ] File the issue against pytorch/pytorch — use the suggested
-      title + labels + cc list above, paste the body between
-      `---ISSUE-BODY-BEGIN---` and `---ISSUE-BODY-END---`.
-- [ ] After filing, add a `Filed as pytorch/pytorch#XXXX` line to the
-      top of
-      [`xccl_split_group_unsupported.md`](xccl_split_group_unsupported.md)
-      so future-us can find the upstream tracker from the workaround
-      doc.
-- [ ] Cross-reference: comment on
-      [pytorch/pytorch#171938](https://github.com/pytorch/pytorch/issues/171938)
-      after filing with "filed sibling issue #XXXX for the xccl-only
-      / DeviceMesh path".
+- [x] `python -m torch.utils.collect_env` captured on a Sunspot
+      compute node (job 12468193) and pasted into the **Versions**
+      section.
+- [x] **Filed as [pytorch/pytorch#186548](https://github.com/pytorch/pytorch/issues/186548)** on 2026-06-07.
+- [x] Added `Filed as pytorch/pytorch#186548` banner to the top of
+      [`xccl_split_group_unsupported.md`](xccl_split_group_unsupported.md).
+- [x] Cross-commented on
+      [pytorch/pytorch#171938](https://github.com/pytorch/pytorch/issues/171938#issuecomment-4643077531)
+      linking the new sibling issue.
+
+All done — this draft doc can be kept as a record of the filing or
+deleted once #186548 is closed upstream.

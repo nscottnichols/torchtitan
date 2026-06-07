@@ -1,5 +1,12 @@
 # `ProcessGroupXCCL` never overrides `supportsSplitting()`
 
+> **Filed upstream as [pytorch/pytorch#186548](https://github.com/pytorch/pytorch/issues/186548)** (2026-06-07). Issue body
+> mirrors this doc + adds a verified Sunspot repro log + `collect_env`
+> block. Sibling: [pytorch/pytorch#171938](https://github.com/pytorch/pytorch/issues/171938).
+> Workaround module:
+> [`xccl_split_group_workaround.py`](../../xccl_split_group_workaround.py).
+> Removal criteria: see the bottom of this doc.
+
 ## TL;DR
 
 `ProcessGroupXCCL` inherits `Backend::supportsSplitting()` from
