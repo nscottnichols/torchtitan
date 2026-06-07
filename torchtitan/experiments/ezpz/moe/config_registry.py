@@ -225,7 +225,7 @@ def moe_16b() -> FaultTolerantTrainer.Config:
         local_batch_size=4,
         hf_assets_path="./assets/hf/deepseek-moe-16b-base",
     )
-    cfg.optimizer.lr = 2.2e-4
+    cfg.optimizer.param_groups[0].optimizer_kwargs["lr"] = 2.2e-4
     cfg.lr_scheduler.decay_type = "cosine"
     cfg.lr_scheduler.min_lr_factor = 0.1
     cfg.lr_scheduler.warmup_steps = 200
@@ -242,7 +242,7 @@ def moe_671b() -> FaultTolerantTrainer.Config:
         local_batch_size=4,
         hf_assets_path="./assets/hf/DeepSeek-V3.1-Base",
     )
-    cfg.optimizer.lr = 2.2e-4
+    cfg.optimizer.param_groups[0].optimizer_kwargs["lr"] = 2.2e-4
     cfg.lr_scheduler.warmup_steps = 2000
     cfg.lr_scheduler.decay_type = "cosine"
     cfg.lr_scheduler.min_lr_factor = 0.1
@@ -297,7 +297,7 @@ def moe_2b_ep() -> FaultTolerantTrainer.Config:
 
 def moe_10b_2b() -> FaultTolerantTrainer.Config:
     cfg = moe("10B_2B", local_batch_size=1)
-    cfg.optimizer.lr = 2.2e-4
+    cfg.optimizer.param_groups[0].optimizer_kwargs["lr"] = 2.2e-4
     cfg.lr_scheduler.decay_type = "cosine"
     cfg.lr_scheduler.min_lr_factor = 0.1
     cfg.training.steps = 1000
@@ -308,7 +308,7 @@ def moe_10b_2b() -> FaultTolerantTrainer.Config:
 def moe_10b_2b_sdpa() -> FaultTolerantTrainer.Config:
     cfg = moe("10B_2B_sdpa", local_batch_size=2,
               activation_checkpoint_mode="none")
-    cfg.optimizer.lr = 2.2e-4
+    cfg.optimizer.param_groups[0].optimizer_kwargs["lr"] = 2.2e-4
     cfg.lr_scheduler.decay_type = "cosine"
     cfg.lr_scheduler.min_lr_factor = 0.1
     cfg.training.steps = 1000
@@ -337,7 +337,7 @@ def smoke_moe_500m_50steps() -> FaultTolerantTrainer.Config:
     cfg.dataloader.dataset_path = None
     cfg.training.steps = 50
     cfg.checkpoint.enable = False
-    cfg.optimizer.lr = 8e-4
+    cfg.optimizer.param_groups[0].optimizer_kwargs["lr"] = 8e-4
     cfg.lr_scheduler.warmup_steps = 5
     cfg.lr_scheduler.decay_ratio = 0.0
     cfg.metrics.log_freq = 1
