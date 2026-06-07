@@ -161,6 +161,34 @@ def _ezpz_grpo_config_cls():
         # --- vLLM (off by default — XPU vLLM is fragile) -----------------------
         use_vllm: bool = False
 
+        def __post_init__(self):
+            # When --fsdp is on and gradient_checkpointing would otherwise
+            # be True, migrate to fsdp_config["activation_checkpointing"]
+            # BEFORE TrainingArguments.__post_init__ runs — that's where
+            # the "redundant AllGather" warning lives (training_args.py:2732),
+            # and once super() emits it, it's emitted on every rank for
+            # the rest of the run.
+            #
+            # We do this in __post_init__ rather than in main() so that
+            # transformers' own check passes (gradient_checkpointing=False
+            # by the time it looks).
+            if self.fsdp and self.gradient_checkpointing:
+                fsdp_cfg = self.fsdp_config
+                if fsdp_cfg is None:
+                    fsdp_cfg = {}
+                elif isinstance(fsdp_cfg, str):
+                    # HF parses --fsdp_config <path> later; we have a path
+                    # string here. Load it now so we can merge our flag in.
+                    import json
+                    with open(fsdp_cfg, encoding="utf-8") as f:
+                        fsdp_cfg = json.load(f)
+                else:
+                    fsdp_cfg = dict(fsdp_cfg)
+                fsdp_cfg.setdefault("activation_checkpointing", True)
+                self.fsdp_config = fsdp_cfg
+                self.gradient_checkpointing = False
+            super().__post_init__()
+
     return EzpzGRPOConfig
 
 
@@ -286,20 +314,8 @@ def main() -> None:
         bf16=config.bf16,
     )
 
-    # When FSDP is on, prefer FSDP's native activation checkpointing over
-    # HF Trainer's gradient_checkpointing — the latter inserts a redundant
-    # AllGather in backward (transformers issue #30404). We migrate the
-    # user's --gradient_checkpointing into fsdp_config["activation_checkpointing"]
-    # and clear the Trainer-side flag.
-    if config.fsdp and config.gradient_checkpointing:
-        fsdp_cfg = dict(config.fsdp_config) if config.fsdp_config else {}
-        fsdp_cfg.setdefault("activation_checkpointing", True)
-        config.fsdp_config = fsdp_cfg
-        config.gradient_checkpointing = False
-        log.info(
-            "[FSDP] migrated --gradient_checkpointing → "
-            "fsdp_config.activation_checkpointing=True"
-        )
+    # (FSDP + gradient_checkpointing migration happens in
+    # EzpzGRPOConfig.__post_init__ — see _ezpz_grpo_config_cls.)
 
     rank = ezpz.distributed.get_rank()
     device_type = ezpz.distributed.get_torch_device_type()
