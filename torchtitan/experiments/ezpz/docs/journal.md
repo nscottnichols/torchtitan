@@ -4,6 +4,99 @@ Running log of what's happening, session by session. Most recent first.
 
 ---
 
+## 2026-06-06 — scaling-study unblock + production charts refresh + scaling docs consolidation
+
+End-to-end session that turned a string of scaling-study NO_OUTPUT /
+CRASH failures (every 64N+ submit since 2026-05-29) into a clean Aurora
+torch-2.13 scaling table, refreshed all production charts, and
+consolidated the four per-model scaling docs into one page.
+
+### Scaling-study unblock (commits `6c6235fdf`, this entry)
+
+Five stacked bugs in `scripts/run_scaling_study_aurora.sh` were silently
+killing every 64N+ scaling submit. Root-caused and fixed:
+
+1. **`.venv.tar.gz` rebuild lost `.venv/bin/`** (empty in tarball even
+   though present in source venv) — rebuilt manually.
+2. **Wrapper's trailing `"$@"`** on the inner `ezpz launch python3 -m
+   torchtitan...train` invocation leaked PBS `-v` CLI args straight
+   into the training entry point, causing instant arg-parse failure
+   (NO_OUTPUT wall <60s). Removed.
+3. **blendcorpus segfault at ≥768 ranks** in
+   `blendcorpus_builder.py:275 __init__`. Bypassed by adding a
+   `SCALING_DATASET` env knob so the sweep can run against an HF
+   streaming dataset (default for sweeps now is
+   `eliplutchok/fineweb-small-sample`). Default in the script stays
+   `blendcorpus` so production-shaped sweeps still hit the real loader.
+4. **`qsub -- /bin/bash -c "..."` swallowed the `#!/bin/bash --login`
+   shebang**, leaving `module` undefined on the PBS-spawned shell →
+   `module load oneapi/release/2025.3.1` silently failed → oneAPI MPI
+   binaries (`mpiexec`, `qstat`) not on PATH →
+   `from sh import qstat` ImportError. Fix: submit the script
+   directly (`qsub <script>`), not via `bash -c`.
+5. **PATH-order race** propagated rank-N python3 ahead of
+   `/tmp/.venv/bin`, so the rank-N `python3 -m torchtitan...train`
+   imported a system Python with no ezpz. Pinned the inner command to
+   `${VIRTUAL_ENV:-/tmp/.venv}/bin/python3`.
+
+Also caught a stale default: `agpt_2b` in the scaling wrapper was
+`LBS=1`, but production runs `LBS=2` (`submit_agpt_2b_aurora_venv.sh`).
+Changed the default to LBS=2 so the wrapper produces apples-to-apples
+numbers with prod going forward.
+
+**Validation (`SCALING_GROUP=light`, `SCALING_DATASET=eliplutchok/fineweb-small-sample`):**
+
+| N | LBS | Job | agpt_2b TPS/MFU | agpt_20b TPS/MFU | moe_2b |
+|---|-----|-----|------------------|-------------------|--------|
+| 64 | 1 | 8528805 | 5,062 / 18.99% | 447 / 22.32% | NO_OUTPUT |
+| 128 | 1 | 8528834 | 4,300 / 16.13% | 417 / 20.83% | CRASH |
+| 64 | 2 | 8528940 | _pending_ | — | — |
+
+moe_2b NO_OUTPUT at scale tracks the upstream `edp_mesh=None` SIGABRT
+regression noted in CLAUDE.md. Separate task.
+
+### Production chains
+
+- **2B 256N (`8519833`)** walltime-finished cleanly @ step-69900
+  (Exit_status=-29, walltime=12:00:20). Continuation `8521626` is now
+  top of Q. Chain still has +2 conts beneath (`8521630` H,
+  `8521631`/`8521632` H).
+- **2B 512N + 20B 512N chains**: both Q'd for days waiting on prod
+  slot. 20B chain's `step-4500` ckpt was an empty placeholder
+  (4.0K, 0 .distcp shards) from a mid-save kill — renamed to
+  `step-4500.bak-empty-20260606-170503/` so 8521628 resumes cleanly
+  from step-4400 (244GB, complete) when it gets a slot.
+
+### Evals (commit `11d8d9f26`)
+
+Ran `eval-2b-v2.sh` on 2B 256N step-66000 and step-68000 (8528801):
+
+| Step | Tokens (B) | HSn | ARC-E | ARC-C | Wino |
+|------|-----------|-----|-------|-------|------|
+| 64,000 | 3,221 | 0.5538 | 0.6040 | 0.3336 | 0.5549 |
+| **66,000** | **3,322** | **0.5577** | **0.5918** | **0.3302** | **0.5462** |
+| **68,000** | **3,422** | **0.5577** | **0.5905** | **0.3302** | **0.5509** |
+
+ARC-E spike at 64K appears to be noise; otherwise convergence is flat
+to slightly positive on HSn.
+
+### Docs consolidation (commit `11d8d9f26`)
+
+Collapsed `docs/scaling/{agpt-2b.md,agpt-20b.md,agpt-80b.md,moe.md}`
+into a single `docs/scaling/README.md` organised by model. Added a
+"Historical: the n=64/128 CRASH era" callout documenting the five-bug
+stack above. Backfilled stale prod walltime (12h, was 6h on 20b page).
+
+### Production charts refresh (commit `148fff6e6`)
+
+Re-ran all plotting scripts (`plot_production.py`,
+`plot_production_combined.py`, `plot_production_wandb.py`,
+`plot_evals_combined.py`, `plot_v1_vs_v2.py` for both 2b + 20b)
+against current W&B. 28 SVGs/PNGs refreshed across production +
+historical-v1-bf16 + evals figure dirs.
+
+---
+
 ## 2026-06-02 — 46th upstream sync (graph_trainer-only, no ezpz replay)
 
 Pulled 2 new commits since the 45th sync (`04a309858..27aa49077`):
