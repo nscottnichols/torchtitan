@@ -4,6 +4,163 @@ Running log of what's happening, session by session. Most recent first.
 
 ---
 
+## 2026-06-07 (evening) — 80B prod sync-ckpt validated end-to-end + train_grpo HfArgumentParser + FSDP wiring + blendcorpus index race + xccl issue filed
+
+Big session covering four threads. Tracked in tasks #40–#63.
+
+### 80B prod sync-ckpt path validated end-to-end (12468197, Sunspot 4N)
+
+After three false-start retries diagnosing dataset-loader and PBS
+env-var issues (12468190 hung after step 1 on the
+`eliplutchok/fineweb-small-sample` HF stream; 12468194 died 32s in
+without `NHOSTS_TRAIN`; 12468195/12468196 hit a blendcorpus
+per-corpus + blendable-dataset index-build race — see below), got a
+clean 4N TP=2 books-blendcorpus run in 12468197:
+
+- **Loss descent**: 12.95 → **7.49** at step 164 (-5.46 nats)
+- **Cadence**: ~42s per step, ~7 min per 10 steps, steady throughout
+- **MFU**: 17.7-17.9% steady (matches the May 5 working-config smoke
+  12466025 exactly)
+- **Memory**: 88.97% peak (4N gives ~7 GiB tile headroom for 80B)
+- **First sync checkpoint**: **saved at step 100 in 101.84s**,
+  904 GB across 48 distcp shards, durable on disk at
+  `outputs/checkpoints/agpt-80b-adamw-books-n4-gbs24/step-100/`
+- **Walltime-killed at step 164** (Exit_status=-29, SIGKILL on 2h
+  walltime — `TRAINING_STEPS=200` was a soft target; would have
+  reached step 200 with a 3h allocation)
+
+The **first sync ckpt save is the load-bearing milestone** — it's
+exactly where 12468189 died on async mode hitting the gloo-on-xpu
+bug. With `CHECKPOINT_ASYNC_MODE=disabled` the rank-0
+`dist.new_group(backend="gloo")` is skipped entirely and the rest of
+the path is clean. The 80B production stack is now end-to-end
+validated on Sunspot under the workaround.
+
+### train_grpo CLI rewrite: argparse (10 flags) → HfArgumentParser (191 flags)
+
+User flagged that `torchtitan/experiments/ezpz/rl/train_grpo.py`
+was exposing only ~7 of GRPOConfig's 64 own fields + ~100 inherited
+TrainingArguments fields — every other knob was hardcoded or hidden
+behind env-var fallbacks. Refactored to `HfArgumentParser((EzpzGRPOArgs,
+EzpzGRPOConfig))`:
+
+- `EzpzGRPOArgs` holds ezpz-side fields (`task`,
+  `model_name_or_path`, `num_samples`, `no_save`,
+  `fsdp_transformer_layer_cls_to_wrap`, `fsdp_cpu_ram_efficient_loading`)
+- `EzpzGRPOConfig(GRPOConfig)` overrides defaults where ezpz/XPU
+  values differ from upstream (bf16=True, gradient_checkpointing=True,
+  beta=0.0, torch_empty_cache_steps=1, num_generations=4,
+  max_completion_length=64, save_strategy="no", use_vllm=False)
+- All other GRPOConfig fields fall through to TRL defaults, so
+  every TRL knob (--beta, --epsilon, --loss_type, --vllm_*,
+  --optim, --gradient_accumulation_steps, --num_iterations,
+  --warmup_steps, --lr_scheduler_type, etc.) is now CLI-settable
+  without code edits
+
+Breaking change: `--model-name-or-path` and `--no-save` (hyphenated)
+became `--model_name_or_path` and `--no_save` (snake_case) since
+HfArgumentParser mirrors dataclass field names. `grep -r` found no
+existing callers, so safe to land.
+
+### FSDP env-bootstrap wiring (mirrors ezpz.examples.hf.py pattern)
+
+Under `ezpz launch` (mpiexec), passing TRL's `--fsdp full_shard` is
+a silent no-op: HF Trainer's internal `accelerate.Accelerator` only
+builds a `FullyShardedDataParallelPlugin` when env vars
+(`ACCELERATE_USE_FSDP=true`, `FSDP_*`) are pre-set — which
+`accelerate launch` does for you but `mpiexec` does not. So passing
+`--fsdp full_shard` was silently dropping every rank into plain DDP
+(every rank holds the full model → 2B models OOM at 12 ranks/tile).
+
+`ezpz.examples.hf.py` works around this by constructing the FSDP
+plugin explicitly and passing it to `Accelerator(fsdp_plugin=...)`
+— but that path requires owning the training loop, which TRL owns.
+So we adopted the equivalent surgical approach: populate the same
+env vars the explicit plugin would generate, BEFORE
+`GRPOTrainer.__init__` runs. Wires up
+`ACCELERATE_USE_FSDP=true`, `FSDP_SHARDING_STRATEGY`,
+`FSDP_AUTO_WRAP_POLICY=TRANSFORMER_BASED_WRAP`,
+`FSDP_TRANSFORMER_CLS_TO_WRAP`,
+`FSDP_BACKWARD_PREFETCH=BACKWARD_PRE`,
+`FSDP_USE_ORIG_PARAMS=true`,
+`FSDP_STATE_DICT_TYPE=SHARDED_STATE_DICT`,
+`ACCELERATE_MIXED_PRECISION=bf16` (from `bf16=True`),
+`FSDP_CPU_RAM_EFFICIENT_LOADING=true` +
+`FSDP_SYNC_MODULE_STATES=true` (when
+`--fsdp_cpu_ram_efficient_loading` is on).
+
+Two follow-up fixes the user surfaced from real launches:
+
+1. **FSDPOption enum coercion** (`d859fafc1`): HfArgumentParser
+   parses `--fsdp full_shard` into a list of `FSDPOption` enums.
+   `str(FSDPOption.FULL_SHARD)` returns `'FSDPOption.FULL_SHARD'`
+   (the StrEnum class-qualified name), not `'full_shard'`. Initial
+   parser used `str(x).lower().split()[0]` →
+   `'fsdpoption.full_shard'` → not in `_FSDP_STRATEGY_MAP` →
+   ValueError before training. Fixed:
+   `getattr(x, "value", str(x)).lower()` and scan whole list for a
+   known strategy token (so `--fsdp "full_shard auto_wrap"` works
+   regardless of token order).
+2. **gradient_checkpointing + FSDP migration** (`6758a809d`):
+   transformers warns `"When using FSDP full shard, instead of using
+   gradient_checkpointing, please use activation_checkpointing in
+   fsdp_config"` (training_args.py:2732). The warning fires inside
+   `TrainingArguments.__post_init__`, BEFORE `main()` runs, so
+   migrating in main() was too late — 48 ranks each printed it.
+   Fixed: override `EzpzGRPOConfig.__post_init__` to migrate
+   `gradient_checkpointing` → `fsdp_config["activation_checkpointing"]`
+   BEFORE `super().__post_init__()` runs. Now transformers sees
+   `gradient_checkpointing=False` and never warns. Also pre-loads
+   `--fsdp_config <path>.json` so user-set keys
+   (transformer_layer_cls_to_wrap, cpu_ram_efficient_loading) survive
+   the migration merge.
+
+### blendcorpus per-corpus index-build race
+
+12468195 died in 2:34 with
+`EOFError: No data left in file` when rank 2 tried to mmap-load
+`shuffle_idx.npy` while rank 0 was still writing it. The books
+dataset is tiny (3 shards, 11 GB, 4826 samples for a 200-step run
+at GBS=24) so rank-0 index-build finishes in **8 ms** — too fast
+for the implicit barrier-via-allreduce on the next dist op to close
+the race.
+
+12468196 died the same way 2:34 in but at the NEXT layer — the
+"blendable dataset" index (`_index.npy`, `_sample_index.npy`),
+built in 11 ms.
+
+Root cause in `deps/blendcorpus/blendcorpus/data/gpt_dataset.py`:
+the per-corpus path (`_build_index_mappings`, lines ~1050-1135)
+does rank-0-write then all-ranks-`np.load(..., mmap_mode='r')`
+**with NO `torch.distributed.barrier()` between them**. The
+blendable-dataset path (lines 215-265) DOES have barriers — so the
+per-corpus path is racy at small dataset sizes.
+
+Production canonical chain uses olmo-mix (much larger, build takes
+seconds) so this has never bitten before. Workaround: just retry —
+once indices are durably on disk, the second pass hits cache and
+skips the build. Permanent fix needs a `torch.distributed.barrier()`
+in upstream blendcorpus.
+
+Diagnosis + minimal repro shape + suggested upstream fix in
+[`docs/upstream-issues/blendcorpus_index_build_race.md`](upstream-issues/blendcorpus_index_build_race.md).
+
+### xccl supportsSplitting issue filed upstream
+
+Filed as **[pytorch/pytorch#186548](https://github.com/pytorch/pytorch/issues/186548)**
+with verified Sunspot repro log + collect_env block, plus a
+cross-reference comment on the sibling
+[pytorch/pytorch#171938](https://github.com/pytorch/pytorch/issues/171938).
+The workaround `xccl_split_group_workaround.py` stays in place
+until both: (1) `ProcessGroupXCCL.supportsSplitting() override`
+lands, (2) `ProcessGroupXCCL::split` is implemented + CI-tested.
+
+Removal criteria documented at the bottom of
+[`docs/upstream-issues/xccl_split_group_unsupported.md`](upstream-issues/xccl_split_group_unsupported.md),
+which now has a banner pointing to the upstream tracker.
+
+---
+
 ## 2026-06-07 (pm) — 80B prod attempt on Sunspot 4N + new upstream CheckpointManager XPU bug
 
 First real 80B production launch on Sunspot post-47th-sync. Job
