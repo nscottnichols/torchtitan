@@ -98,8 +98,9 @@ it is `False`. Layer 2 exercises the actual `dist.split_group`
 (or `DeviceMesh._unflatten` on multi-rank) code path and confirms the
 RuntimeError surfaces at the documented site.
 
-Run log (Sunspot 1N, Intel Max 1550, torch 2.13.0.dev20260519+xpu —
-to be attached / pasted):
+Run log (Sunspot 1N, Intel Max 1550, torch 2.13.0.dev20260519+xpu;
+captured by job 12468191, full log at
+`logs/repro-xccl-supports-splitting-12468191/run.log` in this repo):
 
 ```
 === Layer 1: ProcessGroupXCCL.supports_splitting query ===
@@ -212,19 +213,20 @@ cc @H-Huang @awgu @wanchaol @fegin @fduwjj @wz337 @wconstab @d4l3k @pragupta @ms
 
 ## Filing checklist
 
-Before posting:
-
-- [ ] Repro job 12468191 finished — paste the actual run log into
-      the **Run log** section above (replacing the predicted-output
-      placeholder).
+- [x] **Repro verified end-to-end** (job 12468191, Sunspot 1N,
+      2026-06-07). Both layers print `REPRODUCED`; the run log
+      pasted above is the actual output, not predicted.
 - [ ] Run `python -m torch.utils.collect_env` on the same node and
       paste into the **Versions** section.
-- [ ] Cross-reference: comment on
-      [pytorch/pytorch#171938](https://github.com/pytorch/pytorch/issues/171938)
-      after filing with "filed sibling issue #XXXX for the xccl-only
-      / DeviceMesh path".
+- [ ] File the issue against pytorch/pytorch — use the suggested
+      title + labels + cc list above, paste the body between
+      `---ISSUE-BODY-BEGIN---` and `---ISSUE-BODY-END---`.
 - [ ] After filing, add a `Filed as pytorch/pytorch#XXXX` line to the
       top of
       [`xccl_split_group_unsupported.md`](xccl_split_group_unsupported.md)
       so future-us can find the upstream tracker from the workaround
       doc.
+- [ ] Cross-reference: comment on
+      [pytorch/pytorch#171938](https://github.com/pytorch/pytorch/issues/171938)
+      after filing with "filed sibling issue #XXXX for the xccl-only
+      / DeviceMesh path".
