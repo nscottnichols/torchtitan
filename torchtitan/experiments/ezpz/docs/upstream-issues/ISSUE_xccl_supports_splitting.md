@@ -82,7 +82,7 @@ it without losing FSDP2's `foreach_all_gather` routing).
 ### Minimal repro
 
 A self-contained two-layer repro lives at
-[`saforem2/torchtitan/torchtitan/experiments/ezpz/docs/upstream-issues/repro_xccl_supports_splitting.py`](https://github.com/saforem2/torchtitan/blob/ezpz/torchtitan/experiments/ezpz/docs/upstream-issues/repro_xccl_supports_splitting.py).
+[`saforem2/torchtitan/torchtitan/experiments/ezpz/docs/upstream-issues/repro_xccl_supports_splitting.py`](https://github.com/saforem2/torchtitan/blob/83e2e8ee0/torchtitan/experiments/ezpz/docs/upstream-issues/repro_xccl_supports_splitting.py).
 No torchtitan / mpiexec dependency — just torch + xpu + xccl:
 
 ```bash
@@ -168,7 +168,7 @@ any forward pass.
 
 We're currently monkey-patching `DeviceMesh._init_one_process_group`
 from a small ezpz-side module
-([`xccl_split_group_workaround.py`](https://github.com/saforem2/torchtitan/blob/ezpz/torchtitan/experiments/ezpz/xccl_split_group_workaround.py))
+([`xccl_split_group_workaround.py`](https://github.com/saforem2/torchtitan/blob/83e2e8ee0/torchtitan/experiments/ezpz/xccl_split_group_workaround.py))
 that:
 
 1. Detects xccl/XPU at module load — no-op on CUDA/CPU builds.
@@ -202,10 +202,51 @@ upstream override + `split()` impl land.
 
 ### Versions
 
-(to be filled in from `python -m torch.utils.collect_env`; expected
-to mirror the env block in pytorch/pytorch#171938 — torch 2.10+xpu
-or torch 2.13+xpu on SUSE/Sunspot with Intel Max 1550, xccl-enabled
-build.)
+Captured from a Sunspot compute node (job 12468193) on 2026-06-07.
+
+<details>
+<summary><code>python -m torch.utils.collect_env</code></summary>
+
+```
+PyTorch version: 2.13.0.dev20260519+xpu
+Is debug build: False
+CUDA used to build PyTorch: None
+ROCM used to build PyTorch: N/A
+
+OS: SUSE Linux Enterprise Server 15 SP7 (x86_64)
+GCC version: (Spack GCC) 14.3.0
+Clang version: Could not collect
+CMake version: version 3.28.3
+Libc version: glibc-2.38
+
+Python version: 3.14.2 (main, Dec  9 2025, 19:03:28) [Clang 21.1.4 ] (64-bit runtime)
+Python platform: Linux-6.4.0-150700.53.52-default-x86_64-with-glibc2.38
+Is CUDA available: False
+Is XPU available: True
+XPU used to build PyTorch: 20250302
+Intel GPU driver version:
+* level-zero:   1.24.0.0-i1146
+* intel-opencl: 25.18.33578.51-1146
+Intel GPU models detected:
+* 12× Intel(R) Data Center GPU Max 1550 (Aurora/Sunspot tile-pair config,
+  total_memory=65520MB per tile, driver_version=1.6.33578+51)
+
+HIP runtime version: N/A
+MIOpen runtime version: N/A
+Is XNNPACK available: True
+
+CPU:
+Architecture: x86_64
+Model name: Intel(R) Xeon(R) CPU Max 9470C
+CPU(s): 208 (2 sockets × 52 cores × 2 threads/core)
+NUMA node(s): 4
+
+Versions of relevant libraries:
+[pip3] Could not collect
+[conda] Could not collect
+```
+
+</details>
 
 cc @H-Huang @awgu @wanchaol @fegin @fduwjj @wz337 @wconstab @d4l3k @pragupta @msaroufim @dcci
 
