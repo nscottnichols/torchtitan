@@ -270,10 +270,25 @@ for ((i = 0; i < NUM_CONFIGS; i++)); do
         extra_args+=("--activation_checkpoint.mode" "${ac_mode}")
     fi
 
+    # Dataset selection: SCALING_DATASET=blendcorpus (default) uses local
+    # books.txt list; SCALING_DATASET=<hf/repo> streams from HF.
+    dataset_args=()
+    if [[ "${SCALING_DATASET:-blendcorpus}" == "blendcorpus" ]]; then
+        dataset_args+=("--dataloader.dataset" "blendcorpus"
+                       "--dataloader.dataset_path" "${DATASET_PATH}")
+    else
+        dataset_args+=("--dataloader.dataset" "${SCALING_DATASET}")
+    fi
+
+    # Use absolute python3 from the activated /tmp/.venv to avoid PATH-order
+    # races where mpiexec --envall propagates a stale PATH and rank-N python
+    # resolves to the system python (which doesn't have ezpz).
+    PY="${VIRTUAL_ENV:-/tmp/.venv}/bin/python3"
+
     timeout "${BENCH_TIMEOUT}" \
         stdbuf -oL -eL \
         env NGPU="${NGPUS}" PYTHONUNBUFFERED=1 \
-        ezpz launch python3 -m torchtitan.experiments.ezpz.train \
+        ezpz launch "${PY}" -m torchtitan.experiments.ezpz.train \
         --module "${module}" \
         --config "${config}" \
         --training.steps "${BENCH_STEPS}" \
@@ -283,10 +298,8 @@ for ((i = 0; i < NUM_CONFIGS; i++)); do
         --parallelism.tensor_parallel_degree "${tp}" \
         --metrics.log_freq 1 \
         --checkpoint.no-enable \
-        --dataloader.dataset blendcorpus \
-        --dataloader.dataset_path "${DATASET_PATH}" \
+        "${dataset_args[@]}" \
         "${extra_args[@]}" \
-        "$@" \
         2>&1 | if ((FILTER_NONZERO_RANKS)); then grep -v '^\[rank[1-9][0-9]*\]:'; else cat; fi >"${logfile}" || true
     exit_code=${PIPESTATUS[0]}
 
