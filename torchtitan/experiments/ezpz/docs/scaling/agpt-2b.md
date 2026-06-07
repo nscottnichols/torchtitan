@@ -14,25 +14,23 @@
 | 8     | 96   | 192    | 7,291   | 699,936    | 27.36% | 99.3%            | 2026-05-29 sweep |
 | 16    | 192  | 384    | 6,803   | 1,306,176  | 25.53% | 92.6%            | 2026-05-29 sweep |
 | 32    | 384  | 768    | 6,984   | 2,681,856  | 26.20% | 95.1%            | 2026-05-29 sweep |
-| 64    | 768  | 768†   | 5,062   | 3,887,616  | 18.99% | 68.9%            | [8528805](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/cids97r8) (2026-06-06, LBS=1) |
-| 128   | 1,536| 1,536† | 4,300   | 6,604,800  | 16.13% | 58.5%            | [8528834](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/sy6gomvy) (2026-06-06, LBS=1) |
+| 64    | 768  | 1,536  | 6,083 (6,553) | 4,671,744 | 22.82% (24.59%) | 82.8% (89.3%) | [8529046](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/ihiy4ej1), [8528940](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/_) (2026-06-06) |
+| 128   | 1,536| 3,072  | 4,934   | 7,578,624  | 18.51% | 67.2%            | [8529081](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/m9i0long) (2026-06-07) |
 | 256   | 3,072| 6,144  | 5,002   | 15,366,144 | 18.77% | 68.1%            | 2026-05-29 sweep |
 | 512   | 6,144| 12,288 | —       | —          | —      | —                | Pending (needs prod queue) |
 | 1,024 | 12,288| 24,576| —       | —          | —      | —                | Blocked: `set_determinism` init crash, see [project_1024n_init_crash](.) |
 | 2,048 | 24,576| 49,152| —       | —          | —      | —                | Blocked: same as 1,024 |
 | 4,096 | 49,152| 98,304| —       | —          | —      | —                | Blocked: same as 1,024 |
 
-† 64N + 128N were re-run on 2026-06-06 after a multi-week block. The
-script default at the time was still `LBS=1`, so their GBS is half what
-it should be for apples-to-apples with the rest of the table. The
-script default is now `LBS=2` (commit `4ceffb31e`); these two cells
-should be re-run for a clean comparison.
+64N has two LBS=2 data points (8528940 ran with the prior wrapper
+that still had agpt_20b at LBS=1; 8529046 ran with both at LBS=2 and
+the spmd_types-fixed venv). Numbers in parens are from 8528940.
 
 **Headline:** Small-N (4–32) lands at **~27% MFU** (matches the torch
 2.13 Sunspot target and well above the torch-2.10 Sunspot baseline
 below). At N=256 throughput drops to 18.77% MFU (≈68% efficiency vs
-4N). 64N + 128N at LBS=1 sit at 18–19% / 16% MFU; expect ~25–27% once
-re-run at LBS=2.
+4N). 64N at LBS=2 hits 22.8–24.6% MFU (in line with the small-N
+trend); 128N drops to 18.5% MFU.
 
 ### Historical: the n=64 / n=128 CRASH era (2026-05-29 → 2026-06-06)
 
