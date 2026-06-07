@@ -139,9 +139,9 @@ _add_config() {
 if [[ "${SCALING_GROUP}" == "light" || "${SCALING_GROUP}" == "all" ]]; then
     #              label       module      config     lbs tp gas  seq   compile ac
     # LBS chosen to match production submit scripts (submit_agpt_{2b,20b}_aurora_venv.sh):
-    #   agpt_2b production runs LBS=2 (GBS = N*12*2). agpt_20b production runs LBS=1.
+    # both agpt_2b and agpt_20b production runs use LBS=2 (GBS = N*12*2).
     _add_config    "agpt_2b"   "ezpz.agpt" "agpt_2b"   2   1   1  8192  "on"    "full"
-    _add_config    "agpt_20b"  "ezpz.agpt" "agpt_20b"  1   1   2  8192  "on"    "full"
+    _add_config    "agpt_20b"  "ezpz.agpt" "agpt_20b"  2   1   1  8192  "on"    "full"
     _add_config    "moe_2b"    "ezpz.moe"  "moe_2b"    2   1   1  4096  "off"   "full"
 fi
 

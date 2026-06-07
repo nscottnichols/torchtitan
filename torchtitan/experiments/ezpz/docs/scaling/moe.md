@@ -37,8 +37,10 @@ for planned experiments (EP, TP, float8).
 
 | Nodes | Status | Notes |
 |-------|--------|-------|
-| 64 | NO_OUTPUT | 8528805 (2026-06-06), 251s wall |
-| 128 | CRASH | 8528834 (2026-06-06), 163s wall |
+| 64 | NO_OUTPUT | 8528805 (2026-06-06), 251s wall — pre-spmd_types fix |
+| 64 | NO_OUTPUT | 8529046 (2026-06-06), 235s wall — post-spmd_types fix; failure mode changed (longer wall) but still NO_OUTPUT |
+| 128 | CRASH | 8528834 (2026-06-06), 163s wall — pre-spmd_types fix |
+| 128 | OOM | 8529081 (2026-06-07), 616s wall — post-spmd_types fix; all-to-all buffer growth |
 
 Likely the upstream `edp_mesh=None` SIGABRT regression noted in
 CLAUDE.md "MoE SIGABRT". Open diagnosis task: re-run on Aurora torch

@@ -4,6 +4,88 @@ Running log of what's happening, session by session. Most recent first.
 
 ---
 
+## 2026-06-07 — spmd_types venv fix + LBS=2 scaling sweeps + post-mortem docs
+
+Continuation of the 2026-06-06 scaling-study unblock. Two new
+findings drove the work this session:
+
+### 1. Stale wrapper default for agpt_20b
+
+While reviewing yesterday's 64N + 128N numbers the user noticed the
+agpt_2b scaling rows had MFU well below the 256N reference point
+(18.99% / 16.13% vs 18.77%). Tracing the wrapper found agpt_2b
+defaulting to `LBS=1` while production uses `LBS=2`. Fixed in commit
+`4ceffb31e`. Verifying production scripts also caught agpt_20b at
+`LBS=1` in the wrapper while `submit_agpt_20b_aurora_venv.sh` uses
+`LBS="${LBS:-2}"`. Fixed in commit `8294883e5`.
+
+Re-ran at the new LBS=2 defaults:
+
+| N | agpt_2b TPS/MFU | agpt_20b TPS/MFU | moe_2b | Job |
+|---|------------------|-------------------|--------|-----|
+| 64 | 6,553 / 24.59% | 448 / 22.36% (LBS=1 stale) | killed @ walltime | [8528940](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/) |
+| 64 | 6,083 / 22.82% | 511 / 25.48% | NO_OUTPUT 235s | [8529046](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/ihiy4ej1) |
+| 128 | 4,934 / 18.51% | 480 / 23.96% | OOM 616s | [8529081](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/m9i0long) |
+
+Confirmed expected weak-scaling pattern: 2B drops to 18.5% MFU at
+128N, 20B holds steady around 24% — both consistent with all-reduce
+overhead growing with N. Memory shot up from ~20 GiB (LBS=1) to
+~44 GiB (LBS=2) for 2B; 20B from ~29 GiB to ~40 GiB. All still
+safely under 70%.
+
+### 2. Upstream `spmd_types` regression
+
+Mid-resubmit, fresh 64N attempt (`8529016`) CRASHed in <20s with:
+
+    File "/lus/.../torchtitan/components/loss.py", line 12, in <module>
+      import spmd_types as spmd
+    ModuleNotFoundError: No module named 'spmd_types'
+
+Tracked to upstream commit `fec0c175d` (Pian Pawakapan, 2026-06-05,
+[#3467] "[spmd_types] manual loss parallel CE"), which adds
+`spmd_types==0.2.1` to `requirements.txt` + `pyproject.toml` but
+relies on user reinstall. Our compute-node `/tmp/.venv` (from the
+2026-06-03 tarball) didn't have it; nor did the source venv before
+the user's `uvi --no-deps spmd_types` today.
+
+Fix:
+
+    uv pip install --python .venv/bin/python3 \
+        --no-deps --no-cache --link-mode=copy spmd_types
+
+Then rebuilt `.venv.tar.gz` (2.6 GB, 56 spmd_types entries verified
+in tarball). Old broken tarball backed up at
+`.venv.tar.gz.bak-pre-spmd-20260606-215928`. Validated on 8529046 +
+8529081 — both ran cleanly post-fix.
+
+### 3. Docs revert + redistribution
+
+Yesterday's consolidation of the 4 per-model scaling docs into a
+single 250-line README turned out to be a regression vs the sibling
+convention (`docs/evals/agpt/{2b,20b}/`, `docs/production/agpt/`).
+Reverted in commit `f19bbdec3`: README is now an index-only
+dashboard, per-model pages restored. Today's LBS=2 numbers + the
+spmd_types post-mortem flagged inline on the relevant per-model
+page.
+
+### 4. moe_2b regression
+
+moe_2b at 64N + 128N still fails on Aurora torch 2.13 even with
+spmd_types installed. Failure mode changed (NO_OUTPUT 235s → OOM
+616s), but it's likely the upstream `edp_mesh=None` SIGABRT noted
+in CLAUDE.md. Not yet diagnosed; tracked separately.
+
+### State at end of session
+
+- 2B 256N production chain (`8519833`) walltime-finished cleanly at
+  step-69900 yesterday. Continuation `8521626` still Q for a 256N
+  prod slot.
+- All 2B + 20B production chains Q+H, waiting on prod queue rotation.
+- Today's Aurora torch 2.13 scaling row at 256N is the next gap
+  to fill once Q frees.
+
+---
+
 ## 2026-06-06 — scaling-study unblock + production charts refresh + scaling docs consolidation
 
 End-to-end session that turned a string of scaling-study NO_OUTPUT /

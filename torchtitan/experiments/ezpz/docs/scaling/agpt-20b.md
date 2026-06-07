@@ -23,8 +23,10 @@
 | 8 | 96 | — | — | — | — | — | — | Pending | |
 | 16 | 192 | — | — | — | — | — | — | Pending | |
 | 32 | 384 | 768 | 4,500 | 50.3 | 16.9% | 43.96 GiB (69%) | 12.91 | Complete | 2026-04 |
-| 64 | 768 | 1,536 | 453 | 67.34 | 22.58% | 28.86 GiB (45%) | — | Complete | [8521698](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/3pm3admv) + [8528805](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/i0gra8by) (2026-06-06) |
-| 128 | 1,536 | 3,072 | 417 | 62.12 | 20.83% | 28.73 GiB (45%) | — | Complete | [8528834](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/5kpt6al1) (2026-06-06) |
+| 64 (LBS=1) | 768 | 1,536 | 453 | 67.34 | 22.58% | 28.86 GiB (45%) | — | Complete | [8521698](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/3pm3admv) + [8528805](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/i0gra8by) (2026-06-06) |
+| 64 (LBS=2) | 768 | 1,536 | 511 | 75.98 | 25.48% | 39.97 GiB (62%) | — | Complete | [8529046](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/0fyu61o4) (2026-06-06) |
+| 128 (LBS=1) | 1,536 | 3,072 | 417 | 62.12 | 20.83% | 28.73 GiB (45%) | — | Complete | [8528834](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/5kpt6al1) (2026-06-06) |
+| 128 (LBS=2) | 1,536 | 3,072 | 480 | 71.45 | 23.96% | 39.84 GiB (62%) | — | Complete | [8529081](https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/rvueahwe) (2026-06-07) |
 | 256–4096 | — | — | — | — | — | — | — | Pending | |
 
 **Config:** SophiaG LR=2.28e-5, compile=on, seq_len=8192, olmo-mix-1124
