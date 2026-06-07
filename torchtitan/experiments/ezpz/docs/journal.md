@@ -4,6 +4,64 @@ Running log of what's happening, session by session. Most recent first.
 
 ---
 
+## 2026-06-07 (pm) — 80B prod attempt on Sunspot 4N + new upstream CheckpointManager XPU bug
+
+First real 80B production launch on Sunspot post-47th-sync. Job
+12468189: died at trainer init with
+
+    RuntimeError: No backend type associated with device type xpu
+
+raised inside `CheckpointManager.__init__` at
+`torchtitan/components/checkpoint.py:468`, on the line
+
+    self.pg = cast(dist.ProcessGroup, dist.new_group(backend="gloo"))
+
+which fires when `async_mode in (AsyncMode.ASYNC, AsyncMode.ASYNC_WITH_PINNED_MEM)`.
+xccl-only default PG has no gloo backend bound, so the gloo
+subgroup-creation fails. Same shape as the xccl_split_group bug from
+the prior session — another upstream code path that assumes a CUDA-
+style gloo PG bundled in with the accelerator backend.
+
+Discovered courtesy of the RANK 0 ABORT chain extension from
+2026-06-06 (`84c84cd0b`): the underlying cause showed up clearly at
+the top of the failure log instead of being buried under per-rank
+mpiexec stderr.
+
+**Workaround**: `--checkpoint.async-mode=disabled` (or
+`CHECKPOINT_ASYNC_MODE=disabled` via the failover wrapper). Sync
+ckpt mode skips the gloo subgroup creation entirely.
+
+Resubmitted as 12468190 with the workaround; got past trainer init,
+step 1 clean (loss 12.913, mem 53 GiB / 82.86%), training in
+progress as of this entry.
+
+Full diagnosis + removal criteria + the related-bugs cross-refs in
+[`docs/upstream-issues/checkpoint_async_gloo_on_xpu.md`](upstream-issues/checkpoint_async_gloo_on_xpu.md).
+
+Also added a `DATASET` env knob to
+`scripts/submit_agpt_80b_aurora_venv_failover.sh` (commit
+`eeb907b73`) so non-Aurora launches can use HF-streaming datasets
+without a local data-list (Sunspot has no canonical olmo-mix-1124
+list).
+
+### Other 80B production state
+
+- The 4N working-config table in `docs/production/agpt/80b/README.md`
+  now has three bit-equivalent smoke datapoints (May 5 Aurora,
+  Jun 2 Sunspot, Jun 6 Sunspot post-47th-sync). All converge to the
+  same step-20 loss (10.39-10.46) and 88.94% memory. Configuration
+  is stable across two ezpz refactors + one workaround.
+
+### Optional follow-ups
+
+- Ezpz-side workaround module for the gloo-on-xpu bug (mirroring
+  `xccl_split_group_workaround.py`) so async ckpt mode "just works"
+  on XPU. Deferred — sync mode is acceptable for now.
+- File pytorch/torchtitan issue requesting defensive fallback in
+  `CheckpointManager.__init__` when `new_group(backend="gloo")` fails.
+
+---
+
 ## 2026-06-07 — spmd_types venv fix + LBS=2 scaling sweeps + post-mortem docs
 
 Continuation of the 2026-06-06 scaling-study unblock. Two new
