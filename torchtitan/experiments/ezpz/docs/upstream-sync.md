@@ -20,13 +20,12 @@ was required in ezpz.
 
 ---
 
-## 2026-06-06 (47th sync — RoPE refactor replayed; OPTIMIZER REFACTOR STILL TODO)
+## 2026-06-06 (47th sync — RoPE + optimizer refactors replayed; smoke pending)
 
-**Status: IN PROGRESS — sitting in worktree `ezpz-46th-47th-sync`.**
-The RoPE half is replayed and verified. The optimizer half (PR #3269)
-is not yet started. Don't merge this worktree branch back into `ezpz`
-until the optimizer side is done — `ezpz` is currently usable and we
-don't want to break it mid-sync.
+**Status: REPLAY COMPLETE — sitting in worktree `ezpz-46th-47th-sync`.**
+Both structural refactors (RoPE + mixed-optimizer) are replayed and
+import-verified. Numerics smoke against pre-merge baselines is the
+next gate before merging the worktree branch back into `ezpz`.
 
 Pulled 34 commits (`27aa49077..641b5f6b8`) from `upstream/main`.
 
@@ -77,11 +76,11 @@ agpt configs `debugmodel` / `2B` / `80B` and all 10 moe flavors
 / `10B_2B` / `10B_2B_sdpa` all build cleanly. Numerics-equivalence
 smoke against pre-merge baselines NOT yet run.
 
-### Still to do (PR #3269 mixed-optimizer refactor)
+### Replayed (mixed-optimizer refactor, PR #3269)
 
 [`632f67f12` — [optimizer] support mixed
-optimizers](https://github.com/pytorch/torchtitan/pull/3269). Replaces
-the flat `OptimizersContainer.Config(lr=8e-4)` with a per-group
+optimizers](https://github.com/pytorch/torchtitan/pull/3269) replaces
+the flat `OptimizersContainer.Config(lr=8e-4)` shape with a per-group
 shape:
 
 ```python
@@ -92,23 +91,63 @@ OptimizersContainer.Config(
 )
 ```
 
-Discovered when `agpt_2b_real()` build failed with `TypeError:
-OptimizersContainer.Config.__init__() got an unexpected keyword
-argument 'lr'`. Affects:
+`OptimizersContainer.__init__` walks model params first-match-wins,
+batches by `optimizer_name`, and instantiates one optimizer per
+`(model_part, optimizer_name)` pair. Subclasses register additional
+optimizer types via `_resolve_optimizer_cls(name)`. The flat `lr` /
+`beta1` / `beta2` / `eps` / `weight_decay` / `name` fields are gone
+from `OptimizersContainer.Config`; users supply them through
+`ParamGroupConfig.optimizer_kwargs`.
 
-* `agpt/config_registry.py:163` + `moe/config_registry.py:98` —
-  baseline `OptimizersContainer.Config(lr=8e-4)` callsites.
-* `competition/configs.py` — ~10 `<Custom>OptimizersContainer.Config(lr=X)`
-  callsites for Muon / SophiaG / Mano / SPAM / ADOPT.
-* `optimizer/containers.py` — 8 custom container subclasses
-  (`MuonOptimizersContainer`, `SophiaGOptimizersContainer`, etc.)
-  each define `class Config(OptimizersContainer.Config)` and a
-  `_build_optimizer_kwargs` method. Both likely need to fit the new
-  ParamGroupConfig shape.
-* `lr_finder.py:205` — light reference to container names.
+Replayed across 6 ezpz surfaces in commit `bac0a3473`:
 
-This is a larger surface than the RoPE replay. Punted to its own
-session.
+* `optimizer/containers.py`: each custom container subclass is now
+  thin — just overrides `_resolve_optimizer_cls(name)` to register
+  its optimizer class name. Dropped the flat-field Config classes
+  and `_build_optimizer_kwargs` helpers. Added matching
+  `default_<name>(lr=..., **kwargs)` factories
+  (`default_muon`, `default_sophiag`, `default_mano`,
+  `default_spam`, `default_adopt`, `default_muon_clip`,
+  `default_schedule_free`, `default_torch_muon`) mirroring
+  upstream's `default_adamw`. Kept the runtime extras
+  (`SophiaG.update_hessian`, `ScheduleFree.train_mode/eval_mode`,
+  `_CompositeOptimizer`, `register_muonclip_qk_pairs`).
+  `TorchMuonOptimizersContainer` keeps its bespoke `__init__`
+  (shape-based split doesn't fit pattern grouping) but reads its
+  kwargs from `param_groups[0].optimizer_kwargs`.
+* `optimizer/__init__.py`: re-export 8 new `default_<name>`
+  factories + the previously-missing `ScheduleFree` / `TorchMuon`
+  container symbols.
+* `agpt/config_registry.py`, `moe/config_registry.py`: swap
+  baseline `OptimizersContainer.Config(lr=8e-4)` to
+  `default_adamw(lr=8e-4)`.
+* `competition/configs.py`: 28 `<Custom>OptimizersContainer.Config(lr=X)`
+  callsites swapped to `default_<name>(lr=X)`. 19 post-construction
+  `cfg.optimizer.lr = X` mutations rewritten to
+  `cfg.optimizer.param_groups[0].optimizer_kwargs["lr"] = X`.
+* `train.py`: rewrote the `_build_optimizer_config` swap helper
+  (`--optimizer <name> --optimizer.<key>=<val>`). The old version
+  walked `dataclasses.fields(OptimizersContainer.Config)` for
+  `lr`/`beta1`/etc. — those fields no longer exist. New version
+  is a thin dispatch through `_OPTIMIZER_FACTORIES[name](**overrides)`
+  with a `_coerce_override` helper for bool/int/float/str string
+  coercion. Dropped the now-unused `dataclasses` import.
+
+**Verified end-to-end** under torch 2.13 venv (login node import test):
+
+- agpt configs (debugmodel, 2B, 20B, 80B) — all build, all
+  show `param_groups=1 first_pg=AdamW/0.0008`.
+- moe registry (10 flavors) + baseline configs
+  (`moe_2b`, `moe_2b_ep`, `moe_debugmodel`) — all build.
+- All **48 of 48** competition configs build cleanly (after fixing
+  19 `cfg.optimizer.lr = X` mutations).
+- All 9 `--optimizer <name>` swap paths exercised through
+  `_build_optimizer_config` with single + multi-kwarg overrides.
+
+`lr_finder.py:205` only reads container class names for output
+directory layout — no code change needed.
+
+Numerics-equivalence smoke against pre-merge baselines NOT yet run.
 
 ### Other commits in this sync (no ezpz replay required)
 
@@ -125,14 +164,14 @@ session.
 
 ### Action items
 
-- Replay PR #3269 (mixed-optimizer refactor) across the 4 ezpz
-  surfaces listed above.
-- After both halves are replayed, run a numerics smoke
-  (`moe_2b_ep`, `agpt_80b @ TP=2`) against the 2026-06-02 baselines
-  before merging this worktree branch into `ezpz`.
-- Audit RL commits.
+- Run a numerics smoke (`moe_2b_ep` 2N, `agpt_80b @ TP=2` 4N) against
+  the 2026-06-02 baselines from this worktree before merging
+  `worktree-ezpz-46th-47th-sync` back into `ezpz`.
+- Audit the 4 RL commits in this sync — `experiments/ezpz/rl/` may
+  need attention if they touch shared surfaces.
 
 Merge commit: `fb1c5a319` (in worktree, not on `ezpz`).
+Replay commits: `02dd1e7fe` (RoPE), `bac0a3473` (mixed-optimizer).
 
 ---
 
