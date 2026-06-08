@@ -176,6 +176,14 @@ def _ezpz_grpo_config_cls():
         max_completion_length: int = 64
         temperature: float = 0.7
 
+        # --- observability -----------------------------------------------------
+        # Stream sample prompts + generated completions to W&B (as a table)
+        # every logging_steps. For RL experiments where you want to see what
+        # the model is actually generating, this is the single most useful
+        # signal. Trivially cheap (only logged on rank 0).
+        log_completions: bool = True
+        num_completions_to_print: int = 4
+
         # --- vLLM (off by default — XPU vLLM is fragile) -----------------------
         use_vllm: bool = False
 
@@ -456,6 +464,65 @@ def _bootstrap_fsdp_env(
     )
 
 
+def _build_wandb_config(
+    ezpz_args, config, model_name: str, device_type: str, rank: int
+) -> dict:
+    """Build the wandb init-config block from every dataclass field.
+
+    The old hand-curated dict only logged ~11 of GRPOConfig's 60+ fields
+    (and none of TrainingArguments' 100+ inherited fields). Anything not
+    in that hand-curated list silently disappeared from wandb hyperparams,
+    making sweeps hard to interpret.
+
+    Now: dump every field of ezpz_args + config to wandb config, with
+    light filtering for fields that don't serialize cleanly (callables,
+    huge strings, internal HF state).
+    """
+    import dataclasses
+
+    EZPZ_PREFIX = "ezpz/"
+    TRAIN_PREFIX = "train/"
+    # Fields that aren't useful or don't serialize well
+    SKIP = {
+        "hub_token", "push_to_hub_token",  # secrets
+        "logging_dir", "output_dir", "run_name",  # path noise
+        "label_names",  # internal HF
+    }
+
+    def _safe(v):
+        # Coerce non-JSON-serializable values into reprs wandb can handle
+        if v is None or isinstance(v, (str, int, float, bool)):
+            return v
+        if isinstance(v, (list, tuple)):
+            return [_safe(x) for x in v]
+        if isinstance(v, dict):
+            return {str(k): _safe(val) for k, val in v.items()}
+        return repr(v)
+
+    out: dict = {}
+
+    # ezpz-side args
+    for f in dataclasses.fields(ezpz_args):
+        if f.name in SKIP:
+            continue
+        out[f"{EZPZ_PREFIX}{f.name}"] = _safe(getattr(ezpz_args, f.name))
+
+    # GRPOConfig + TrainingArguments inherited fields
+    for f in dataclasses.fields(config):
+        if f.name in SKIP or f.name.startswith("_"):
+            continue
+        val = getattr(config, f.name, None)
+        out[f"{TRAIN_PREFIX}{f.name}"] = _safe(val)
+
+    # Resolved runtime extras
+    out["runtime/model_name"] = model_name
+    out["runtime/device_type"] = device_type
+    out["runtime/rank"] = rank
+    out["runtime/world_size"] = int(os.environ.get("WORLD_SIZE", "1"))
+
+    return out
+
+
 def main() -> None:
     from trl import GRPOTrainer
     from transformers import AutoTokenizer, HfArgumentParser
@@ -525,28 +592,16 @@ def main() -> None:
         f"fsdp={config.fsdp or 'off'} device={device_type}"
     )
 
-    # W&B tracking via ezpz (rank 0 only)
+    # W&B tracking via ezpz (rank 0 only). Initializing BEFORE GRPOTrainer
+    # constructs its internal Accelerator gives HF Trainer's WandbCallback
+    # a live wandb run to attach to, so every self.log() inside training
+    # (GRPO metrics, rewards, completions, sampling stats) makes it to wandb.
     if rank == 0:
         ezpz.distributed.setup_wandb(
             project_name="torchtitan.ezpz.rl",
-            config={
-                "model": model_name,
-                "task": ezpz_args.task,
-                "num_steps": config.max_steps,
-                "lr": config.learning_rate,
-                "batch_size": config.per_device_train_batch_size,
-                "num_generations": config.num_generations,
-                "beta": config.beta,
-                "gradient_checkpointing": config.gradient_checkpointing,
-                "use_vllm": config.use_vllm,
-                "fsdp": str(config.fsdp) if config.fsdp else "off",
-                "fsdp_transformer_layer_cls_to_wrap": (
-                    ezpz_args.fsdp_transformer_layer_cls_to_wrap
-                    if config.fsdp
-                    else None
-                ),
-                "device_type": device_type,
-            },
+            config=_build_wandb_config(
+                ezpz_args, config, model_name, device_type, rank,
+            ),
         )
 
     tokenizer = AutoTokenizer.from_pretrained(model_name)
