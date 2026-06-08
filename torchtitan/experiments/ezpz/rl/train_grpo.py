@@ -444,32 +444,6 @@ def main() -> None:
     rank = ezpz.distributed.get_rank()
     device_type = ezpz.distributed.get_torch_device_type()
 
-    # Pin the accelerator device to this rank's local slot BEFORE any
-    # model loading. Under ZE_FLAT_DEVICE_HIERARCHY=FLAT each process
-    # sees all 12 XPU tiles, so AutoModelForCausalLM.from_pretrained
-    # ends up putting weights on whatever torch.xpu.current_device()
-    # happens to be (often the last one touched). Accelerate then
-    # passes device_id=xpu:<LOCAL_RANK % ngpus> to FSDP, which raises
-    #   ValueError: Inconsistent compute device and `device_id` on
-    #   rank N: xpu:<actual> vs xpu:<expected>
-    # before training_step. The fix is to pin current_device early so
-    # every from_pretrained / .to(device) call lands on the right tile.
-    local_rank = ezpz.distributed.get_local_rank()
-    if device_type == "xpu":
-        import torch
-        ngpus = torch.xpu.device_count()
-        if ngpus > 0:
-            torch.xpu.set_device(local_rank % ngpus)
-            log.info(
-                f"[rank {rank}] pinned to xpu:{local_rank % ngpus} "
-                f"(local_rank={local_rank}, ngpus={ngpus})"
-            )
-    elif device_type == "cuda":
-        import torch
-        ngpus = torch.cuda.device_count()
-        if ngpus > 0:
-            torch.cuda.set_device(local_rank % ngpus)
-
     # Resolve + pre-warm HF cache on rank 0, then barrier so worker
     # ranks read from cache instead of hammering HF Hub with 48
     # concurrent HEAD requests (which trips per-IP rate limits, see
