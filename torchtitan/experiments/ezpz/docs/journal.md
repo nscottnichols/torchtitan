@@ -4,6 +4,199 @@ Running log of what's happening, session by session. Most recent first.
 
 ---
 
+## 2026-06-08 — RL polish + first real SFT path (gsm8k / metamathqa / mix) + 32N XCCL pain
+
+Long session, three intertwined threads. Tracked in tasks #66–#75.
+
+### train_grpo polish
+
+User-driven iteration on the GRPO entry point that turned up
+several real bugs plus a bunch of UX improvements:
+
+- **Vocab-aware chat-template picker**
+  (`_pick_chat_template` in `train_grpo.py`, commit `31c19c8e4`).
+  The chatml fallback I added 2026-06-07 used literal `<|user|>` /
+  `<|assistant|>` tokens, which the AuroraGPT-2B tokenizer encodes
+  as 4-token sequences the model has never seen as turn
+  boundaries — every completion echoed the prompt back. New picker
+  probes tokenizer vocab for single-token boundaries and picks
+  `gemma` (`<start_of_turn>` / `<end_of_turn>`, ids 106/107 in
+  AuroraGPT-2B), `chatml` (`<|im_start|>` / `<|im_end|>` for
+  Qwen-family), or `plaintext` (USER:/ASSISTANT:) fallback. 25-step
+  hardware verify (job 12468210) showed the model correctly
+  generating `<end_of_turn>` and stopping early
+  (`completions/min_length` 13-15 vs 64 with the broken fallback).
+- **Per-task `--task` autocomplete** — choices auto-populated from
+  `TASK_REGISTRY` (commit `05f0ee803`). Unknown task now fails at
+  parse-time with the full list, not after dist init.
+- **Auto-detect FSDP wrap class from `model_type`** (commit
+  `e3477c717`). 15 model families pre-mapped (llama, llama4,
+  qwen2, qwen3, mistral, gemma, phi, gpt_neox, deepseek_v3, …)
+  so switching `--model_name_or_path` doesn't require also
+  switching `--fsdp_transformer_layer_cls_to_wrap`.
+- **Rank-0 model prefetch + broadcast** (commit `765f1f5a8`).
+  48 ranks doing `AutoModel.from_pretrained` against the same HF
+  Hub repo trips 429 rate-limits with 200s+ backoffs; rank 0
+  pre-warms cache via `snapshot_download`, barrier, workers load
+  from disk.
+- **`device_map="auto"` override for FSDP** (commit `e00b130f9`).
+  TRL's `create_model_from_path` defaults `device_map="auto"`
+  which under FLAT mode lands every rank's model on the
+  highest-numbered tile (`xpu:11`) — FSDP then catches the
+  per-rank-device mismatch and raises before training. Override
+  to `device_map=None` so `model.to(accelerator.device)` puts
+  the model on the right tile. Diagnosed via the
+  `scripts/diag/device_mismatch.py` 48-rank probe — phase-1 confirmed
+  pre-trainer device assignments were all correct, phase-2 hit
+  the same xpu:11 bug as the user, smoking gun was TRL's default.
+- **Auto-populate `setup_wandb` config from every dataclass field**
+  (commit `d5619f512`). 11 → 181 hyperparameter keys; nothing
+  gets silently dropped from sweeps. Also enabled
+  `log_completions=True` + `num_completions_to_print=2` so the
+  Rich completions table is streamed to wandb without becoming
+  a wall-of-text on screen.
+- **Revert and replace dead-end fix** (`d1affb775`): the
+  `torch.xpu.set_device(local_rank % ngpus)` early-pin I added
+  2026-06-07 was verified harmless but didn't fix the bug — the
+  real culprit was TRL's `device_map="auto"` (above). Reverted
+  via `git revert` rather than force-pushing.
+- **`extract_answer` prefers LAST `=` + recognizes gsm8k `####`**
+  (commit `d749e2199`). User flagged that
+  `6×12×10×12=<<6*12*12=720*12=8640>>` was graded 0.0 even
+  though `8640` was correct — old regex matched the FIRST `=`
+  and returned the intermediate `720`. Fix walks all `=` matches
+  and returns the last one; adds gsm8k's `#### N` final-answer
+  marker as a higher-priority alternative.
+
+### Streaming-mode rewrite of RL tasks + new `arithmetic` task
+
+User noticed the default `num_samples=1000` meant a 1000-step run
+sees each prompt ~48× — model can memorize rather than learn.
+Switched all five tasks (`sum_digits`, `multiply`, `arithmetic`
+[new], `word_sort`, `countdown`) to a `build_streaming_or_finite`
+helper that materializes a 100k-pool when `num_samples=0` (the
+new default) and a finite-N pool otherwise. Iteration was bumpy:
+
+  - Commits `98d537d07` (sum_digits + multiply) and `08638ff9e`
+    (new `arithmetic` task with {+, −, ×, ÷}) tried to use a true
+    `IterableDataset` — but TRL's GRPOTrainer rejects iterable
+    datasets at __init__ (trl#3213). User hit the
+    `NotImplementedError` on first launch.
+  - Commit `f454e9236` replaced the IterableDataset with a large
+    finite `Dataset.from_list` (default 100k); same effective
+    "no prompt reuse" behavior at modest one-time init cost
+    (0.5s for sum_digits, 125s for countdown due to its
+    permutations-based rejection sampling).
+  - Commit `637a83cda` extended the streaming default to
+    `word_sort` + `countdown` after a user-launched
+    `--task word_sort` hit the "There seems not to be a single
+    sample in your epoch_iterator" empty-dataset bug — those two
+    tasks had been missed in the first pass.
+
+The new `arithmetic` task mixes operations with weighted sampling,
+guarantees integer answers (division uses divisor + quotient
+construction), adds an `op` column for per-op reward dashboards,
+plus a `length_penalty` reward function on top of accuracy +
+format (commit not pushed yet — verified locally only).
+
+### SFT companion (`train_sft.py` + `datasets_sft.py` + Aurora submit)
+
+Built the SFT side of the RL stack so weak-baseline checkpoints
+like AuroraGPT-2B-sophiag can be instruction-tuned before being
+used as a GRPO starting point. Mirrors `train_grpo.py`'s shape:
+`HfArgumentParser((EzpzSFTArgs, EzpzSFTConfig))`, reuses all the
+GRPO helpers (FSDP env-bootstrap, chat-template picker, rank-0
+prefetch, wandb auto-config), adds `assistant_only_loss=True` +
+`packing=True` + `max_length=1024` defaults.
+
+Dataset registry (`datasets_sft.py`):
+  - `gsm8k` (7473) — grade-school CoT math
+  - `metamathqa` (~395k) — augmented GSM8K+MATH
+  - `alpaca` (52k) — broad instruction-following (added later)
+  - `math_alpaca_mix` (60/10/30 metamath/gsm8k/alpaca via
+    `interleave_datasets`) — broader for downstream non-math tasks
+    like `word_sort` (added later)
+
+Bundle commit: `5446e1d74`. Required adding `{% generation %}` /
+`{% endgeneration %}` markers around the assistant content in all
+3 chat templates so SFTTrainer's `assistant_only_loss=True` could
+compute the loss mask (folded into the same commit). Verified
+locally that the gemma template produces the correct
+`assistant_masks` via `apply_chat_template(...,
+return_assistant_tokens_mask=True)`.
+
+Verified end-to-end on 4N Sunspot (job 12468212): 50 steps
+(`max_steps=50`), `train_loss=0.582`, `mean_token_accuracy=0.871`
+in 35s. Pipeline intact.
+
+### 32N production SFT — extended XCCL pain
+
+User asked for a 32N SFT to actually produce a usable
+instruction-tuned checkpoint. The pipeline works in the small but
+**32N hits XCCL exceptions repeatedly**:
+
+| Job | Dataset | Outcome | Failure mode |
+|---|---|---|---|
+| 12468217 | metamathqa | Died at 2:20 | 384 ranks × HF Hub xet-read = 429 storm + `.incomplete/dataset_info.json` cascade |
+| 12468218 | metamathqa | Trained to step 442 (epoch 1.75), then `ccl::v1::exception` → SIGABRT on rank 241 | First XCCL crash |
+| 12468220 | metamathqa (resume) | `--resume_from_checkpoint` silently ignored, restarted from scratch, hit same XCCL crash at step ~590 (epoch 1.55) | Resume bug + repeat crash |
+| 12468221 | metamathqa (resume) | CLI validation: `--auto-retry` needs `--nproc`, not `--nhost` | Bad CLI |
+| 12468222 | metamathqa (resume) | First successful `--auto-retry` swap-in (32 train + 4 spare), but `--resume_from_checkpoint` still silently ignored across both attempts. Walltime-killed mid-second-attempt | Resume bug + walltime |
+| 12468232 | math_alpaca_mix | Crashed at argparse-init: `60% metamathqa` in description triggers `%m` format error | Argparse `%` escape |
+| **12468237** | math_alpaca_mix | Trained to step 200 + saved a usable `checkpoint-200`, then hung post-save for 30 min until `--auto-retry` watchdog killed it. `stuck_pre_training` failover-stop on attempt 2 | Post-save hang (new failure mode) |
+
+Fixes landed during the chain:
+
+  - `train_sft.py:_prefetch_and_broadcast_dataset` — rank 0 builds
+    dataset first, barrier, workers load from warm cache (no more
+    429 storms)
+  - Pre-warmed `~/.cache/huggingface/datasets/` locally on `/home`
+    so compute nodes always hit cache (lustre-NFS shared)
+  - `trainer.train(resume_from_checkpoint=config.resume_from_checkpoint
+    or None)` explicit pass-through (the silently-ignored resume
+    was an FSDP-sharded checkpoint compatibility issue with HF
+    Trainer's auto-detect)
+  - `%%` escape on all literal `%` in registry descriptions
+
+What we have to show for it: **`outputs/sft/aurora2b-sophiag-metamathqa-32n/checkpoint-400-hf/`**
+— consolidated HF-format checkpoint (~1.75 epochs metamathqa,
+loss 0.20, mean_token_accuracy 0.934, 7.94 GB safetensors).
+Usable for downstream GRPO via
+`--model_name_or_path outputs/sft/aurora2b-sophiag-metamathqa-32n/checkpoint-400-hf`.
+Plus `outputs/sft/aurora2b-sophiag-mix-32n/checkpoint-200/`
+(FSDP-sharded, mix dataset, 200 steps) — could be consolidated
+similarly.
+
+The 32N XCCL crash pattern reproduces across two distinct SFT
+training paths (metamath-only and mix). Not a one-off; not
+strongly correlated with a single bad node either (12468218
+crashed on `x1921c5s1b0n0`, 12468220 on a different host). Worth
+investigating further (single-rank stuck-in-collective somewhere
+between step 400-600 of a multi-node SFT run, looking the same
+across two different datasets and across two different training
+schedules) — but the SFT'd checkpoint we have is good enough to
+move on with the GRPO experiments.
+
+### SFT checkpoint consolidation tool
+
+Added `rl/scripts/consolidate_sft_ckpt.sh` (bash) wrapping
+`accelerate merge-weights` + cp of config + tokenizer from the
+source model dir. Pattern: `checkpoint-N/pytorch_model_fsdp_0/`
+(distcp shards) → `checkpoint-N-hf/model.safetensors` plus the
+HF-format companion files. Verified consolidation produces a
+`from_pretrained`-loadable checkpoint (`model_type=llama`,
+`GemmaTokenizer`, 1.99B params, bf16 dtype).
+
+### Aurora 80B production script default flip
+
+Brief carry-over from 2026-06-07 evening: `submit_agpt_80b_aurora_venv_failover.sh`
+default for `CHECKPOINT_ASYNC_MODE` was `async` (commit
+`ce321caae` flipped it to `disabled`). Just confirming the change
+shipped — anyone launching on Aurora today gets the safe
+sync-checkpoint default that avoids the gloo-on-xpu crash.
+
+---
+
 ## 2026-06-07 (evening) — 80B prod sync-ckpt validated end-to-end + train_grpo HfArgumentParser + FSDP wiring + blendcorpus index race + xccl issue filed
 
 Big session covering four threads. Tracked in tasks #40–#63.
