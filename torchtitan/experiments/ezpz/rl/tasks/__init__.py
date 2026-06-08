@@ -48,6 +48,7 @@ def get_task(name: str) -> RLTask:
 
 
 # Import task modules so they self-register.
+from torchtitan.experiments.ezpz.rl.tasks import arithmetic as _  # noqa: F401, E402
 from torchtitan.experiments.ezpz.rl.tasks import countdown as _  # noqa: F401, E402
 from torchtitan.experiments.ezpz.rl.tasks import multiply as _  # noqa: F401, E402
 from torchtitan.experiments.ezpz.rl.tasks import sum_digits as _  # noqa: F401, E402
