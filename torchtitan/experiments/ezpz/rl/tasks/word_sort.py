@@ -15,7 +15,10 @@ import re
 from datasets import Dataset
 
 from torchtitan.experiments.ezpz.rl.tasks import RLTask, register_task
-from torchtitan.experiments.ezpz.rl.tasks.common import get_completion_text
+from torchtitan.experiments.ezpz.rl.tasks.common import (
+    build_streaming_or_finite,
+    get_completion_text,
+)
 
 # Common English words (short, unambiguous, easy to tokenize)
 WORD_POOL = [
@@ -33,39 +36,20 @@ WORD_POOL = [
 # ---------------------------------------------------------------------------
 
 
-def build_dataset(
-    num_samples: int = 1000,
-    min_words: int = 3,
-    max_words: int = 6,
-    seed: int = 42,
-) -> Dataset:
-    """Generate word-sorting prompts with ground truth answers.
+def _sample_one(rng, min_words: int, max_words: int) -> dict:
+    """Generate one word-sort prompt+answer pair."""
+    n = rng.randint(min_words, max_words)
+    words = rng.sample(WORD_POOL, n)
+    # Ensure the sample isn't already sorted
+    shuffled = words[:]
+    while shuffled == sorted(shuffled):
+        rng.shuffle(shuffled)
 
-    Args:
-        num_samples: Number of samples to generate.
-        min_words: Minimum words per problem.
-        max_words: Maximum words per problem.
-        seed: Random seed for reproducibility.
+    word_list = ", ".join(shuffled)
+    sorted_list = ", ".join(sorted(shuffled))
 
-    Returns:
-        HuggingFace Dataset with columns: prompt (list[dict]), answer (str).
-    """
-    rng = random.Random(seed)
-    prompts = []
-    answers = []
-
-    for _ in range(num_samples):
-        n = rng.randint(min_words, max_words)
-        words = rng.sample(WORD_POOL, n)
-        # Ensure the sample isn't already sorted
-        shuffled = words[:]
-        while shuffled == sorted(shuffled):
-            rng.shuffle(shuffled)
-
-        word_list = ", ".join(shuffled)
-        sorted_list = ", ".join(sorted(shuffled))
-
-        prompt = [
+    return {
+        "prompt": [
             {
                 "role": "user",
                 "content": (
@@ -73,12 +57,37 @@ def build_dataset(
                     f"Reply with just the sorted list, separated by commas."
                 ),
             }
-        ]
+        ],
+        "answer": sorted_list,
+    }
 
-        prompts.append(prompt)
-        answers.append(sorted_list)
 
-    return Dataset.from_dict({"prompt": prompts, "answer": answers})
+def build_dataset(
+    num_samples: int = 0,
+    min_words: int = 3,
+    max_words: int = 6,
+    seed: int = 42,
+) -> Dataset:
+    """Generate word-sorting prompts with ground truth answers.
+
+    Args:
+        num_samples: Number of samples to materialize. ``0`` (default)
+            uses a large pool (~100k via
+            ``build_streaming_or_finite``) so a typical run never
+            reuses the same prompt. Any positive integer materializes
+            that exact count up front.
+        min_words: Minimum words per problem.
+        max_words: Maximum words per problem.
+        seed: Random seed for reproducibility.
+
+    Returns:
+        HuggingFace Dataset.
+    """
+    rng = random.Random(seed)
+    return build_streaming_or_finite(
+        lambda: _sample_one(rng, min_words, max_words),
+        num_samples,
+    )
 
 
 # ---------------------------------------------------------------------------

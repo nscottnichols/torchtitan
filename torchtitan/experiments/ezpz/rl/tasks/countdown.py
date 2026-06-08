@@ -19,7 +19,10 @@ from itertools import permutations
 from datasets import Dataset
 
 from torchtitan.experiments.ezpz.rl.tasks import RLTask, register_task
-from torchtitan.experiments.ezpz.rl.tasks.common import get_completion_text
+from torchtitan.experiments.ezpz.rl.tasks.common import (
+    build_streaming_or_finite,
+    get_completion_text,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -70,8 +73,49 @@ def _find_target(
 # ---------------------------------------------------------------------------
 
 
+def _sample_one(
+    rng,
+    min_numbers: int,
+    max_numbers: int,
+    max_value: int,
+    max_attempts: int = 50,
+) -> dict:
+    """Generate one countdown prompt+answer pair.
+
+    Uses rejection sampling: try up to ``max_attempts`` (numbers, ops)
+    combinations until ``_find_target`` returns something in the
+    1-999 range. If we somehow can't find one in that many tries (very
+    unlikely with the default bounds), retry with a fresh random
+    number set forever — we'd rather block briefly than return junk.
+    """
+    while True:
+        for _ in range(max_attempts):
+            n = rng.randint(min_numbers, max_numbers)
+            numbers = [rng.randint(1, max_value) for _ in range(n)]
+            target = _find_target(numbers, rng)
+            if target is None:
+                continue
+
+            nums_str = ", ".join(str(x) for x in numbers)
+            return {
+                "prompt": [
+                    {
+                        "role": "user",
+                        "content": (
+                            f"Using the numbers {nums_str}, create an "
+                            f"arithmetic expression using +, -, * that "
+                            f"equals {target}. Show your expression and "
+                            f"result."
+                        ),
+                    }
+                ],
+                "answer": str(target),
+                "numbers": nums_str,
+            }
+
+
 def build_dataset(
-    num_samples: int = 1000,
+    num_samples: int = 0,
     min_numbers: int = 3,
     max_numbers: int = 5,
     max_value: int = 25,
@@ -80,7 +124,11 @@ def build_dataset(
     """Generate countdown problems with achievable targets.
 
     Args:
-        num_samples: Number of samples to generate.
+        num_samples: Number of samples to materialize. ``0`` (default)
+            uses a large pool (~100k via
+            ``build_streaming_or_finite``) so a typical run never
+            reuses the same prompt. Any positive integer materializes
+            that exact count up front.
         min_numbers: Minimum count of given numbers.
         max_numbers: Maximum count of given numbers.
         max_value: Maximum value for each given number.
@@ -91,40 +139,10 @@ def build_dataset(
         answer (str), numbers (str).
     """
     rng = random.Random(seed)
-    prompts = []
-    answers = []
-    all_numbers = []
-
-    attempts = 0
-    while len(prompts) < num_samples and attempts < num_samples * 10:
-        attempts += 1
-        n = rng.randint(min_numbers, max_numbers)
-        numbers = [rng.randint(1, max_value) for _ in range(n)]
-        target = _find_target(numbers, rng)
-        if target is None:
-            continue
-
-        nums_str = ", ".join(str(x) for x in numbers)
-        prompt = [
-            {
-                "role": "user",
-                "content": (
-                    f"Using the numbers {nums_str}, create an arithmetic "
-                    f"expression using +, -, * that equals {target}. "
-                    f"Show your expression and result."
-                ),
-            }
-        ]
-
-        prompts.append(prompt)
-        answers.append(str(target))
-        all_numbers.append(nums_str)
-
-    return Dataset.from_dict({
-        "prompt": prompts,
-        "answer": answers,
-        "numbers": all_numbers,
-    })
+    return build_streaming_or_finite(
+        lambda: _sample_one(rng, min_numbers, max_numbers, max_value),
+        num_samples,
+    )
 
 
 # ---------------------------------------------------------------------------
