@@ -49,3 +49,28 @@ def get_completion_text(completion) -> str:
             msg.get("content", "") for msg in completion if isinstance(msg, dict)
         )
     return str(completion)
+
+
+def build_streaming_or_finite(sample_fn, num_samples: int):
+    """Wrap a per-sample generator function into an HF Dataset.
+
+    The convention: ``num_samples == 0`` means stream forever
+    (returns an ``IterableDataset`` — every training step sees a
+    fresh prompt, so the model can't memorize a fixed pool). Any
+    positive integer materializes a finite ``Dataset`` of that size,
+    which is what older training code expects.
+
+    ``sample_fn`` is a zero-arg callable that returns one dict per
+    call (must contain at least ``prompt`` and ``answer`` keys).
+    The caller is responsible for seeding the RNG inside sample_fn
+    so reproducibility behaves correctly.
+    """
+    from datasets import Dataset, IterableDataset
+
+    if num_samples == 0:
+        def _stream():
+            while True:
+                yield sample_fn()
+        return IterableDataset.from_generator(_stream)
+
+    return Dataset.from_list([sample_fn() for _ in range(num_samples)])

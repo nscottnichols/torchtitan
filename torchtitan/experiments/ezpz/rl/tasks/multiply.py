@@ -15,6 +15,7 @@ from datasets import Dataset
 
 from torchtitan.experiments.ezpz.rl.tasks import RLTask, register_task
 from torchtitan.experiments.ezpz.rl.tasks.common import (
+    build_streaming_or_finite,
     extract_answer,
     get_completion_text,
 )
@@ -25,8 +26,27 @@ from torchtitan.experiments.ezpz.rl.tasks.common import (
 # ---------------------------------------------------------------------------
 
 
+def _sample_one(rng, num_factors: int, max_factor: int) -> dict:
+    """Generate one multiplication prompt+answer pair."""
+    factors = [rng.randint(2, max_factor) for _ in range(num_factors)]
+    product = 1
+    for f in factors:
+        product *= f
+
+    expression = " × ".join(str(f) for f in factors)
+    return {
+        "prompt": [
+            {
+                "role": "user",
+                "content": f"What is {expression}? Reply with just the number.",
+            }
+        ],
+        "answer": str(product),
+    }
+
+
 def build_dataset(
-    num_samples: int = 1000,
+    num_samples: int = 0,
     num_factors: int = 2,
     max_factor: int = 12,
     seed: int = 42,
@@ -34,36 +54,23 @@ def build_dataset(
     """Generate multiplication prompts with ground truth answers.
 
     Args:
-        num_samples: Number of samples to generate.
+        num_samples: Number of samples to materialize. ``0`` (default)
+            streams indefinitely — every training step sees a fresh
+            randomly-generated prompt and the model can't memorize a
+            fixed pool. Any positive integer materializes that many
+            samples up front (the old behavior).
         num_factors: Number of factors per problem (default 2).
         max_factor: Maximum value for each factor (inclusive).
         seed: Random seed for reproducibility.
 
     Returns:
-        HuggingFace Dataset with columns: prompt (list[dict]), answer (str).
+        HuggingFace Dataset (finite) or IterableDataset (streaming).
     """
     rng = random.Random(seed)
-    prompts = []
-    answers = []
-
-    for _ in range(num_samples):
-        factors = [rng.randint(2, max_factor) for _ in range(num_factors)]
-        product = 1
-        for f in factors:
-            product *= f
-
-        expression = " × ".join(str(f) for f in factors)
-        prompt = [
-            {
-                "role": "user",
-                "content": f"What is {expression}? Reply with just the number.",
-            }
-        ]
-
-        prompts.append(prompt)
-        answers.append(str(product))
-
-    return Dataset.from_dict({"prompt": prompts, "answer": answers})
+    return build_streaming_or_finite(
+        lambda: _sample_one(rng, num_factors, max_factor),
+        num_samples,
+    )
 
 
 # ---------------------------------------------------------------------------
