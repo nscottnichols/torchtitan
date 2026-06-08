@@ -149,21 +149,13 @@ class ColwiseParallelWithGradPlacement(ColwiseParallel):
                 "local_input_grad_placements must be specified when input is a "
                 "plain tensor. Please think about what you want the from_local(Replicate) backward behavior like."
             )
-            try:
-                input_tensor = DTensor.from_local(
-                    input_tensor,
-                    device_mesh,
-                    input_layouts,
-                    run_check=False,
-                    grad_placements=local_input_grad_placements,
-                )
-            except TypeError:
-                input_tensor = DTensor.from_local(
-                    input_tensor,
-                    device_mesh,
-                    input_layouts,
-                    run_check=False,
-                )
+            input_tensor = DTensor.from_local(
+                input_tensor,
+                device_mesh,
+                input_layouts,
+                run_check=False,
+                grad_placements=local_input_grad_placements,
+            )
 
         if input_layouts != desired_input_layouts:
             input_tensor = input_tensor.redistribute(

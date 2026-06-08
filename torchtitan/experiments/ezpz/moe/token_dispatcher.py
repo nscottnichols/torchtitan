@@ -1,0 +1,1607 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+#
+# This source code is licensed under the BSD-style license found in the
+# LICENSE file in the root directory of this source tree.
+
+import atexit
+import os
+from collections import Counter
+from dataclasses import dataclass
+
+import torch
+import torch.distributed as dist
+import torch.distributed.nn.functional as dist_nn_functional
+import torch.nn.functional as F
+from torch import nn
+from torch.distributed._functional_collectives import (
+    all_to_all_single,
+    all_to_all_single_autograd,
+)
+from torch.distributed.tensor import DeviceMesh
+
+from torchtitan.config import Configurable
+from torchtitan.ops.scatter_add import deterministic_scatter_add
+
+
+@torch.library.custom_op(
+    "torchtitan_ezpz::deterministic_scatter_add_1d", mutates_args=()
+)
+def deterministic_scatter_add_1d(
+    out: torch.Tensor, index: torch.Tensor, src: torch.Tensor
+) -> torch.Tensor:
+    index_2d = index.reshape(-1, 1).expand(-1, src.shape[-1])
+    return deterministic_scatter_add(out, index_2d, src)
+
+
+def deterministic_scatter_add_(
+    out: torch.Tensor, index: torch.Tensor, src: torch.Tensor
+) -> torch.Tensor:
+    """Deterministic in-place scatter_add for forward-only/no-grad paths."""
+    prev = torch.are_deterministic_algorithms_enabled()
+    prev_warn_only = torch.is_deterministic_algorithms_warn_only_enabled()
+    torch.use_deterministic_algorithms(True, warn_only=False)
+    try:
+        return out.scatter_add_(dim=0, index=index, src=src)
+    finally:
+        torch.use_deterministic_algorithms(prev, warn_only=prev_warn_only)
+
+
+@deterministic_scatter_add_1d.register_fake
+def _(out: torch.Tensor, index: torch.Tensor, src: torch.Tensor) -> torch.Tensor:
+    return torch.empty_like(out)
+
+
+def _backward_scatter_add_1d(
+    ctx: torch.autograd.function.FunctionCtx, grad_output: torch.Tensor
+) -> tuple[torch.Tensor, None, torch.Tensor]:
+    (index,) = ctx.saved_tensors  # pyrefly: ignore[missing-attribute]
+    index_2d = index.reshape(-1, 1).expand(-1, grad_output.shape[-1])
+    grad_src = torch.gather(grad_output, dim=0, index=index_2d)
+    return grad_output, None, grad_src
+
+
+def _setup_scatter_add_1d_context(
+    ctx: torch.autograd.function.FunctionCtx,
+    inputs: tuple[torch.Tensor, torch.Tensor, torch.Tensor],
+    output: torch.Tensor,
+) -> None:
+    _out, index, _src = inputs
+    ctx.save_for_backward(index)
+
+
+deterministic_scatter_add_1d.register_autograd(
+    _backward_scatter_add_1d,
+    setup_context=_setup_scatter_add_1d_context,
+)
+
+
+_MOE_FASTPATH_COUNTERS: Counter[str] = Counter()
+_MOE_FASTPATH_ATEXIT_REGISTERED = False
+
+
+def _moe_fastpath_debug_enabled() -> bool:
+    return os.environ.get("TT_MOE_DEBUG_FASTPATHS", "").lower() in {
+        "1",
+        "true",
+        "yes",
+        "rank0",
+        "all",
+    }
+
+
+def _rank_for_fastpath_debug() -> int:
+    for name in ("RANK", "PMI_RANK", "PALS_RANKID", "OMPI_COMM_WORLD_RANK"):
+        value = os.environ.get(name)
+        if value not in (None, ""):
+            return int(value)
+    return 0
+
+
+def _print_moe_fastpath_counters() -> None:
+    if not _moe_fastpath_debug_enabled():
+        return
+    mode = os.environ.get("TT_MOE_DEBUG_FASTPATHS", "").lower()
+    rank = _rank_for_fastpath_debug()
+    if mode != "all" and rank != 0:
+        return
+    if not _MOE_FASTPATH_COUNTERS:
+        print(f"[rank{rank}] TT_MOE_FASTPATH_COUNTERS empty", flush=True)
+        return
+    counts = " ".join(
+        f"{name}={count}" for name, count in sorted(_MOE_FASTPATH_COUNTERS.items())
+    )
+    print(f"[rank{rank}] TT_MOE_FASTPATH_COUNTERS {counts}", flush=True)
+
+
+def _record_moe_fastpath(name: str, count: int = 1) -> None:
+    global _MOE_FASTPATH_ATEXIT_REGISTERED
+    if not _moe_fastpath_debug_enabled():
+        return
+    if torch.compiler.is_compiling():
+        return
+    if not _MOE_FASTPATH_ATEXIT_REGISTERED:
+        atexit.register(_print_moe_fastpath_counters)
+        _MOE_FASTPATH_ATEXIT_REGISTERED = True
+    _MOE_FASTPATH_COUNTERS[name] += count
+
+
+def _record_moe_fastpath_max(name: str, value: int) -> None:
+    global _MOE_FASTPATH_ATEXIT_REGISTERED
+    if not _moe_fastpath_debug_enabled():
+        return
+    if torch.compiler.is_compiling():
+        return
+    if not _MOE_FASTPATH_ATEXIT_REGISTERED:
+        atexit.register(_print_moe_fastpath_counters)
+        _MOE_FASTPATH_ATEXIT_REGISTERED = True
+    if name not in _MOE_FASTPATH_COUNTERS or value > _MOE_FASTPATH_COUNTERS[name]:
+        _MOE_FASTPATH_COUNTERS[name] = value
+
+
+def _record_moe_fastpath_min(name: str, value: int) -> None:
+    global _MOE_FASTPATH_ATEXIT_REGISTERED
+    if not _moe_fastpath_debug_enabled():
+        return
+    if torch.compiler.is_compiling():
+        return
+    if not _MOE_FASTPATH_ATEXIT_REGISTERED:
+        atexit.register(_print_moe_fastpath_counters)
+        _MOE_FASTPATH_ATEXIT_REGISTERED = True
+    if name not in _MOE_FASTPATH_COUNTERS or value < _MOE_FASTPATH_COUNTERS[name]:
+        _MOE_FASTPATH_COUNTERS[name] = value
+
+
+def _record_moe_fastpath_stat(name: str, value: int) -> None:
+    _record_moe_fastpath(f"{name}_count")
+    _record_moe_fastpath(f"{name}_sum", value)
+    _record_moe_fastpath_max(f"{name}_max", value)
+    _record_moe_fastpath_min(f"{name}_min", value)
+
+
+def _normal_equal_a2a_padding_enabled() -> bool:
+    return _normal_equal_a2a_padding_policy() in {"force", "adaptive"}
+
+
+def _normal_equal_a2a_padding_policy() -> str:
+    value = os.environ.get("TT_MOE_NORMAL_EQUAL_A2A_PADDING", "").lower()
+    if value in {"1", "true", "yes", "force"}:
+        return "force"
+    if value == "adaptive":
+        return "adaptive"
+    return "off"
+
+
+def _normal_equal_a2a_padding_threshold() -> float:
+    value = os.environ.get("TT_MOE_NORMAL_EQUAL_A2A_PADDING_THRESHOLD", "0.10")
+    try:
+        threshold = float(value)
+    except ValueError:
+        threshold = 0.10
+    return max(threshold, 0.0)
+
+
+def _normal_equal_a2a_padding_telemetry_enabled() -> bool:
+    return os.environ.get("TT_MOE_NORMAL_EQUAL_A2A_PADDING_TELEMETRY", "").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+
+
+def _debug_dispatch_contracts_enabled() -> bool:
+    return os.environ.get("TT_MOE_DEBUG_DISPATCH_CONTRACTS", "").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+
+
+def _equal_a2a_padding_overhead_ratio(
+    *,
+    input_splits: list[int],
+    output_splits: list[int],
+    equal_split_size: int,
+) -> tuple[int, float]:
+    real_tokens = sum(input_splits) + sum(output_splits)
+    padded_tokens = sum(equal_split_size - split for split in input_splits) + sum(
+        equal_split_size - split for split in output_splits
+    )
+    if real_tokens <= 0:
+        return padded_tokens, float("inf")
+    return padded_tokens, padded_tokens / real_tokens
+
+
+def _sync_after_a2a_enabled() -> bool:
+    return os.environ.get("TT_MOE_SYNC_AFTER_A2A", "").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+
+
+def _sync_before_a2a_enabled() -> bool:
+    return os.environ.get("TT_MOE_SYNC_BEFORE_A2A", "").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+
+
+def _c10d_a2a_autograd_enabled() -> bool:
+    return os.environ.get("TT_MOE_C10D_A2A_AUTOGRAD", "").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+
+
+def _shares_storage(a: torch.Tensor, b: torch.Tensor) -> bool:
+    return a.untyped_storage().data_ptr() == b.untyped_storage().data_ptr()
+
+
+def _scatter_add_forward_or_autograd(
+    out: torch.Tensor,
+    index: torch.Tensor,
+    src: torch.Tensor,
+    protected_input: torch.Tensor,
+) -> torch.Tensor:
+    if torch.is_grad_enabled() or _shares_storage(out, protected_input):
+        _record_moe_fastpath("scatter_add_autograd_or_alias")
+        return deterministic_scatter_add(out, index, src)
+    _record_moe_fastpath("scatter_add_inplace_no_grad")
+    return deterministic_scatter_add_(out, index, src)
+
+
+def _scatter_add_1d_forward_or_autograd(
+    out: torch.Tensor,
+    index: torch.Tensor,
+    src: torch.Tensor,
+    protected_input: torch.Tensor,
+) -> torch.Tensor:
+    if torch.is_grad_enabled() or _shares_storage(out, protected_input):
+        _record_moe_fastpath("scatter_add_1d_autograd_or_alias")
+        return deterministic_scatter_add_1d(out, index, src)
+    _record_moe_fastpath("scatter_add_inplace_no_grad")
+    scatter_index = index.reshape(-1, 1).expand(-1, src.shape[-1])
+    return deterministic_scatter_add_(out, scatter_index, src)
+
+
+def _sync_after_a2a_if_enabled(x: torch.Tensor) -> None:
+    if not _sync_after_a2a_enabled():
+        return
+    _record_moe_fastpath("sync_after_a2a")
+    if x.device.type == "xpu":
+        torch.xpu.synchronize(x.device)
+    elif x.device.type == "cuda":
+        torch.cuda.synchronize(x.device)
+
+
+def _sync_before_a2a_if_enabled(x: torch.Tensor) -> None:
+    if not _sync_before_a2a_enabled():
+        return
+    _record_moe_fastpath("sync_before_a2a")
+    if x.device.type == "xpu":
+        torch.xpu.synchronize(x.device)
+    elif x.device.type == "cuda":
+        torch.cuda.synchronize(x.device)
+
+
+def _all_to_all_single_autograd(
+    input: torch.Tensor,
+    output_split_sizes: list[int] | None,
+    input_split_sizes: list[int] | None,
+    mesh: DeviceMesh,
+) -> torch.Tensor:
+    _sync_before_a2a_if_enabled(input)
+    if not _c10d_a2a_autograd_enabled():
+        return all_to_all_single_autograd(
+            input,
+            output_split_sizes,
+            input_split_sizes,
+            mesh,
+        )
+
+    if output_split_sizes is None:
+        output_tokens = input.shape[0]
+    else:
+        output_tokens = sum(output_split_sizes)
+    output = input.new_empty((output_tokens, *input.shape[1:]))
+    _record_moe_fastpath("c10d_a2a_autograd")
+    return dist_nn_functional.all_to_all_single(
+        output,
+        input.contiguous(),
+        output_split_sizes,
+        input_split_sizes,
+        group=mesh.get_group(),
+    )
+
+
+@dataclass(frozen=True, kw_only=True)
+class LocalDispatchMetadata:
+    """Metadata returned by LocalTokenDispatcher.dispatch() for use in combine()."""
+
+    token_indices_experts_sorted: torch.Tensor  # (N*top_k,)
+    top_scores_experts_sorted: torch.Tensor  # (N*top_k,) scores in expert-sorted order
+    num_tokens_per_expert_list: list[int] | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class AllToAllDispatchMetadata(LocalDispatchMetadata):
+    """Metadata returned by AllToAllTokenDispatcher.dispatch() for use in combine()."""
+
+    input_shape: tuple  # for _unpermute
+    permuted_indices: torch.Tensor | None  # for _unpermute
+    input_splits: list[int]
+    output_splits: list[int]
+    # Pre-pad token count. dispatch() rounds bs*slen up to a multiple of
+    # sp_size when sp_size > 1; combine() slices pad rows off using this.
+    original_num_tokens: int
+    # Optional fast inverse for equal-count rank-major <-> expert-major layout.
+    # Shape is (ep_size, num_local_experts, tokens_per_rank_expert).
+    rank_major_shape: tuple[int, int, int] | None = None
+    # Optional rank-major per-(rank, expert) segment lengths. When available,
+    # combine can invert expert-major ordering with split/cat instead of a
+    # large indexed write, which is friendlier to the XPU Level Zero backend.
+    rank_major_segment_lens: list[int] | None = None
+    num_local_experts: int | None = None
+    # Optional equal-split all-to-all metadata. When set, dispatch/combine pad
+    # every peer segment to this size for the collective and compact afterward.
+    equal_a2a_split_size: int | None = None
+    normal_equal_a2a_padding: bool = False
+
+
+class LocalTokenDispatcher(Configurable):
+    """Token dispatcher for EP=1. Handles local token reordering only.
+
+    Also serves as the base class for EP dispatchers (AllToAllTokenDispatcher,
+    DeepEPTokenDispatcher) which override dispatch() and combine().
+
+    Not an nn.Module — dispatchers have no learnable parameters or buffers.
+    """
+
+    @dataclass(kw_only=True, slots=True)
+    class Config(Configurable.Config):
+        num_experts: int
+        top_k: int
+        score_before_experts: bool = True
+
+    def __init__(self, config: Config):
+        self.num_experts = config.num_experts
+        self.top_k = config.top_k
+        self.score_before_experts = config.score_before_experts
+
+    def dispatch(
+        self,
+        x: torch.Tensor,
+        top_scores: torch.Tensor,
+        selected_experts_indices: torch.Tensor,
+        num_tokens_per_expert: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor, LocalDispatchMetadata]:
+        """Reorder tokens by expert assignment for local expert computation.
+
+        Args:
+            x: (num_tokens, dim) all input tokens
+            top_scores: (num_tokens, top_k) routing scores
+            selected_experts_indices: (num_tokens, top_k) expert indices per token
+            num_tokens_per_expert: optional precomputed token counts per expert
+
+        Returns:
+            routed_input: (num_tokens * top_k, dim) tokens sorted by expert index
+            num_tokens_per_expert: (num_experts,) token counts per expert
+            metadata: LocalDispatchMetadata for combine()
+        """
+        # TODO: Extract this local reordering block (histc, argsort, score
+        # application) into a shared helper — it's duplicated in
+        # AllToAllTokenDispatcher.dispatch.
+        # group tokens together by expert indices from 0 to num_experts and pass that to experts forward
+        if num_tokens_per_expert is None:
+            num_tokens_per_expert = torch.histc(
+                selected_experts_indices.view(-1),
+                bins=self.num_experts,
+                min=0,
+                max=self.num_experts,
+            )
+
+        # Reorder the token indices to match the order of the experts
+        # token_indices_experts_sorted shape (bs*slen*top_k,)
+        token_indices_experts_sorted = torch.argsort(
+            selected_experts_indices.view(-1), stable=True
+        )
+
+        top_scores_experts_sorted = top_scores.view(-1)[token_indices_experts_sorted]
+        token_indices_experts_sorted = token_indices_experts_sorted // self.top_k
+
+        # shape (bs*slen*top_k, dim)
+        routed_input = x[token_indices_experts_sorted]
+
+        # Apply scores before expert computation if configured
+        if self.score_before_experts:
+            _record_moe_fastpath("score_before_experts")
+            routed_input = (
+                routed_input.to(torch.float32)
+                * top_scores_experts_sorted.reshape(-1, 1)
+            ).to(x.dtype)
+
+        metadata = LocalDispatchMetadata(
+            token_indices_experts_sorted=token_indices_experts_sorted,
+            top_scores_experts_sorted=top_scores_experts_sorted,
+        )
+        return routed_input, num_tokens_per_expert, metadata
+
+    def combine(
+        self,
+        routed_output: torch.Tensor,
+        metadata: LocalDispatchMetadata,
+        x: torch.Tensor,
+        shared_experts: nn.Module | None = None,
+    ) -> torch.Tensor:
+        """Score, scatter_add, and optionally overlap shared_experts.
+
+        For EP=1, no communication is needed. shared_experts runs before
+        scatter_add (no async overlap benefit here, but keeps the interface
+        uniform with AllToAllTokenDispatcher).
+
+        Args:
+            routed_output: (num_tokens * top_k, dim) expert outputs
+            metadata: LocalDispatchMetadata from dispatch()
+            x: (num_tokens, dim) original input tokens
+            shared_experts: optional shared expert module to overlap
+
+        Returns:
+            (num_tokens, dim) combined output with shared_experts added.
+        """
+        out = shared_experts(x) if shared_experts is not None else torch.zeros_like(x)
+
+        if not self.score_before_experts:
+            if routed_output.dtype == torch.bfloat16:
+                _record_moe_fastpath("score_after_experts_bf16")
+            else:
+                _record_moe_fastpath("score_after_experts")
+            routed_output = routed_output * metadata.top_scores_experts_sorted.to(
+                routed_output.dtype
+            ).reshape(-1, 1)
+
+        dim = x.shape[-1]
+        scatter_index = metadata.token_indices_experts_sorted.reshape(-1, 1).expand(
+            -1, dim
+        )
+        out = _scatter_add_forward_or_autograd(out, scatter_index, routed_output, x)
+        return out
+
+
+class AllToAllTokenDispatcher(LocalTokenDispatcher):
+    """Token dispatcher for EP>1. Handles token reorder + all-to-all dispatch/combine.
+
+    Handles the full token routing lifecycle:
+    dispatch (reorder + EP all-to-all) and combine (reverse).
+
+    ep_mesh is set by the parallelization code after construction.
+    """
+
+    @dataclass(kw_only=True, slots=True)
+    class Config(LocalTokenDispatcher.Config):
+        force_load_balance: bool = False
+
+    def __init__(self, config: Config):
+        super().__init__(config)
+        self.force_load_balance = config.force_load_balance
+        self._force_load_balance_sort_cache = {}
+        # DeviceMesh (not ProcessGroup) so that CooR precompile can use
+        # torch.ops._dtensor.mesh_get_process_group to keep the FX graph
+        # rank-agnostic. Set by ExpertParallel._partition_fn().
+        self.ep_mesh: DeviceMesh | None = None
+        # TODO: these should be set at config time
+        # Set at runtime by apply_moe_ep_tp. Uses _sym_get_coordinate
+        # so the rank is a SymInt under CooR precompile.
+        self.sp_size: int = 1
+        self.sp_rank: int | torch.SymInt = -1
+
+    @staticmethod
+    def _balanced_counts(num_assignments: int, num_experts: int) -> list[int]:
+        base_count = num_assignments // num_experts
+        remainder = num_assignments % num_experts
+        return [
+            base_count + (1 if expert_idx < remainder else 0)
+            for expert_idx in range(num_experts)
+        ]
+
+    def _force_load_balance_splits(
+        self,
+        num_tokens: int,
+        ep_size: int,
+        ep_rank: int,
+        dtype: torch.dtype,
+        device: torch.device,
+    ) -> tuple[torch.Tensor, list[int], list[int], int | None]:
+        num_local_experts = self.num_experts // ep_size
+        counts = self._balanced_counts(num_tokens * self.top_k, self.num_experts)
+        input_splits = [
+            sum(counts[rank * num_local_experts : (rank + 1) * num_local_experts])
+            for rank in range(ep_size)
+        ]
+        local_counts = counts[
+            ep_rank * num_local_experts : (ep_rank + 1) * num_local_experts
+        ]
+        output_splits = [sum(local_counts)] * ep_size
+        num_tokens_per_expert_group = torch.tensor(
+            local_counts * ep_size,
+            device=device,
+            dtype=dtype,
+        )
+        uniform_local_count = (
+            local_counts[0]
+            if all(count == local_counts[0] for count in local_counts)
+            else None
+        )
+        return (
+            num_tokens_per_expert_group,
+            input_splits,
+            output_splits,
+            uniform_local_count,
+        )
+
+    def _force_load_balance_sort_indices(
+        self,
+        selected_experts_indices: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Return cached assignment-major and token-major sort indices.
+
+        Force-load-balanced routing uses a deterministic round-robin pattern.
+        For a fixed benchmark shape, the stable expert-major order is therefore
+        identical every iteration; caching avoids repeating argsort in the hot
+        path after warmup.
+        """
+        cache_key = (
+            selected_experts_indices.device.type,
+            selected_experts_indices.device.index,
+            selected_experts_indices.numel(),
+            self.num_experts,
+            self.top_k,
+        )
+        cached = self._force_load_balance_sort_cache.get(cache_key)
+        if cached is None:
+            assignment_indices = torch.argsort(
+                selected_experts_indices.view(-1), stable=True
+            )
+            token_indices = assignment_indices // self.top_k
+            cached = (assignment_indices, token_indices)
+            self._force_load_balance_sort_cache[cache_key] = cached
+        return cached
+
+    @staticmethod
+    def _can_use_equal_a2a_splits(splits: list[int]) -> bool:
+        return len(splits) > 0 and min(splits) != max(splits)
+
+    @torch.compiler.disable
+    def _global_equal_a2a_split_size(
+        self,
+        input_splits: list[int],
+        device: torch.device,
+        dtype: torch.dtype,
+    ) -> int:
+        assert self.ep_mesh is not None
+        local_max = max(input_splits) if input_splits else 0
+        local_max_per_peer = torch.full(
+            (self.ep_mesh.size(),),
+            local_max,
+            device=device,
+            dtype=dtype,
+        )
+        global_max_per_rank = all_to_all_single(
+            local_max_per_peer,
+            None,
+            None,
+            group=self.ep_mesh,
+        )
+        global_max_per_rank = torch.ops._c10d_functional.wait_tensor(
+            global_max_per_rank
+        )
+        return int(global_max_per_rank.max().item())
+
+    def _normal_equal_a2a_adaptive_allowed(
+        self,
+        *,
+        input_splits: list[int],
+        output_splits: list[int],
+        equal_split_size: int,
+        device: torch.device,
+    ) -> bool:
+        padded_tokens, local_ratio = _equal_a2a_padding_overhead_ratio(
+            input_splits=input_splits,
+            output_splits=output_splits,
+            equal_split_size=equal_split_size,
+        )
+        if local_ratio == float("inf"):
+            return False
+
+        ratio = torch.tensor(
+            [local_ratio],
+            device=device,
+            dtype=torch.float32,
+        )
+        assert self.ep_mesh is not None
+        dist.all_reduce(ratio, op=dist.ReduceOp.MAX, group=self.ep_mesh.get_group())
+        global_worst_ratio = float(ratio.item())
+        self._record_normal_equal_a2a_padding_stats(
+            padded_tokens=padded_tokens,
+            local_ratio=local_ratio,
+            global_worst_ratio=global_worst_ratio,
+        )
+        threshold = _normal_equal_a2a_padding_threshold()
+        if global_worst_ratio <= threshold:
+            _record_moe_fastpath("normal_equal_a2a_padding_adaptive_dispatch")
+            return True
+        _record_moe_fastpath("normal_equal_a2a_padding_adaptive_skip")
+        return False
+
+    def _record_normal_equal_a2a_padding_stats(
+        self,
+        *,
+        padded_tokens: int,
+        local_ratio: float,
+        global_worst_ratio: float | None,
+    ) -> None:
+        _record_moe_fastpath_stat(
+            "normal_equal_a2a_padding_candidate_padded_tokens",
+            int(padded_tokens),
+        )
+        _record_moe_fastpath_stat(
+            "normal_equal_a2a_padding_local_overhead_bp",
+            int(round(local_ratio * 10000)),
+        )
+        if global_worst_ratio is not None:
+            _record_moe_fastpath_stat(
+                "normal_equal_a2a_padding_global_worst_overhead_bp",
+                int(round(global_worst_ratio * 10000)),
+            )
+
+    def _record_normal_equal_a2a_padding_stats_for_splits(
+        self,
+        *,
+        input_splits: list[int],
+        output_splits: list[int],
+        equal_split_size: int,
+        device: torch.device,
+        reduce_global: bool,
+    ) -> None:
+        padded_tokens, local_ratio = _equal_a2a_padding_overhead_ratio(
+            input_splits=input_splits,
+            output_splits=output_splits,
+            equal_split_size=equal_split_size,
+        )
+        if local_ratio == float("inf"):
+            return
+
+        global_worst_ratio = None
+        if reduce_global:
+            ratio = torch.tensor(
+                [local_ratio],
+                device=device,
+                dtype=torch.float32,
+            )
+            assert self.ep_mesh is not None
+            dist.all_reduce(ratio, op=dist.ReduceOp.MAX, group=self.ep_mesh.get_group())
+            global_worst_ratio = float(ratio.item())
+
+        self._record_normal_equal_a2a_padding_stats(
+            padded_tokens=padded_tokens,
+            local_ratio=local_ratio,
+            global_worst_ratio=global_worst_ratio,
+        )
+
+    @staticmethod
+    def _assert_split_contract(
+        *,
+        name: str,
+        splits: list[int],
+        expected_tokens: int,
+    ) -> None:
+        if not _debug_dispatch_contracts_enabled():
+            return
+        if any(split < 0 for split in splits):
+            raise AssertionError(f"{name}: negative split in {splits}")
+        actual = sum(splits)
+        if actual != expected_tokens:
+            raise AssertionError(
+                f"{name}: split sum {actual} != expected tokens {expected_tokens}"
+            )
+
+    @staticmethod
+    @torch.compiler.disable
+    def _pad_to_equal_splits(
+        x: torch.Tensor,
+        splits: list[int],
+        equal_split_size: int,
+    ) -> torch.Tensor:
+        AllToAllTokenDispatcher._assert_split_contract(
+            name="pad_to_equal_splits",
+            splits=splits,
+            expected_tokens=x.shape[0],
+        )
+        if all(split == equal_split_size for split in splits):
+            return x
+        padded_shape = (len(splits) * equal_split_size, *x.shape[1:])
+        padded = x.new_zeros(padded_shape)
+        src_offset = 0
+        dst_offset = 0
+        for split in splits:
+            if split:
+                padded[dst_offset : dst_offset + split].copy_(
+                    x[src_offset : src_offset + split]
+                )
+            src_offset += split
+            dst_offset += equal_split_size
+        if _debug_dispatch_contracts_enabled():
+            expected_tokens = len(splits) * equal_split_size
+            if padded.shape[0] != expected_tokens:
+                raise AssertionError(
+                    "pad_to_equal_splits: padded token count "
+                    f"{padded.shape[0]} != {expected_tokens}"
+                )
+        return padded
+
+    @staticmethod
+    @torch.compiler.disable
+    def _compact_equal_splits(
+        x: torch.Tensor,
+        splits: list[int],
+        equal_split_size: int,
+    ) -> torch.Tensor:
+        if _debug_dispatch_contracts_enabled():
+            expected_tokens = len(splits) * equal_split_size
+            if x.shape[0] != expected_tokens:
+                raise AssertionError(
+                    "compact_equal_splits: padded token count "
+                    f"{x.shape[0]} != {expected_tokens}"
+                )
+        if all(split == equal_split_size for split in splits):
+            return x
+        compact = x.new_empty((sum(splits), *x.shape[1:]))
+        src_offset = 0
+        dst_offset = 0
+        for split in splits:
+            if split:
+                compact[dst_offset : dst_offset + split].copy_(
+                    x[src_offset : src_offset + split]
+                )
+            src_offset += equal_split_size
+            dst_offset += split
+        AllToAllTokenDispatcher._assert_split_contract(
+            name="compact_equal_splits",
+            splits=splits,
+            expected_tokens=compact.shape[0],
+        )
+        return compact
+
+    @staticmethod
+    def _force_load_balance_equal_split_routed_input(
+        x: torch.Tensor,
+        ep_size: int,
+        num_local_experts: int,
+        input_splits: list[int],
+        equal_split_size: int,
+    ) -> torch.Tensor:
+        """Build the force-load-balanced equal-split dispatch buffer directly.
+
+        Round-robin force-load-balanced routing with ``top_k == num_local_experts``
+        sends each EP rank the same strided token shard once per local expert.
+        Materializing that rank-major equal-split layout directly avoids first
+        gathering the unpadded expert-sorted buffer and then padding each rank
+        segment.
+        """
+        pieces = []
+        for rank, split in enumerate(input_splits):
+            assert split % num_local_experts == 0
+            piece = x[rank::ep_size].repeat(num_local_experts, 1)
+            if split < equal_split_size:
+                piece = F.pad(piece, (0, 0, 0, equal_split_size - split))
+            pieces.append(piece)
+        return torch.cat(pieces, dim=0)
+
+    def _split_along_sp(self, *tensors: torch.Tensor) -> list[torch.Tensor]:
+        """Split tensors along the first dim across EP ranks for sequence parallel."""
+        sp_size = self.sp_size
+        sp_rank = self.sp_rank
+        results = []
+        for t in tensors:
+            assert t.is_contiguous()
+            num_tokens = t.shape[0]
+            if num_tokens % sp_size != 0:
+                raise ValueError(
+                    "Uneven split of tokens is not supported yet. "
+                    "Requires EP degree dividing batch size * seq len."
+                )
+            local_num_tokens = num_tokens // sp_size
+            offset = sp_rank * local_num_tokens
+            results.append(t[offset : offset + local_num_tokens])
+        return results
+
+    def dispatch(
+        self,
+        x: torch.Tensor,
+        top_scores: torch.Tensor,
+        selected_experts_indices: torch.Tensor,
+        num_tokens_per_expert: torch.Tensor | None = None,
+    ) -> tuple[
+        torch.Tensor, torch.Tensor, AllToAllDispatchMetadata | LocalDispatchMetadata
+    ]:
+        """Reorder tokens, then all-to-all dispatch to expert-parallel ranks.
+
+        When ep_mesh is None (EP=1), falls back to local dispatch — no
+        all-to-all communication, just local token reordering with padding.
+
+        When sp_size > 1 (sequence parallel), inputs are first split along
+        the token dim so each EP rank processes a disjoint subset.
+
+        Args:
+            x: (num_tokens, dim) all input tokens (global if sp_size > 1)
+            top_scores: (num_tokens, top_k) routing scores
+            selected_experts_indices: (num_tokens, top_k) expert indices per token
+            num_tokens_per_expert: optional precomputed token counts per expert
+
+        Returns:
+            routed_input: (R, dim) tokens in expert-major order for local experts
+            num_tokens_per_expert_local: (num_local_experts,) token counts
+            metadata: dispatch metadata for combine()
+        """
+        # EP=1: fall back to local dispatch (no all-to-all needed)
+        if self.ep_mesh is None:
+            return super().dispatch(
+                x, top_scores, selected_experts_indices, num_tokens_per_expert
+            )
+
+        ep_size = self.ep_mesh.size()
+        original_num_tokens = x.shape[0]
+
+        if self.sp_size > 1:
+            assert self.sp_rank >= 0, (
+                "sp_rank must be set before use. "
+                "apply_moe_ep_tp() should set it from tp_mesh._sym_get_coordinate()."
+            )
+            # Round bs*slen up to a multiple of sp_size. Pad rows route to
+            # expert 0 with zero scores -> zero contribution to scatter_add.
+            pad = (-original_num_tokens) % self.sp_size
+            if pad > 0:
+                x = F.pad(x, (0, 0, 0, pad))
+                top_scores = F.pad(top_scores, (0, 0, 0, pad))
+                selected_experts_indices = F.pad(
+                    selected_experts_indices, (0, 0, 0, pad)
+                )
+            x, top_scores, selected_experts_indices = self._split_along_sp(
+                x, top_scores, selected_experts_indices
+            )
+            # Router token counts are for the pre-SP token set; recompute after
+            # the local SP split.
+            num_tokens_per_expert = None
+
+        # TODO: Extract this local reordering block (histc, argsort, score
+        # application) into a shared helper — it's duplicated in
+        # LocalTokenDispatcher.dispatch.
+        # group tokens together by expert indices from 0 to num_experts and pass that to experts forward
+        if num_tokens_per_expert is None:
+            num_tokens_per_expert = torch.histc(
+                selected_experts_indices.view(-1),
+                bins=self.num_experts,
+                min=0,
+                max=self.num_experts,
+            )
+
+        use_force_load_balance_fast_path = (
+            self.force_load_balance
+            and self.sp_size == 1
+            and not torch.compiler.is_compiling()
+        )
+        if use_force_load_balance_fast_path:
+            _record_moe_fastpath("force_load_balance_dispatch")
+
+        # Reorder the token indices to match the order of the experts
+        # token_indices_experts_sorted shape (bs*slen*top_k,)
+        if use_force_load_balance_fast_path:
+            (
+                assignment_indices_experts_sorted,
+                token_indices_experts_sorted,
+            ) = self._force_load_balance_sort_indices(selected_experts_indices)
+        else:
+            assignment_indices_experts_sorted = torch.argsort(
+                selected_experts_indices.view(-1), stable=True
+            )
+            token_indices_experts_sorted = (
+                assignment_indices_experts_sorted // self.top_k
+            )
+
+        top_scores_experts_sorted = top_scores.view(-1)[
+            assignment_indices_experts_sorted
+        ]
+
+        if use_force_load_balance_fast_path:
+            (
+                num_tokens_per_expert_group,
+                input_splits_list,
+                output_splits_list,
+                uniform_local_count,
+            ) = self._force_load_balance_splits(
+                original_num_tokens,
+                ep_size,
+                self.ep_mesh.get_local_rank(),
+                num_tokens_per_expert.dtype,
+                num_tokens_per_expert.device,
+            )
+        else:
+            uniform_local_count = None
+            # generate the input splits and output splits for all-to-all
+            with torch.no_grad():
+                num_tokens_per_expert_group = all_to_all_single(
+                    num_tokens_per_expert,
+                    None,
+                    None,
+                    group=self.ep_mesh,
+                )
+                # Need to wait explicitly because it is used by a triton kernel later
+                # which doesn't realize that AsyncCollectiveTensor needs unwrapping
+                num_tokens_per_expert_group = torch.ops._c10d_functional.wait_tensor(
+                    num_tokens_per_expert_group
+                )
+                # non_blocking=True is safe in eager, but under torch.compile the
+                # async D2H transfer can race with the subsequent .tolist()/.item()
+                # calls, producing stale values and failing unbacked-symint guards.
+                non_blocking = not torch.compiler.is_compiling()
+                input_splits = (
+                    num_tokens_per_expert.view(ep_size, -1)
+                    .sum(dim=1)
+                    .to(torch.device("cpu"), non_blocking=non_blocking)
+                )
+                # NOTE: this would incur a device-to-host sync
+                output_splits = (
+                    num_tokens_per_expert_group.view(ep_size, -1)
+                    .sum(dim=1)
+                    .to(torch.device("cpu"), non_blocking=False)
+                )
+                input_splits_list = input_splits.tolist()
+                output_splits_list = output_splits.tolist()
+
+        equal_a2a_split_size = None
+        direct_equal_split_route = False
+        normal_equal_a2a_padding = False
+        if use_force_load_balance_fast_path and self._can_use_equal_a2a_splits(
+            input_splits_list
+        ):
+            equal_a2a_split_size = max(input_splits_list)
+            _record_moe_fastpath("equal_a2a_padding_dispatch")
+            dispatch_input_splits = None
+            dispatch_output_splits = None
+            direct_equal_split_route = (
+                not self.score_before_experts
+                and equal_a2a_split_size % (self.num_experts // ep_size) == 0
+            )
+        elif _normal_equal_a2a_padding_enabled() and self.sp_size == 1 and len(
+            input_splits_list
+        ) > 0:
+            if _debug_dispatch_contracts_enabled() and self.force_load_balance:
+                raise AssertionError(
+                    "normal equal-split padding reached force-load-balanced routing"
+                )
+            normal_equal_policy = _normal_equal_a2a_padding_policy()
+            equal_a2a_split_size = self._global_equal_a2a_split_size(
+                input_splits_list,
+                num_tokens_per_expert.device,
+                num_tokens_per_expert.dtype,
+            )
+            adaptive_allowed = True
+            if normal_equal_policy == "adaptive":
+                adaptive_allowed = self._normal_equal_a2a_adaptive_allowed(
+                    input_splits=input_splits_list,
+                    output_splits=output_splits_list,
+                    equal_split_size=equal_a2a_split_size,
+                    device=num_tokens_per_expert.device,
+                )
+            else:
+                self._record_normal_equal_a2a_padding_stats_for_splits(
+                    input_splits=input_splits_list,
+                    output_splits=output_splits_list,
+                    equal_split_size=equal_a2a_split_size,
+                    device=num_tokens_per_expert.device,
+                    reduce_global=_normal_equal_a2a_padding_telemetry_enabled(),
+                )
+
+            if not adaptive_allowed:
+                equal_a2a_split_size = None
+                dispatch_input_splits = input_splits_list
+                dispatch_output_splits = output_splits_list
+            else:
+                normal_equal_a2a_padding = True
+                _record_moe_fastpath("normal_equal_a2a_padding_dispatch")
+                _record_moe_fastpath(
+                    "normal_equal_a2a_dispatch_padded_tokens",
+                    sum(equal_a2a_split_size - split for split in input_splits_list),
+                )
+                dispatch_input_splits = None
+                dispatch_output_splits = None
+        else:
+            dispatch_input_splits = input_splits_list
+            dispatch_output_splits = output_splits_list
+
+        if direct_equal_split_route:
+            assert equal_a2a_split_size is not None
+            _record_moe_fastpath("direct_equal_split_dispatch")
+            routed_input = self._force_load_balance_equal_split_routed_input(
+                x,
+                ep_size,
+                self.num_experts // ep_size,
+                input_splits_list,
+                equal_a2a_split_size,
+            )
+        else:
+            # shape (bs*slen*top_k, dim)
+            routed_input = x[token_indices_experts_sorted]
+
+            # Apply scores before expert computation if configured
+            if self.score_before_experts:
+                _record_moe_fastpath("score_before_experts")
+                routed_input = (
+                    routed_input.to(torch.float32)
+                    * top_scores_experts_sorted.reshape(-1, 1)
+                ).to(x.dtype)
+
+            if equal_a2a_split_size is not None:
+                routed_input = self._pad_to_equal_splits(
+                    routed_input,
+                    input_splits_list,
+                    equal_a2a_split_size,
+                )
+
+        # All-to-all dispatch tokens to EP ranks
+        routed_input = _all_to_all_single_autograd(
+            routed_input,
+            dispatch_output_splits,
+            dispatch_input_splits,
+            self.ep_mesh,
+        )
+        _sync_after_a2a_if_enabled(routed_input)
+        if equal_a2a_split_size is not None:
+            routed_input = self._compact_equal_splits(
+                routed_input,
+                output_splits_list,
+                equal_a2a_split_size,
+            )
+
+        # Reorder from rank-major to expert-major via _permute.
+        #
+        # num_tokens_per_expert_group layout after all-to-all:
+        #   (e0,r0), (e1,r0), ..., (e0,r1), (e1,r1), ...  (rank-major)
+        # _permute reshuffles to:
+        #   (e0,r0), (e0,r1), ..., (e1,r0), (e1,r1), ...  (expert-major)
+        num_local_experts = num_tokens_per_expert_group.shape[0] // ep_size
+        num_tokens_per_expert_list = None
+        rank_major_segment_lens = None
+        if uniform_local_count is None:
+            if num_tokens_per_expert_group.numel() > 0:
+                rank_major_segment_lens = (
+                    num_tokens_per_expert_group.detach().cpu().tolist()
+                )
+            (
+                input_shape,
+                routed_input,
+                permuted_indices,
+                num_tokens_per_expert_group,
+            ) = self._permute(
+                routed_input,
+                num_tokens_per_expert_group,
+                ep_size,
+                num_local_experts,
+            )
+            rank_major_shape = None
+        else:
+            (
+                input_shape,
+                routed_input,
+                num_tokens_per_expert_group,
+                num_tokens_per_expert_list,
+                rank_major_shape,
+            ) = self._permute_equal_counts(
+                routed_input,
+                num_tokens_per_expert_group,
+                ep_size,
+                num_local_experts,
+                uniform_local_count,
+            )
+            permuted_indices = None
+
+        metadata = AllToAllDispatchMetadata(
+            token_indices_experts_sorted=token_indices_experts_sorted,
+            top_scores_experts_sorted=top_scores_experts_sorted,
+            input_shape=input_shape,
+            permuted_indices=permuted_indices,
+            input_splits=input_splits_list,
+            output_splits=output_splits_list,
+            original_num_tokens=original_num_tokens,
+            rank_major_shape=rank_major_shape,
+            rank_major_segment_lens=rank_major_segment_lens,
+            num_local_experts=num_local_experts,
+            num_tokens_per_expert_list=num_tokens_per_expert_list,
+            equal_a2a_split_size=equal_a2a_split_size,
+            normal_equal_a2a_padding=normal_equal_a2a_padding,
+        )
+        return routed_input, num_tokens_per_expert_group, metadata
+
+    def _permute_equal_counts(
+        self,
+        routed_input,
+        num_tokens_per_expert_group,
+        ep_size,
+        num_local_experts,
+        uniform_local_count: int,
+    ):
+        """Reorder rank-major to expert-major when every segment has equal length."""
+        _record_moe_fastpath("equal_count_permute")
+        input_shape = routed_input.shape
+        rank_major_shape = (ep_size, num_local_experts, uniform_local_count)
+        routed_input = (
+            routed_input.view(*rank_major_shape, routed_input.shape[-1])
+            .transpose(0, 1)
+            .reshape(input_shape)
+        )
+        num_tokens_per_expert = num_tokens_per_expert_group.view(
+            ep_size, num_local_experts
+        ).sum(0)
+        num_tokens_per_expert_list = [
+            uniform_local_count * ep_size for _ in range(num_local_experts)
+        ]
+        return (
+            input_shape,
+            routed_input,
+            num_tokens_per_expert,
+            num_tokens_per_expert_list,
+            rank_major_shape,
+        )
+
+    def _permute(
+        self, routed_input, num_tokens_per_expert_group, ep_size, num_local_experts
+    ):
+        """Reorder tokens from rank-major to expert-major layout.
+
+        Input layout:  (e0,r0), (e1,r0), ..., (e0,r1), (e1,r1), ...  (rank-major)
+        Output layout: (e0,r0), (e0,r1), ..., (e1,r0), (e1,r1), ...  (expert-major)
+        """
+        device = num_tokens_per_expert_group.device
+        # output_size must be host-known. num_tokens_per_expert_group.sum()
+        # is a CUDA scalar, but this unpadded all-to-all path keeps one
+        # routed_input row per received routed token assignment, so its shape
+        # equals the number of routed tokens.
+        total = routed_input.shape[0]
+
+        # [R, E] matrix of token counts per (rank, expert)
+        t_mat = num_tokens_per_expert_group.view(ep_size, num_local_experts)
+
+        # Where each (r, e) segment starts in the input (rank-major order)
+        input_starts = (
+            num_tokens_per_expert_group.cumsum(0) - num_tokens_per_expert_group
+        ).view(ep_size, num_local_experts)
+
+        # Transpose to expert-major [E, R] and flatten
+        segment_lens = t_mat.t().reshape(-1)
+        input_starts = input_starts.t().reshape(-1)
+
+        # For each output position, find its input position:
+        #   output[p] = input[input_starts[seg] + (p - output_starts[seg])]
+        seg_ids = torch.arange(segment_lens.shape[0], device=device).repeat_interleave(
+            segment_lens, output_size=total
+        )
+        output_starts = segment_lens.cumsum(0) - segment_lens
+        permuted_indices = (
+            input_starts[seg_ids]
+            + torch.arange(total, device=device)
+            - output_starts[seg_ids]
+        )
+
+        num_tokens_per_expert = t_mat.sum(0)
+        return (
+            routed_input.shape,
+            routed_input[permuted_indices, :],
+            permuted_indices,
+            num_tokens_per_expert,
+        )
+
+    def _unpermute(
+        self,
+        routed_output,
+        input_shape,
+        permuted_indices,
+        rank_major_shape=None,
+        rank_major_segment_lens=None,
+        num_local_experts=None,
+    ):
+        """Reverse expert-major reordering."""
+        if rank_major_shape is not None:
+            _record_moe_fastpath("equal_count_unpermute")
+            return (
+                routed_output.view(
+                    rank_major_shape[1],
+                    rank_major_shape[0],
+                    rank_major_shape[2],
+                    routed_output.shape[-1],
+                )
+                .transpose(0, 1)
+                .reshape(input_shape)
+            )
+
+        if (
+            os.environ.get("TT_MOE_SEGMENT_CAT_UNPERMUTE", "").lower()
+            in {"1", "true", "yes"}
+            and rank_major_segment_lens is not None
+            and num_local_experts is not None
+        ):
+            ep_size = len(rank_major_segment_lens) // num_local_experts
+            expert_major_lens = [
+                rank_major_segment_lens[rank * num_local_experts + expert]
+                for expert in range(num_local_experts)
+                for rank in range(ep_size)
+            ]
+            expert_major_chunks = routed_output.split(expert_major_lens, dim=0)
+            rank_major_chunks = [
+                expert_major_chunks[expert * ep_size + rank]
+                for rank in range(ep_size)
+                for expert in range(num_local_experts)
+            ]
+            _record_moe_fastpath("segment_cat_unpermute")
+            return torch.cat(rank_major_chunks, dim=0)
+
+        assert permuted_indices is not None
+        out_unpermuted = routed_output.new_empty(input_shape)
+        out_unpermuted[permuted_indices, :] = routed_output
+        return out_unpermuted
+
+    # pyrefly: ignore [bad-override]
+    def combine(
+        self,
+        routed_output: torch.Tensor,
+        metadata: AllToAllDispatchMetadata,
+        x: torch.Tensor,
+        shared_experts: nn.Module | None = None,
+    ) -> torch.Tensor:
+        """Reverse the dispatch: unpermute + all-to-all + score + scatter_add.
+
+        shared_experts overlaps with the async all-to-all combine — it runs
+        while the a2a is in flight on the NCCL stream. scatter_add forces sync.
+
+        When sp_size > 1 (sequence parallel), dispatch uses local token
+        indices. Combine offsets them to global positions so scatter_add
+        into full x is correct.
+
+        Args:
+            routed_output: (R, dim) expert outputs in expert-major order
+            metadata: AllToAllDispatchMetadata from dispatch()
+            x: (num_tokens, dim) original input tokens
+            shared_experts: optional shared expert module to overlap
+
+        Returns:
+            (num_tokens, dim) combined output with shared_experts added.
+        """
+        # EP=1: fall back to local combine (no all-to-all needed)
+        if self.ep_mesh is None:
+            return super().combine(routed_output, metadata, x, shared_experts)
+
+        # Reverse expert-major reordering
+        routed_output = self._unpermute(
+            routed_output,
+            metadata.input_shape,
+            metadata.permuted_indices,
+            metadata.rank_major_shape,
+            metadata.rank_major_segment_lens,
+            metadata.num_local_experts,
+        )
+        # All-to-all combine: returns AsyncCollectiveTensor — the a2a runs
+        # on the NCCL stream and won't block until the tensor is accessed.
+        combine_input_splits = metadata.output_splits
+        combine_output_splits = metadata.input_splits
+        equal_a2a_split_size = metadata.equal_a2a_split_size
+        if equal_a2a_split_size is not None:
+            if metadata.normal_equal_a2a_padding:
+                _record_moe_fastpath("normal_equal_a2a_padding_combine")
+                _record_moe_fastpath(
+                    "normal_equal_a2a_combine_padded_tokens",
+                    sum(
+                        equal_a2a_split_size - split for split in metadata.output_splits
+                    ),
+                )
+            else:
+                _record_moe_fastpath("equal_a2a_padding_combine")
+            routed_output = self._pad_to_equal_splits(
+                routed_output,
+                metadata.output_splits,
+                equal_a2a_split_size,
+            )
+            combine_input_splits = None
+            combine_output_splits = None
+        routed_output = _all_to_all_single_autograd(
+            routed_output,
+            combine_output_splits,
+            combine_input_splits,
+            self.ep_mesh,
+        )
+        _sync_after_a2a_if_enabled(routed_output)
+        if equal_a2a_split_size is not None:
+            routed_output = self._compact_equal_splits(
+                routed_output,
+                metadata.input_splits,
+                equal_a2a_split_size,
+            )
+
+        # shared_experts overlaps with the async a2a (NCCL stream).
+        # Score application + scatter_add forces the a2a to sync.
+        out = shared_experts(x) if shared_experts is not None else torch.zeros_like(x)
+
+        if not self.score_before_experts:
+            if routed_output.dtype == torch.bfloat16:
+                _record_moe_fastpath("score_after_experts_bf16")
+            else:
+                _record_moe_fastpath("score_after_experts")
+            routed_output = routed_output * metadata.top_scores_experts_sorted.to(
+                routed_output.dtype
+            ).reshape(-1, 1)
+
+        # When sequence_parallel is active, dispatch splits tokens to a local
+        # shard, so token_indices_experts_sorted are 0-based local indices.
+        # Offset them to global positions so scatter_add into full x is correct.
+        original_num_tokens = metadata.original_num_tokens
+        if self.sp_size > 1:
+            padded_num_tokens = original_num_tokens + (
+                (-original_num_tokens) % self.sp_size
+            )
+            local_num_tokens = padded_num_tokens // self.sp_size
+            token_indices_experts_sorted = (
+                metadata.token_indices_experts_sorted + local_num_tokens * self.sp_rank
+            )
+            assert isinstance(token_indices_experts_sorted, torch.Tensor)
+            # Drop pad-row entries: their global indices fall in
+            # [original_num_tokens, padded_num_tokens), out of `out`'s range.
+            # scatter_add itself is not padded; `out` matches x's shape.
+            if padded_num_tokens != original_num_tokens:
+                mask = token_indices_experts_sorted < original_num_tokens
+                token_indices_experts_sorted = token_indices_experts_sorted[mask]
+                routed_output = routed_output[mask]
+        else:
+            token_indices_experts_sorted = metadata.token_indices_experts_sorted
+        out = _scatter_add_1d_forward_or_autograd(
+            out, token_indices_experts_sorted, routed_output, x
+        )
+        return out
+
+
+class TorchAOTokenDispatcher(AllToAllTokenDispatcher):
+    """Token dispatcher with token group padding for quantized grouped GEMMs.
+
+    Uses torchao's ``permute_and_pad`` instead of the standard ``_permute`` to
+    reorder tokens into expert-major order and pad each expert's token group to
+    a multiple of ``pad_multiple``. This alignment is required by FP8/MXFP8
+    quantized grouped GEMM kernels (e.g. 16 for FP8, 32 for MXFP8).
+
+    Requires EP to be enabled (ep_mesh must be set). Raises ValueError
+    if ep_mesh is None, since quantized grouped GEMMs need padded token
+    groups which are only produced by the EP permute_and_pad path.
+    """
+
+    @dataclass(kw_only=True, slots=True)
+    class Config(AllToAllTokenDispatcher.Config):
+        pad_multiple: int
+
+    def __init__(self, config: Config):
+        super().__init__(config)
+        self.pad_multiple = config.pad_multiple
+
+    def dispatch(
+        self,
+        x,
+        top_scores,
+        selected_experts_indices,
+        num_tokens_per_expert: torch.Tensor | None = None,
+    ):
+        if self.ep_mesh is None:
+            raise ValueError(
+                "TorchAOTokenDispatcher requires expert parallelism (ep_mesh must be set). "
+                "Quantized grouped GEMMs need padded token groups, which requires EP>1. "
+            )
+        return super().dispatch(
+            x, top_scores, selected_experts_indices, num_tokens_per_expert
+        )
+
+    def _permute(
+        self, routed_input, num_tokens_per_expert_group, ep_size, num_local_experts
+    ):
+        # FP8/MXFP8 require groups to be permuted to expert major order AND
+        # padded to nearest multiple of 16.
+        # It also does padding to make sure the number of tokens each expert
+        # gets locally is a multiple of `self.pad_multiple`.
+        # Note that this will create side effects when wrapping the for-loop
+        # implementation of GroupedExperts, as it does not need padding.
+        from torchao.prototype.moe_training.ep.permute import permute_and_pad
+
+        (
+            input_shape,
+            routed_input,
+            permuted_indices,
+            num_tokens_per_expert_group_padded,
+            _group_offsets,
+        ) = permute_and_pad(
+            routed_input,
+            num_tokens_per_expert_group,
+            ep_size,
+            num_local_experts,
+            self.pad_multiple,
+        )
+        return (
+            input_shape,
+            routed_input,
+            permuted_indices,
+            num_tokens_per_expert_group_padded,
+        )
+
+    def _unpermute(
+        self, routed_output, input_shape, permuted_indices, rank_major_shape=None
+    ):
+        if rank_major_shape is not None:
+            raise ValueError(
+                "TorchAOTokenDispatcher does not support rank_major_shape unpermute"
+            )
+        # Strip the padding sentinel row added by permute_and_pad
+        out_unpermuted = routed_output.new_empty(input_shape)
+        out_unpermuted[permuted_indices, :] = routed_output
+        return out_unpermuted[:-1]
+
+
+@dataclass(frozen=True, kw_only=True)
+class DeepEPDispatchMetadata:
+    """Metadata for DeepEP/HybridEP token dispatch."""
+
+    state: object  # deepep.DispatchState or hybridep.DispatchState
+
+
+class DeepEPTokenDispatcher(LocalTokenDispatcher):
+    """Token dispatcher using DeepEP/HybridEP for efficient token dispatch/combine.
+
+    Uses DeepEP library kernels instead of standard all-to-all collectives for
+    token dispatch and combine. For the DeepEP backend, combine is asynchronous
+    — callers must call sync_combine() before using the result.
+
+    ep_mesh is set by ExpertParallel._apply().
+    """
+
+    @dataclass(kw_only=True, slots=True)
+    class Config(LocalTokenDispatcher.Config):
+        """Config for DeepEP/HybridEP token dispatcher.
+
+        Args:
+            comm_backend: "deepep" for H100/NVLink Switch, "hybridep" for GB200/NVLink72.
+            non_blocking_capacity_factor: Enable non-blocking HybridEP dispatch with a
+                given capacity factor.
+
+                Setting this to a float in (0, 1] enables CPU-free non-blocking
+                dispatch and controls num_permuted_tokens — the fused-permute
+                output capacity, estimated as:
+                num_tokens × ep_size × min(num_local_experts, top_k) × cf,
+                aligned for MXFP8.  Tokens whose permuted offset exceeds this
+                limit are silently dropped (overflow_flag is set on GPU).
+
+                - None = blocking mode (default).  HybridEP calls
+                  cudaStreamSynchronize after dispatch, copies
+                  tokens_per_expert to pinned CPU memory, and computes the
+                  exact num_permuted_tokens on the host.  No token dropping.
+                - 1.0 = non-blocking, worst-case sizing: every token can reach
+                  every local expert, no drops, highest memory.
+                - < 1.0 = non-blocking, reduced memory; controls the
+                  fused-permute output tensor size (num_permuted_tokens).
+                  Safe in practice when forced load balancing (e.g. aux-loss /
+                  round-robin) keeps distribution roughly uniform.
+
+                Note: this factor has no lasting effect on the all-to-all
+                communication buffer.  HybridEP's dispatch_with_permute
+                internally passes the actual num_tokens to
+                update_template_config, which auto-grows the buffer to the
+                full token count on the first dispatch regardless of this
+                setting.
+        """
+
+        comm_backend: str
+        non_blocking_capacity_factor: float | None = None
+        pad_multiple: int | None = None
+
+    def __init__(self, config: Config):
+        super().__init__(config)
+        self.comm_backend = config.comm_backend
+        self.non_blocking_capacity_factor = config.non_blocking_capacity_factor
+        self.pad_multiple = config.pad_multiple
+        # Set by ExpertParallel._partition_fn()
+        self.ep_mesh: DeviceMesh | None = None
+
+        # Import to register custom ops so SAC saves communication outputs
+        # instead of recomputing them. This must happen before apply_ac.
+        if config.comm_backend == "hybridep":
+            from torchtitan.distributed.deepep import hybridep  # noqa: F401
+        else:
+            from torchtitan.distributed.deepep import deepep  # noqa: F401
+
+    # pyrefly: ignore [bad-override]
+    def dispatch(
+        self,
+        x: torch.Tensor,
+        top_scores: torch.Tensor,
+        selected_experts_indices: torch.Tensor,
+        num_tokens_per_expert: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor, DeepEPDispatchMetadata]:
+        assert self.ep_mesh is not None, (
+            "ep_mesh must be set before dispatch. "
+            "ExpertParallel._partition_fn() should set it."
+        )
+        ep_group = self.ep_mesh.get_group()
+        num_local_experts = self.num_experts // ep_group.size()
+        if self.comm_backend == "hybridep":
+            from torchtitan.distributed.deepep.hybridep import dispatch_tokens
+
+            hidden_states, tokens_per_expert, state = dispatch_tokens(
+                x,
+                selected_experts_indices,
+                top_scores,
+                num_local_experts,
+                self.num_experts,
+                ep_group,
+                score_before_experts=self.score_before_experts,
+                non_blocking_expert_capacity_factor=self.non_blocking_capacity_factor,
+                pad_multiple=self.pad_multiple,
+            )
+        else:
+            from torchtitan.distributed.deepep.deepep import dispatch_tokens
+
+            hidden_states, tokens_per_expert, state = dispatch_tokens(
+                x,
+                selected_experts_indices,
+                top_scores,
+                num_local_experts,
+                self.num_experts,
+                ep_group,
+                score_before_experts=self.score_before_experts,
+            )
+
+        metadata = DeepEPDispatchMetadata(state=state)
+        return hidden_states, tokens_per_expert, metadata
+
+    # pyrefly: ignore [bad-override]
+    def combine(
+        self,
+        routed_output: torch.Tensor,
+        metadata: DeepEPDispatchMetadata,
+        x: torch.Tensor,
+        shared_experts: nn.Module | None = None,
+    ) -> torch.Tensor:
+        """Combine tokens via DeepEP/HybridEP, overlapping shared_experts.
+
+        For the deepep backend, combine is async — shared_experts runs while
+        the combine is in flight, then sync_combine() waits before the addition.
+        """
+        if self.comm_backend == "hybridep":
+            from torchtitan.distributed.deepep import hybridep
+
+            routed_output = hybridep.combine_tokens(
+                routed_output,
+                metadata.state,  # pyrefly: ignore [bad-argument-type]
+                pad_multiple=self.pad_multiple,
+            )
+        else:
+            from torchtitan.distributed.deepep.deepep import combine_tokens
+
+            # pyrefly: ignore [bad-argument-type]
+            routed_output = combine_tokens(routed_output, metadata.state)
+
+        # shared_experts runs in parallel with combine communication.
+        # This is the key optimization - we overlap compute with communication.
+        shared_out = shared_experts(x) if shared_experts is not None else None
+
+        # Sync the combine operation before using routed_output.
+        # This inserts a CUDA stream wait, ensuring combine is complete before
+        # the subsequent addition or reshape operations read routed_output.
+        from torchtitan.distributed.deepep.deepep import sync_combine
+
+        sync_combine()
+
+        if shared_out is not None:
+            routed_output = routed_output + shared_out
+        return routed_output

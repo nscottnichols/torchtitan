@@ -31,6 +31,8 @@ Differences vs upstream `parallelize_deepseekv3`:
 """
 
 import os
+from collections.abc import Sequence
+from functools import partial
 from typing import Any
 
 import ezpz
@@ -45,8 +47,16 @@ from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
 )
 from torch.distributed.device_mesh import DeviceMesh
 from torch.distributed.fsdp import CPUOffloadPolicy, fully_shard, MixedPrecisionPolicy
-from torch.distributed.tensor import Partial, Replicate, Shard
+from torch.distributed.tensor import (
+    distribute_module,
+    DTensor,
+    Partial,
+    Placement,
+    Replicate,
+    Shard,
+)
 from torch.distributed.tensor.parallel import (
+    ColwiseParallel,
     parallelize_module,
     PrepareModuleInputOutput,
     RowwiseParallel,
@@ -62,19 +72,99 @@ from torchtitan.config import (
 from torchtitan.distributed import ParallelDims
 from torchtitan.distributed.activation_checkpoint import apply_ac
 from torchtitan.distributed.context_parallel import apply_cp_to_forward
-from torchtitan.distributed.expert_parallel import ExpertParallel, TensorParallel
+from torchtitan.distributed.expert_parallel import TensorParallel
+from torchtitan.experiments.ezpz.moe.expert_parallel import ExpertParallel
 from torchtitan.distributed.fsdp import get_fsdp_reshard_after_forward_policy
-from torchtitan.distributed.tensor_parallel import (
-    ColwiseParallelWithGradPlacement,
-    maybe_enable_async_tp,
-    NoParallel,
-)
+from torchtitan.distributed.tensor_parallel import maybe_enable_async_tp, NoParallel
 from torchtitan.experiments.ezpz.moe import moeModel
 from torchtitan.tools.logging import logger
 
 
 def _env_flag_enabled(name: str) -> bool:
     return os.environ.get(name, "").lower() in {"1", "true", "yes"}
+
+
+class ColwiseParallelWithGradPlacement(ColwiseParallel):
+    """ColwiseParallel with fallback for wheels lacking grad_placements."""
+
+    def __init__(
+        self,
+        *,
+        input_layouts: Placement | None = None,
+        output_layouts: Placement | None = None,
+        use_local_output: bool = True,
+        local_input_grad_placements: Sequence[Placement] | None = None,
+    ):
+        super().__init__(
+            input_layouts=input_layouts,
+            output_layouts=output_layouts,
+            use_local_output=use_local_output,
+        )
+        self.local_input_grad_placements = local_input_grad_placements
+
+    @staticmethod
+    # pyrefly: ignore [bad-param-name-override]
+    def _prepare_input_fn(
+        input_layouts,
+        desired_input_layouts,
+        local_input_grad_placements,
+        mod,
+        inputs,
+        device_mesh,
+    ):
+        input_tensor = inputs[0]
+        if not isinstance(input_tensor, DTensor):
+            assert local_input_grad_placements is not None, (
+                "local_input_grad_placements must be specified when input is a "
+                "plain tensor."
+            )
+            try:
+                input_tensor = DTensor.from_local(
+                    input_tensor,
+                    device_mesh,
+                    input_layouts,
+                    run_check=False,
+                    grad_placements=local_input_grad_placements,
+                )
+            except TypeError:
+                input_tensor = DTensor.from_local(
+                    input_tensor,
+                    device_mesh,
+                    input_layouts,
+                    run_check=False,
+                )
+
+        if input_layouts != desired_input_layouts:
+            input_tensor = input_tensor.redistribute(
+                placements=desired_input_layouts, async_op=True
+            )
+        return input_tensor
+
+    def _apply(self, module: nn.Module, device_mesh: DeviceMesh) -> nn.Module:
+        if isinstance(module, nn.Linear):
+            partition_fn = self._partition_linear_fn
+        elif isinstance(module, nn.Embedding):
+            partition_fn = self._partition_embedding_fn
+        else:
+            raise NotImplementedError(
+                "ColwiseParallelWithGradPlacement currently only supports "
+                "nn.Linear and nn.Embedding!"
+            )
+
+        return distribute_module(
+            module,
+            device_mesh,
+            partition_fn,
+            partial(
+                self._prepare_input_fn,  # pyrefly: ignore [bad-argument-type]
+                self.input_layouts,
+                self.desired_input_layouts,
+                self.local_input_grad_placements,
+            ),
+            partial(
+                self._prepare_output_fn, self.output_layouts, self.use_local_output
+            ),
+        )
 
 
 def maybe_disable_fsdp_backward_prefetch(model: nn.Module) -> None:

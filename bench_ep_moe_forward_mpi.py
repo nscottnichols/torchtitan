@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-MPI-launched EP microbenchmark for torchtitan.models.common.moe.MoE.forward.
+MPI-launched EP microbenchmark for torchtitan.experiments.ezpz.moe.MoE.forward.
 
 Target default: 10B_2B_sdpa-shaped MoE path on XPU/XCCL with system MPI.
 
@@ -12,15 +12,12 @@ from __future__ import annotations
 
 import argparse
 import gc
-import importlib.util
 import os
 import socket
 import statistics
-import sys
 import time
 import warnings
 from dataclasses import dataclass
-from pathlib import Path
 
 import torch
 import torch.distributed as dist
@@ -28,37 +25,17 @@ from torch import nn
 from torch.distributed._functional_collectives import all_to_all_single_autograd
 from torch.distributed.device_mesh import DeviceMesh, init_device_mesh
 
-from torchtitan.distributed.expert_parallel import ExpertParallel
-from torchtitan.models.common.feed_forward import FeedForward
-from torchtitan.models.common.linear import Linear
-from torchtitan.models.common.moe import MoE, TokenChoiceTopKRouter
-from torchtitan.models.common.token_dispatcher import (
+from torchtitan.experiments.ezpz.moe.expert_parallel import ExpertParallel
+from torchtitan.experiments.ezpz.moe.experts import EzpzGroupedExperts
+from torchtitan.experiments.ezpz.moe.moe import MoE, TokenChoiceTopKRouter
+from torchtitan.experiments.ezpz.moe.token_dispatcher import (
     AllToAllDispatchMetadata,
     AllToAllTokenDispatcher,
+    deterministic_scatter_add_,
     _print_moe_fastpath_counters,
 )
-from torchtitan.ops.scatter_add import deterministic_scatter_add_
-
-
-def load_ezpz_grouped_experts():
-    experts_path = (
-        Path(__file__).resolve().parent
-        / "torchtitan"
-        / "experiments"
-        / "ezpz"
-        / "moe"
-        / "experts.py"
-    )
-    spec = importlib.util.spec_from_file_location("_tt_ezpz_moe_experts", experts_path)
-    if spec is None or spec.loader is None:
-        raise ImportError(f"Could not load EzpzGroupedExperts from {experts_path}")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module.EzpzGroupedExperts
-
-
-EzpzGroupedExperts = load_ezpz_grouped_experts()
+from torchtitan.models.common.feed_forward import FeedForward
+from torchtitan.models.common.linear import Linear
 
 
 @dataclass(frozen=True)
@@ -643,7 +620,7 @@ def summarize(
     local_tokens = args.batch_size * args.seq_len
     global_tokens = local_tokens * info.world_size
 
-    print("benchmark=torchtitan.models.common.moe.MoE.forward")
+    print("benchmark=torchtitan.experiments.ezpz.moe.MoE.forward")
     print(f"model_flavor={args.model_flavor}")
     print(f"host={socket.gethostname()}")
     print(f"mode={mode}")

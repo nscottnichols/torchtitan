@@ -13,9 +13,8 @@ import ezpz
 import ezpz.distributed
 
 from torchtitan.components.checkpoint import CheckpointManager
-from torchtitan.components.loss import ChunkedCELoss, CrossEntropyLoss
+from torchtitan.components.loss import CrossEntropyLoss
 from torchtitan.components.lr_scheduler import LRSchedulersContainer
-from torchtitan.components.metrics import MetricsProcessor
 from torchtitan.components.optimizer import OptimizersContainer
 from torchtitan.components.quantization.float8 import (
     Float8GroupedExpertsConverter,
@@ -33,6 +32,8 @@ from torchtitan.experiments.ezpz.blendcorpus.blendcorpus_builder import (
     BlendCorpusDataLoader,
 )
 from torchtitan.experiments.ezpz.blendcorpus.build_tokenizer import EZPZTokenizer
+from torchtitan.experiments.ezpz.loss import EzpzChunkedCELoss as ChunkedCELoss
+from torchtitan.experiments.ezpz.metrics import MetricsProcessor
 from torchtitan.experiments.ezpz.trainer import FaultTolerantTrainer
 from torchtitan.experiments.ft.config.job_config import FaultTolerance
 

@@ -13,10 +13,10 @@ import torch.nn.functional as F
 from torch import nn
 
 from torchtitan.models.common.linear import Linear
-from torchtitan.models.common.moe import (
+from torchtitan.experiments.ezpz.moe.moe import (
     TokenChoiceTopKRouter,
 )
-from torchtitan.models.common.token_dispatcher import (
+from torchtitan.experiments.ezpz.moe.token_dispatcher import (
     _MOE_FASTPATH_COUNTERS,
     _equal_a2a_padding_overhead_ratio,
     _normal_equal_a2a_padding_enabled,
@@ -28,10 +28,10 @@ from torchtitan.models.common.token_dispatcher import (
     AllToAllTokenDispatcher,
     LocalTokenDispatcher,
     TorchAOTokenDispatcher,
+    deterministic_scatter_add_,
 )
 from torchtitan.ops.scatter_add import (
     deterministic_scatter_add,
-    deterministic_scatter_add_,
 )
 
 

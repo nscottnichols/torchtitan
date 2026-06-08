@@ -25,7 +25,7 @@ import torch.nn.functional as F
 from torch.distributed.tensor import DTensor
 from torch.utils.checkpoint import checkpoint
 
-from torchtitan.models.common.moe import GroupedExperts
+from .moe import GroupedExperts
 
 
 ExpertComputeBackend = Literal["for_loop", "grouped_mm"]
