@@ -182,7 +182,11 @@ def _ezpz_grpo_config_cls():
         # the model is actually generating, this is the single most useful
         # signal. Trivially cheap (only logged on rank 0).
         log_completions: bool = True
-        num_completions_to_print: int = 4
+        # Display-only — how many rows to render in the Rich completions
+        # table on rank 0 each logging_steps. wandb gets all completions
+        # regardless. 2 is enough to see what the model is doing without
+        # a wall of text per step.
+        num_completions_to_print: int = 2
 
         # --- vLLM (off by default — XPU vLLM is fragile) -----------------------
         use_vllm: bool = False
@@ -523,6 +527,74 @@ def _build_wandb_config(
     return out
 
 
+# Jinja chat templates. Use single-token turn boundaries that exist in
+# the model's vocab — otherwise the model has never seen them and
+# treats them as ordinary text, producing prompt-echoing completions
+# like "<|user|> What is 1+2? <|user|> 1+2 = 3 What is ...".
+_CHAT_TEMPLATE_GEMMA = (
+    # Gemma format: single-token <start_of_turn>/<end_of_turn> (ids
+    # 106/107 in Gemma 2/3 tokenizer family — AuroraGPT-2B uses this).
+    # 'user' and 'model' are the canonical role names.
+    "{% for message in messages %}"
+    "{% if message['role'] == 'system' or message['role'] == 'user' %}"
+    "<start_of_turn>user\n{{ message['content'] }}<end_of_turn>\n"
+    "{% elif message['role'] == 'assistant' %}"
+    "<start_of_turn>model\n{{ message['content'] }}<end_of_turn>\n"
+    "{% endif %}"
+    "{% endfor %}"
+    "{% if add_generation_prompt %}<start_of_turn>model\n{% endif %}"
+)
+_CHAT_TEMPLATE_CHATML = (
+    # ChatML format: <|im_start|>/<|im_end|> — used by Qwen, OpenAI's
+    # public chatml spec, etc. Tokenizers in this family encode the
+    # markers as single tokens.
+    "{% for message in messages %}"
+    "<|im_start|>{{ message['role'] }}\n{{ message['content'] }}<|im_end|>\n"
+    "{% endfor %}"
+    "{% if add_generation_prompt %}<|im_start|>assistant\n{% endif %}"
+)
+_CHAT_TEMPLATE_PLAIN = (
+    # Plain-text fallback. No special tokens. Uses ALL-CAPS role names
+    # + double-newline boundaries which most pretrain corpora contain.
+    # Works on any tokenizer, but the model has no native turn boundary
+    # signal — generation will tend to ramble past the answer.
+    "{% for message in messages %}"
+    "{% if message['role'] == 'system' or message['role'] == 'user' %}"
+    "USER: {{ message['content'] }}\n\n"
+    "{% elif message['role'] == 'assistant' %}"
+    "ASSISTANT: {{ message['content'] }}\n\n"
+    "{% endif %}"
+    "{% endfor %}"
+    "{% if add_generation_prompt %}ASSISTANT: {% endif %}"
+)
+
+
+def _pick_chat_template(tokenizer) -> tuple[str, str]:
+    """Pick a chat template the tokenizer's vocab actually understands.
+
+    Returns (kind, template). Kind is a short label used in the log
+    message so it's clear which format was chosen.
+
+    Strategy: probe the tokenizer for known single-token turn markers
+    (Gemma's <start_of_turn>, ChatML's <|im_start|>) and pick the
+    matching template. If neither is single-token, fall back to a
+    plain-text USER/ASSISTANT format which works anywhere but is
+    less effective at constraining the model.
+    """
+    def _is_single_token(s: str) -> bool:
+        try:
+            ids = tokenizer.encode(s, add_special_tokens=False)
+            return len(ids) == 1
+        except Exception:
+            return False
+
+    if _is_single_token("<start_of_turn>") and _is_single_token("<end_of_turn>"):
+        return "gemma", _CHAT_TEMPLATE_GEMMA
+    if _is_single_token("<|im_start|>") and _is_single_token("<|im_end|>"):
+        return "chatml", _CHAT_TEMPLATE_CHATML
+    return "plaintext", _CHAT_TEMPLATE_PLAIN
+
+
 def main() -> None:
     from trl import GRPOTrainer
     from transformers import AutoTokenizer, HfArgumentParser
@@ -609,28 +681,16 @@ def main() -> None:
         tokenizer.pad_token = tokenizer.eos_token
     # GRPOTrainer._tokenize_prompts (trl/trainer/grpo_trainer.py:1312)
     # calls tokenizer.apply_chat_template, which crashes on base /
-    # pretraining-only tokenizers that have no chat template (e.g.
-    # AuroraGPT-2B-sophiag-gs138650, meta-llama/Llama-3.2-1B). Inject
-    # a minimal chatml-style template so GRPO can wrap user prompts.
-    # Existing chat templates (Instruct variants, Qwen, etc.) are
-    # untouched.
+    # pretraining-only tokenizers that have no chat template. Inject a
+    # template the tokenizer can actually use as turn boundaries — see
+    # _pick_chat_template for the per-vocab logic. Existing chat
+    # templates (Instruct variants, Qwen, etc.) are untouched.
     if tokenizer.chat_template is None:
-        tokenizer.chat_template = (
-            "{% for message in messages %}"
-            "{% if message['role'] == 'system' %}"
-            "<|system|>\n{{ message['content'] }}\n"
-            "{% elif message['role'] == 'user' %}"
-            "<|user|>\n{{ message['content'] }}\n"
-            "{% elif message['role'] == 'assistant' %}"
-            "<|assistant|>\n{{ message['content'] }}\n"
-            "{% endif %}"
-            "{% endfor %}"
-            "{% if add_generation_prompt %}<|assistant|>\n{% endif %}"
-        )
+        kind, tokenizer.chat_template = _pick_chat_template(tokenizer)
         log.info(
-            f"[rank {rank}] tokenizer has no chat_template; injected a "
-            f"minimal chatml fallback (override by setting "
-            f"tokenizer.chat_template explicitly)"
+            f"[rank {rank}] tokenizer has no chat_template; injected "
+            f"{kind!r} fallback (override by setting tokenizer.chat_template "
+            f"explicitly before launching, or pass --chat_template_kwargs)"
         )
 
     dataset = task.build_dataset(num_samples=ezpz_args.num_samples)
