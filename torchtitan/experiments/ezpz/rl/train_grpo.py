@@ -552,6 +552,31 @@ def main() -> None:
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
+    # GRPOTrainer._tokenize_prompts (trl/trainer/grpo_trainer.py:1312)
+    # calls tokenizer.apply_chat_template, which crashes on base /
+    # pretraining-only tokenizers that have no chat template (e.g.
+    # AuroraGPT-2B-sophiag-gs138650, meta-llama/Llama-3.2-1B). Inject
+    # a minimal chatml-style template so GRPO can wrap user prompts.
+    # Existing chat templates (Instruct variants, Qwen, etc.) are
+    # untouched.
+    if tokenizer.chat_template is None:
+        tokenizer.chat_template = (
+            "{% for message in messages %}"
+            "{% if message['role'] == 'system' %}"
+            "<|system|>\n{{ message['content'] }}\n"
+            "{% elif message['role'] == 'user' %}"
+            "<|user|>\n{{ message['content'] }}\n"
+            "{% elif message['role'] == 'assistant' %}"
+            "<|assistant|>\n{{ message['content'] }}\n"
+            "{% endif %}"
+            "{% endfor %}"
+            "{% if add_generation_prompt %}<|assistant|>\n{% endif %}"
+        )
+        log.info(
+            f"[rank {rank}] tokenizer has no chat_template; injected a "
+            f"minimal chatml fallback (override by setting "
+            f"tokenizer.chat_template explicitly)"
+        )
 
     dataset = task.build_dataset(num_samples=ezpz_args.num_samples)
     log.info(f"[rank {rank}] Built dataset with {len(dataset)} samples")
