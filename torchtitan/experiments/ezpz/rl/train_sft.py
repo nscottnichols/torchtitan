@@ -244,7 +244,21 @@ def main() -> None:
             f"{kind!r} fallback"
         )
 
-    dataset = sft_ds.build()
+    # Same shape as _prefetch_and_broadcast_model: rank 0 builds the
+    # dataset first (which triggers the HF Hub download into the local
+    # cache), then we barrier so worker ranks load from the warm cache
+    # instead of all 384 ranks hammering HF Hub with concurrent xet-read
+    # requests (job 12468217 died this way with HTTP 429 storms +
+    # ".incomplete/dataset_info.json not found" cascade failures).
+    import torch.distributed as dist
+    if rank == 0:
+        log.info(f"[prefetch] rank 0 building SFT dataset (warms HF cache)...")
+        dataset = sft_ds.build()
+        log.info(f"[prefetch] rank 0 cache warm for {ezpz_args.sft_dataset!r}")
+    if dist.is_initialized():
+        dist.barrier()
+    if rank != 0:
+        dataset = sft_ds.build()
     log.info(f"[rank {rank}] Built SFT dataset: {len(dataset)} samples")
 
     trainer = SFTTrainer(
@@ -255,7 +269,13 @@ def main() -> None:
     )
 
     log.info(f"[rank {rank}] Starting SFT training...")
-    trainer.train()
+    # Pass resume_from_checkpoint EXPLICITLY. HF Trainer's documented
+    # behavior is to pick it up from args automatically when train() is
+    # called with no arg, but with FSDP-sharded checkpoints the auto-
+    # detect can silently fall through to fresh-from-scratch training
+    # without raising. Explicit pass-through forces the FSDP-sharded
+    # checkpoint load path (12468222 lost its resume to this exact bug).
+    trainer.train(resume_from_checkpoint=config.resume_from_checkpoint or None)
     log.info(f"[rank {rank}] Training complete.")
 
     if rank == 0 and not ezpz_args.no_save:

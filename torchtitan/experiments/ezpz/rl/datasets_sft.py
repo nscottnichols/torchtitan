@@ -118,3 +118,105 @@ register_sft_dataset(
         ),
     )
 )
+
+
+# ---------------------------------------------------------------------------
+# alpaca — broad instruction-following (52k examples)
+# ---------------------------------------------------------------------------
+
+
+def _build_alpaca() -> Dataset:
+    """Load tatsu-lab/alpaca (52k instruction-following examples).
+
+    Each row has {instruction, input, output}. We concatenate
+    instruction+input into the user turn (with a blank line between
+    them when input is non-empty) and use output as the assistant
+    turn. Broader-purpose than math-only datasets — useful for
+    teaching the base AuroraGPT-2B model to follow instructions
+    other than just "do the math".
+    """
+    from datasets import load_dataset
+
+    raw = load_dataset("tatsu-lab/alpaca", split="train")
+
+    def _format(ex):
+        instruction = ex["instruction"]
+        if ex.get("input"):
+            user_content = f"{instruction}\n\n{ex['input']}"
+        else:
+            user_content = instruction
+        return {
+            "prompt": [{"role": "user", "content": user_content}],
+            "completion": [{"role": "assistant", "content": ex["output"]}],
+        }
+
+    return raw.map(_format, remove_columns=raw.column_names)
+
+
+register_sft_dataset(
+    SFTDataset(
+        name="alpaca",
+        build=_build_alpaca,
+        description=(
+            "Broad instruction-following (tatsu-lab/alpaca, ~52k "
+            "examples). Use to teach instruction-following beyond "
+            "math; mix with gsm8k/metamathqa via the 'math_alpaca_mix' "
+            "entry."
+        ),
+    )
+)
+
+
+# ---------------------------------------------------------------------------
+# math_alpaca_mix — interleaves metamathqa + gsm8k + alpaca by weight
+# ---------------------------------------------------------------------------
+
+
+def _build_math_alpaca_mix(
+    weights=(0.6, 0.1, 0.3),
+    seed: int = 42,
+) -> Dataset:
+    """Interleave metamathqa + gsm8k + alpaca with given probabilities.
+
+    Default weight 0.6/0.1/0.3 keeps the math signal dominant (where
+    we have the reward functions to exercise it) while exposing the
+    model to ~30% general instruction-following data — useful for
+    tasks like word_sort that aren't pure arithmetic.
+
+    Uses ``interleave_datasets(stopping_strategy='all_exhausted')`` so
+    smaller datasets cycle until the largest is exhausted; total
+    yielded examples will be roughly ``max_size / max_weight`` so the
+    sampled proportions actually match the requested weights.
+    """
+    from datasets import interleave_datasets
+
+    if len(weights) != 3:
+        raise ValueError(
+            f"math_alpaca_mix weights must be (w_metamath, w_gsm8k, w_alpaca); "
+            f"got {weights!r}"
+        )
+    if abs(sum(weights) - 1.0) > 1e-6:
+        raise ValueError(f"weights must sum to 1.0; got {sum(weights)}")
+
+    return interleave_datasets(
+        [_build_metamathqa(), _build_gsm8k(), _build_alpaca()],
+        probabilities=list(weights),
+        seed=seed,
+        stopping_strategy="all_exhausted",
+    )
+
+
+register_sft_dataset(
+    SFTDataset(
+        name="math_alpaca_mix",
+        build=_build_math_alpaca_mix,
+        description=(
+            # %% — argparse %-formats help strings so literal % must be
+            # escaped or it crashes with "unsupported format character"
+            # (we hit this in job 12468232 — '60% m' parses as %m).
+            "Weighted mix: 60%% metamathqa + 10%% gsm8k + 30%% alpaca. "
+            "Broader than math-only; better for downstream tasks "
+            "that aren't pure arithmetic (e.g. word_sort)."
+        ),
+    )
+)

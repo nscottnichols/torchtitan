@@ -182,6 +182,47 @@ def format_reward(completions, **kwargs) -> list[float]:
     return rewards
 
 
+# Length-penalty tuning constants. The arithmetic prompts ask for "just the
+# number," so a well-formatted answer is ~1-3 tokens. Allow some slack
+# (TARGET) before any penalty kicks in (lets the model show brief work),
+# then ramp linearly to a hard cost at the clip ceiling.
+_LENGTH_PENALTY_TARGET = 8   # whitespace tokens with zero cost
+_LENGTH_PENALTY_HARD = 64    # matches default max_completion_length
+
+
+def length_penalty(completions, **kwargs) -> list[float]:
+    """Soft penalty on completion length (in whitespace-tokens).
+
+    Reward shape:
+      n <= TARGET  →   0.0   (no penalty for short answers)
+      TARGET < n < HARD →  linear from 0 to -1.0
+      n >= HARD    →  -1.0   (full penalty)
+
+    GRPO sums reward functions, so this directly biases the policy
+    toward terse responses without forbidding work-shown answers
+    outright. The shape is intentionally additive (not multiplicative)
+    with accuracy_reward so a correct-but-long answer still nets
+    positive reward (1.0 - up_to_1.0 >= 0).
+
+    Whitespace-tokenization is an approximation of the model's actual
+    token count but is good enough for a smooth gradient signal and
+    avoids dragging the tokenizer into the reward path.
+    """
+    rewards = []
+    span = _LENGTH_PENALTY_HARD - _LENGTH_PENALTY_TARGET
+    for completion in completions:
+        text = get_completion_text(completion)
+        n = max(len(text.split()), 1)
+        if n <= _LENGTH_PENALTY_TARGET:
+            r = 0.0
+        elif n >= _LENGTH_PENALTY_HARD:
+            r = -1.0
+        else:
+            r = -(n - _LENGTH_PENALTY_TARGET) / span
+        rewards.append(r)
+    return rewards
+
+
 # ---------------------------------------------------------------------------
 # Registration
 # ---------------------------------------------------------------------------
@@ -190,7 +231,7 @@ register_task(
     RLTask(
         name="arithmetic",
         build_dataset=build_dataset,
-        reward_funcs=[accuracy_reward, format_reward],
+        reward_funcs=[accuracy_reward, format_reward, length_penalty],
         description="Mixed arithmetic ({+, -, ×, ÷}) on small integers",
     )
 )
