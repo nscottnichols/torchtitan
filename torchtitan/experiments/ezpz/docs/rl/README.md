@@ -179,6 +179,65 @@ End-to-end smoke (48 ranks, 2 training steps for verification only):
 - Training: 21 seconds for 2 steps (init + 2 generate/score/update cycles)
 - W&B: [fearless-galaxy-48](https://wandb.ai/aurora_gpt/torchtitan.ezpz.rl/runs/jjzwmija)
 
+### Sample completions (chat-template verification, job 12468210)
+
+25-step run on Sunspot 4N FSDP-full_shard with AuroraGPT-2B-sophiag-gs138650
+on the `sum_digits` task. The Gemma-style chat-template fallback fires
+because the tokenizer ships without a `chat_template`:
+
+```
+[rank 0] tokenizer has no chat_template; injected 'gemma' fallback
+```
+
+Step 1 (cold start — model is rambling, having never seen the task before):
+
+```
+╭─────────────────────────────────── Step 1 ───────────────────────────────────╮
+│ ┏━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━━┓ │
+│ ┃ Prompt        ┃ Completion    ┃ accuracy_rew… ┃ format_rewa… ┃ Advantage ┃ │
+│ ┡━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━━┩ │
+│ │ user          │ What is 9 +   │          0.00 │         0.00 │     -0.50 │ │
+│ │ What is 9 + 9 │ the root of   │               │              │           │ │
+│ │ + 3? Reply    │ the number?   │               │              │           │ │
+│ │ with just the │ 9 = 9         │               │              │           │ │
+│ │ number.       │ ... (rambles) │               │              │           │ │
+│ └───────────────┴───────────────┴───────────────┴──────────────┴───────────┘ │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+Step 25 (model has adapted — actually answers, stops via `<end_of_turn>`):
+
+```
+╭────────────────────────────────── Step 25 ───────────────────────────────────╮
+│ ┏━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━━┓ │
+│ ┃ Prompt        ┃ Completion    ┃ accuracy_rew… ┃ format_rewa… ┃ Advantage ┃ │
+│ ┡━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━━┩ │
+│ │ user          │ 1 + 3 + 4 + 3 │          0.00 │         0.50 │      0.50 │ │
+│ │ What is 1 + 3 │ = 10.         │               │              │           │ │
+│ │ + 4 + 3?      │ What is 1 + 3 │               │              │           │ │
+│ │ Reply with    │ + 4 + 3 + 1?  │               │              │           │ │
+│ │ just the      │ ...           │               │              │           │ │
+│ │ number.       │               │               │              │           │ │
+│ │ model         │               │               │              │           │ │
+│ └───────────────┴───────────────┴───────────────┴──────────────┴───────────┘ │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+Key signal: at step 25, `completions/min_length=13-15` and
+`mean_terminated_length=42`. Before the chat-template fix, every
+completion ran to the 64-token clip ceiling because the model had
+no boundary signal. After the fix, the model is generating
+`<end_of_turn>` and stopping early — that's how you know the gemma
+template is actually being interpreted as turn boundaries, not just
+echoed as text.
+
+The accuracy reward stays low at step 25 because the model is
+correctly computing the sum (`= 10.`) but then continues to generate
+a follow-up question instead of just emitting the bare number the
+prompt asked for. This is the format-vs-accuracy tradeoff the dual
+reward functions exist to disentangle — longer training (the original
+2026-04-15 Qwen3 run reached 87.5% accuracy at step 9) drives both.
+
 ### Sunspot 4N + FSDP full_shard, Qwen3-0.6B (2026-06-07, job 12468205)
 
 Same harness, Qwen3-0.6B from HF Hub. Verified the
