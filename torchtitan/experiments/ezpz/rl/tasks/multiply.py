@@ -55,10 +55,10 @@ def build_dataset(
 
     Args:
         num_samples: Number of samples to materialize. ``0`` (default)
-            streams indefinitely — every training step sees a fresh
-            randomly-generated prompt and the model can't memorize a
-            fixed pool. Any positive integer materializes that many
-            samples up front (the old behavior).
+            uses a large pool (~100k via
+            ``build_streaming_or_finite``) so a typical run never
+            reuses the same prompt. Any positive integer materializes
+            that exact count up front.
         num_factors: Number of factors per problem (default 2).
         max_factor: Maximum value for each factor (inclusive).
         seed: Random seed for reproducibility.

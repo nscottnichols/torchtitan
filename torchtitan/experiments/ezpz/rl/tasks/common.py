@@ -51,26 +51,30 @@ def get_completion_text(completion) -> str:
     return str(completion)
 
 
+_DEFAULT_LARGE_POOL = 100_000
+
+
 def build_streaming_or_finite(sample_fn, num_samples: int):
     """Wrap a per-sample generator function into an HF Dataset.
 
-    The convention: ``num_samples == 0`` means stream forever
-    (returns an ``IterableDataset`` — every training step sees a
-    fresh prompt, so the model can't memorize a fixed pool). Any
-    positive integer materializes a finite ``Dataset`` of that size,
-    which is what older training code expects.
+    The convention: ``num_samples == 0`` means "as close to streaming
+    as TRL supports" — materializes a large finite pool of
+    ``_DEFAULT_LARGE_POOL`` (100,000) randomly-generated samples so
+    a typical training run never reuses the same prompt. Any positive
+    integer materializes that many samples.
+
+    Why not a true ``IterableDataset``: TRL's ``GRPOTrainer`` rejects
+    iterable datasets at __init__ (see trl#3213,
+    ``trl/trainer/grpo_trainer.py:602``). A 100k pool at e.g.
+    GBS=48 / max_steps=1000 means each prompt is seen at most ~2× on
+    average rather than ~48× with the old default of 1000.
 
     ``sample_fn`` is a zero-arg callable that returns one dict per
     call (must contain at least ``prompt`` and ``answer`` keys).
     The caller is responsible for seeding the RNG inside sample_fn
     so reproducibility behaves correctly.
     """
-    from datasets import Dataset, IterableDataset
+    from datasets import Dataset
 
-    if num_samples == 0:
-        def _stream():
-            while True:
-                yield sample_fn()
-        return IterableDataset.from_generator(_stream)
-
-    return Dataset.from_list([sample_fn() for _ in range(num_samples)])
+    effective_n = _DEFAULT_LARGE_POOL if num_samples == 0 else num_samples
+    return Dataset.from_list([sample_fn() for _ in range(effective_n)])

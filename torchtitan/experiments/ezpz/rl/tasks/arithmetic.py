@@ -114,10 +114,10 @@ def build_dataset(
 
     Args:
         num_samples: Number of samples to materialize. ``0`` (default)
-            streams indefinitely — every training step sees a fresh
-            randomly-generated prompt and the model can't memorize a
-            fixed pool. Any positive integer materializes that many
-            samples up front.
+            uses a large pool (~100k via
+            ``build_streaming_or_finite``) so a typical run never
+            reuses the same prompt. Any positive integer materializes
+            that exact count up front.
         operations: Operations to sample from. Valid values: 'add', 'sub',
             'mul', 'div'. Default is all four.
         min_operands, max_operands: Operand-count range. (Division always

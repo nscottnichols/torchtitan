@@ -91,10 +91,11 @@ class EzpzGRPOArgs:
         metadata={
             "help": (
                 "Number of training prompts to materialize. 0 (default) "
-                "streams indefinitely — every training step sees a fresh "
-                "randomly-generated prompt, so the model can't memorize "
-                "a fixed pool. Set to a positive integer to materialize "
-                "a finite Dataset of that size (the old behavior)."
+                "materializes a large pool (~100k) so a typical run "
+                "never reuses the same prompt. Set to a positive "
+                "integer to materialize that exact count. (TRL's "
+                "GRPOTrainer doesn't yet accept true IterableDataset "
+                "streams — see trl#3213.)"
             )
         },
     )
@@ -702,12 +703,7 @@ def main() -> None:
         )
 
     dataset = task.build_dataset(num_samples=ezpz_args.num_samples)
-    # Streaming datasets (num_samples=0) have no len(); show "streaming"
-    # in the log so it's clear which mode is active.
-    size_str = (
-        "streaming" if ezpz_args.num_samples == 0 else f"{len(dataset)} samples"
-    )
-    log.info(f"[rank {rank}] Built dataset: {size_str}")
+    log.info(f"[rank {rank}] Built dataset: {len(dataset)} samples")
 
     trainer = GRPOTrainer(
         model=model_name,
