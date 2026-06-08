@@ -540,6 +540,12 @@ def _build_wandb_config(
 # the model's vocab — otherwise the model has never seen them and
 # treats them as ordinary text, producing prompt-echoing completions
 # like "<|user|> What is 1+2? <|user|> 1+2 = 3 What is ...".
+#
+# The assistant content is wrapped in {% generation %}…{% endgeneration %}
+# so TRL's SFTTrainer with assistant_only_loss=True can mask out the
+# user turn and compute loss only on the assistant span. These markers
+# are renderer-neutral (jinja just ignores them at render time) so the
+# same template works for both inference / GRPO and SFT.
 _CHAT_TEMPLATE_GEMMA = (
     # Gemma format: single-token <start_of_turn>/<end_of_turn> (ids
     # 106/107 in Gemma 2/3 tokenizer family — AuroraGPT-2B uses this).
@@ -548,7 +554,8 @@ _CHAT_TEMPLATE_GEMMA = (
     "{% if message['role'] == 'system' or message['role'] == 'user' %}"
     "<start_of_turn>user\n{{ message['content'] }}<end_of_turn>\n"
     "{% elif message['role'] == 'assistant' %}"
-    "<start_of_turn>model\n{{ message['content'] }}<end_of_turn>\n"
+    "<start_of_turn>model\n"
+    "{% generation %}{{ message['content'] }}<end_of_turn>\n{% endgeneration %}"
     "{% endif %}"
     "{% endfor %}"
     "{% if add_generation_prompt %}<start_of_turn>model\n{% endif %}"
@@ -558,7 +565,12 @@ _CHAT_TEMPLATE_CHATML = (
     # public chatml spec, etc. Tokenizers in this family encode the
     # markers as single tokens.
     "{% for message in messages %}"
+    "{% if message['role'] == 'assistant' %}"
+    "<|im_start|>assistant\n"
+    "{% generation %}{{ message['content'] }}<|im_end|>\n{% endgeneration %}"
+    "{% else %}"
     "<|im_start|>{{ message['role'] }}\n{{ message['content'] }}<|im_end|>\n"
+    "{% endif %}"
     "{% endfor %}"
     "{% if add_generation_prompt %}<|im_start|>assistant\n{% endif %}"
 )
@@ -571,7 +583,8 @@ _CHAT_TEMPLATE_PLAIN = (
     "{% if message['role'] == 'system' or message['role'] == 'user' %}"
     "USER: {{ message['content'] }}\n\n"
     "{% elif message['role'] == 'assistant' %}"
-    "ASSISTANT: {{ message['content'] }}\n\n"
+    "ASSISTANT: "
+    "{% generation %}{{ message['content'] }}\n\n{% endgeneration %}"
     "{% endif %}"
     "{% endfor %}"
     "{% if add_generation_prompt %}ASSISTANT: {% endif %}"
