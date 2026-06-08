@@ -52,6 +52,7 @@ class LocalMapConfig:
     in_placements: tuple[NamedPlacement, ...]
     out_placements: tuple[NamedPlacement, ...]
     in_grad_placements: tuple[NamedPlacement, ...]
+    redistribute_inputs: bool = False
 
     def to_dict(self) -> dict:
         return {"repr": repr(self)}

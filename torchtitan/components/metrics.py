@@ -36,6 +36,29 @@ DeviceMemStats = namedtuple(
 )
 
 
+def _debug_memory_enabled() -> bool:
+    return os.environ.get("TT_MOE_DEBUG_MEMORY", "").lower() in {
+        "1",
+        "true",
+        "yes",
+        "rank0",
+        "all",
+    }
+
+
+def _rank_for_debug_memory() -> int:
+    for name in ("RANK", "PMI_RANK", "PALS_RANKID", "OMPI_COMM_WORLD_RANK"):
+        value = os.environ.get(name)
+        if value not in (None, ""):
+            return int(value)
+    return 0
+
+
+def _debug_memory_should_print() -> bool:
+    mode = os.environ.get("TT_MOE_DEBUG_MEMORY", "").lower()
+    return mode == "all" or _rank_for_debug_memory() == 0
+
+
 class DeviceMemoryMonitor:
     def __init__(self, device: str = f"{device_type}:0"):
         # pyrefly: ignore [read-only]
@@ -88,6 +111,34 @@ class DeviceMemoryMonitor:
             num_retries,
             num_ooms,
         )
+
+    def get_current_stats(self) -> dict[str, float]:
+        device_info = device_module.memory_stats(self.device)
+
+        allocated = device_info.get("allocated_bytes.all.current", -1)
+        active = device_info.get("active_bytes.all.current", -1)
+        reserved = device_info.get("reserved_bytes.all.current", -1)
+        max_allocated = device_info.get("allocated_bytes.all.peak", -1)
+
+        # Some backends expose direct helpers even when memory_stats() omits
+        # allocated/reserved counters.
+        if allocated < 0 and hasattr(device_module, "memory_allocated"):
+            allocated = device_module.memory_allocated(self.device)
+        if reserved < 0 and hasattr(device_module, "memory_reserved"):
+            reserved = device_module.memory_reserved(self.device)
+        if max_allocated < 0 and hasattr(device_module, "max_memory_allocated"):
+            max_allocated = device_module.max_memory_allocated(self.device)
+
+        return {
+            "allocated_gib": self._to_gib(allocated),
+            "active_gib": self._to_gib(active),
+            "reserved_gib": self._to_gib(reserved),
+            "max_allocated_gib": self._to_gib(max_allocated),
+            "allocated_pct": self._to_pct(allocated),
+            "active_pct": self._to_pct(active),
+            "reserved_pct": self._to_pct(reserved),
+            "max_allocated_pct": self._to_pct(max_allocated),
+        }
 
     def reset_peak_stats(self):
         device_module.reset_peak_memory_stats()
@@ -363,6 +414,8 @@ class MetricsProcessor(Configurable):
         self.model_parts = None
 
     def should_log(self, step: int) -> bool:
+        if _debug_memory_enabled():
+            return True
         return step == 1 or step % self.config.log_freq == 0
 
     def _build_metric_logger(
@@ -492,10 +545,20 @@ class MetricsProcessor(Configurable):
             mfu = 100 * self.num_flops_per_token * tps / self.gpu_peak_flops
 
         time_end_to_end = time_delta / self.config.log_freq
-        time_data_loading = sum(self.data_loading_times) / len(self.data_loading_times)
-        time_data_loading_pct = 100 * sum(self.data_loading_times) / time_delta
+        data_loading_total = sum(self.data_loading_times)
+        time_data_loading = (
+            data_loading_total / len(self.data_loading_times)
+            if self.data_loading_times
+            else 0.0
+        )
+        time_data_loading_pct = 100 * data_loading_total / time_delta
 
         device_mem_stats = self.device_memory_monitor.get_peak_stats()
+        current_mem_stats = (
+            self.device_memory_monitor.get_current_stats()
+            if _debug_memory_enabled()
+            else None
+        )
 
         metrics = {
             "loss_metrics/global_avg_loss": global_avg_loss,
@@ -513,6 +576,41 @@ class MetricsProcessor(Configurable):
             "memory/num_alloc_retries": device_mem_stats.num_alloc_retries,
             "memory/num_ooms": device_mem_stats.num_ooms,
         }
+        if current_mem_stats is not None:
+            metrics.update(
+                {
+                    "memory/current_allocated(GiB)": current_mem_stats[
+                        "allocated_gib"
+                    ],
+                    "memory/current_allocated(%)": current_mem_stats[
+                        "allocated_pct"
+                    ],
+                    "memory/current_active(GiB)": current_mem_stats["active_gib"],
+                    "memory/current_active(%)": current_mem_stats["active_pct"],
+                    "memory/current_reserved(GiB)": current_mem_stats["reserved_gib"],
+                    "memory/current_reserved(%)": current_mem_stats["reserved_pct"],
+                    "memory/max_allocated(GiB)": current_mem_stats[
+                        "max_allocated_gib"
+                    ],
+                    "memory/max_allocated(%)": current_mem_stats[
+                        "max_allocated_pct"
+                    ],
+                }
+            )
+
+            try:
+                from torchtitan.models.common.token_dispatcher import (
+                    _MOE_FASTPATH_COUNTERS,
+                )
+
+                metrics.update(
+                    {
+                        f"moe_counters/{name}": count
+                        for name, count in sorted(_MOE_FASTPATH_COUNTERS.items())
+                    }
+                )
+            except Exception:
+                pass
         if mfu is not None:
             metrics["mfu(%)"] = mfu
 
@@ -523,16 +621,26 @@ class MetricsProcessor(Configurable):
 
         color = self.color
         mfu_str = f"{mfu:.2f}%" if mfu is not None else "N/A"
-        logger.info(
-            f"{color.red}step: {step:2}  "
-            f"{color.green}loss: {global_avg_loss:8.5f}  "
-            f"{color.orange}grad_norm: {grad_norm:7.4f}  "
-            f"{color.turquoise}memory: {device_mem_stats.max_reserved_gib:5.2f}GiB"
-            f"({device_mem_stats.max_reserved_pct:.2f}%)  "
-            f"{color.blue}tps: {round(tps):,}  "
-            f"{color.cyan}tflops: {tflops:,.2f}  "
-            f"{color.magenta}mfu: {mfu_str}{color.reset}"
-        )
+        memory_suffix = ""
+        if current_mem_stats is not None and _debug_memory_should_print():
+            memory_suffix = (
+                f"  alloc: {current_mem_stats['allocated_gib']:5.2f}GiB"
+                f"  reserved_now: {current_mem_stats['reserved_gib']:5.2f}GiB"
+                f"  peak_alloc: {current_mem_stats['max_allocated_gib']:5.2f}GiB"
+            )
+
+        if current_mem_stats is None or _debug_memory_should_print():
+            logger.info(
+                f"{color.red}step: {step:2}  "
+                f"{color.green}loss: {global_avg_loss:8.5f}  "
+                f"{color.orange}grad_norm: {grad_norm:7.4f}  "
+                f"{color.turquoise}memory: {device_mem_stats.max_reserved_gib:5.2f}GiB"
+                f"({device_mem_stats.max_reserved_pct:.2f}%)"
+                f"{memory_suffix}  "
+                f"{color.blue}tps: {round(tps):,}  "
+                f"{color.cyan}tflops: {tflops:,.2f}  "
+                f"{color.magenta}mfu: {mfu_str}{color.reset}"
+            )
 
         self.ntokens_since_last_log = 0
         self.data_loading_times.clear()

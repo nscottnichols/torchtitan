@@ -30,6 +30,7 @@ Differences vs upstream `parallelize_deepseekv3`:
   FSDP world size.
 """
 
+import os
 from typing import Any
 
 import ezpz
@@ -38,6 +39,10 @@ import torch
 import torch.distributed
 import torch.nn as nn
 from ezpz.models import summarize_model
+from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
+    CheckpointImpl,
+    checkpoint_wrapper,
+)
 from torch.distributed.device_mesh import DeviceMesh
 from torch.distributed.fsdp import CPUOffloadPolicy, fully_shard, MixedPrecisionPolicy
 from torch.distributed.tensor import Partial, Replicate, Shard
@@ -66,6 +71,108 @@ from torchtitan.distributed.tensor_parallel import (
 )
 from torchtitan.experiments.ezpz.moe import moeModel
 from torchtitan.tools.logging import logger
+
+
+def _env_flag_enabled(name: str) -> bool:
+    return os.environ.get(name, "").lower() in {"1", "true", "yes"}
+
+
+def maybe_disable_fsdp_backward_prefetch(model: nn.Module) -> None:
+    """Disable FSDP2's default reverse-order backward prefetch when requested.
+
+    FSDP2 enables the default backward prefetch when no explicit prefetch list is
+    configured. Passing each FSDP module itself as the explicit target suppresses
+    the default next-module prefetch; after the module's own pre-backward unshard
+    has completed, that explicit self-prefetch is a no-op.
+    """
+    if not _env_flag_enabled("TT_MOE_FSDP_DISABLE_BACKWARD_PREFETCH"):
+        return
+
+    try:
+        from torch.distributed.fsdp import FSDPModule
+    except ImportError:
+        logger.warning(
+            "TT_MOE_FSDP_DISABLE_BACKWARD_PREFETCH=1 ignored: FSDPModule unavailable"
+        )
+        return
+
+    updated = 0
+    for module in model.modules():
+        if isinstance(module, FSDPModule):
+            module.set_modules_to_backward_prefetch([module])
+            updated += 1
+
+    logger.info(
+        "Configured FSDP backward prefetch self-target no-op for %d modules",
+        updated,
+    )
+
+
+def maybe_checkpoint_attention_only(
+    model: nn.Module,
+    ac_config: ActivationCheckpointConfig,
+) -> None:
+    """Checkpoint only attention modules when requested.
+
+    Full-block checkpointing is unsafe for normal MoE routing because recompute
+    can produce dynamic routing tensors with different metadata. Attention-only
+    checkpointing avoids MoE dispatch/collectives while reducing the largest
+    dense activation footprint in the 8192-sequence full trainer.
+    """
+    if not _env_flag_enabled("TT_MOE_CHECKPOINT_ATTENTION_ONLY"):
+        return
+
+    updated = 0
+    for block in getattr(model, "layers", {}).values():
+        attention = getattr(block, "attention", None)
+        if attention is None:
+            continue
+        block.attention = checkpoint_wrapper(
+            attention,
+            preserve_rng_state=ac_config.preserve_rng_state,
+        )
+        updated += 1
+
+    logger.info("Applied attention-only activation checkpointing to %d modules", updated)
+
+
+def maybe_checkpoint_moe_only(
+    model: nn.Module,
+    ac_config: ActivationCheckpointConfig,
+) -> None:
+    """Checkpoint only MoE modules when requested.
+
+    This targets the grad-enabled normal-routing MoE stack without also wrapping
+    attention, FSDP, lm_head, or optimizer behavior. It is intentionally env
+    gated while the XPU/XCCL activation-growth failure is being isolated.
+    """
+    if not _env_flag_enabled("TT_MOE_CHECKPOINT_MOE_ONLY"):
+        return
+
+    checkpoint_impl = (
+        CheckpointImpl.REENTRANT
+        if _env_flag_enabled("TT_MOE_CHECKPOINT_MOE_REENTRANT")
+        else CheckpointImpl.NO_REENTRANT
+    )
+    updated = 0
+    for block in getattr(model, "layers", {}).values():
+        if not getattr(block, "moe_enabled", False):
+            continue
+        moe = getattr(block, "moe", None)
+        if moe is None:
+            continue
+        block.moe = checkpoint_wrapper(
+            moe,
+            checkpoint_impl=checkpoint_impl,
+            preserve_rng_state=ac_config.preserve_rng_state,
+        )
+        updated += 1
+
+    logger.info(
+        "Applied MoE-only activation checkpointing to %d modules (impl=%s)",
+        updated,
+        checkpoint_impl.name,
+    )
 
 
 def disable_fsdp_gradient_division(model: nn.Module) -> None:
@@ -169,6 +276,9 @@ def parallelize_moe(
             model_compile_enabled=model_compile_enabled,
             base_folder=dump_folder,
         )
+    else:
+        maybe_checkpoint_attention_only(model, ac_config)
+        maybe_checkpoint_moe_only(model, ac_config)
 
     if model_compile_enabled:
         # Upstream apply_compile_sparse uses fullgraph=True which fails on
@@ -251,16 +361,32 @@ def apply_fsdp(
     reshard_after_forward = get_fsdp_reshard_after_forward_policy(
         reshard_after_forward_policy, pp_enabled
     )
-
     if model.tok_embeddings is not None:
         fully_shard(
             model.tok_embeddings,
             **fsdp_config,
             reshard_after_forward=reshard_after_forward,
         )
+    replicate_lm_head = os.environ.get("TT_MOE_REPLICATE_LM_HEAD", "0") == "1"
     if model.norm is not None and model.lm_head is not None:
+        if replicate_lm_head:
+            logger.info(
+                "Leaving lm_head replicated because TT_MOE_REPLICATE_LM_HEAD=1"
+            )
+            fully_shard(
+                model.norm,
+                **fsdp_config,
+                reshard_after_forward=reshard_after_forward_policy == "always",
+            )
+        else:
+            fully_shard(
+                [model.norm, model.lm_head],
+                **fsdp_config,
+                reshard_after_forward=reshard_after_forward_policy == "always",
+            )
+    elif model.norm is not None:
         fully_shard(
-            [model.norm, model.lm_head],
+            model.norm,
             **fsdp_config,
             reshard_after_forward=reshard_after_forward_policy == "always",
         )
@@ -378,6 +504,7 @@ def apply_fsdp(
             )
 
     fully_shard(model, **fsdp_config)
+    maybe_disable_fsdp_backward_prefetch(model)
     disable_fsdp_gradient_division(model)
 
 
@@ -407,6 +534,7 @@ def apply_moe_ep_tp(
                     use_local_input=False,
                     output_layouts=(Partial(),),
                     desired_output_layouts=(Shard(1),),
+                    use_local_output=False,
                 ),
                 "moe.router.gate": NoParallel(
                     local_output_grad_placements=(Partial(),),

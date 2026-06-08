@@ -13,7 +13,7 @@ import ezpz
 import ezpz.distributed
 
 from torchtitan.components.checkpoint import CheckpointManager
-from torchtitan.components.loss import CrossEntropyLoss
+from torchtitan.components.loss import ChunkedCELoss, CrossEntropyLoss
 from torchtitan.components.lr_scheduler import LRSchedulersContainer
 from torchtitan.components.metrics import MetricsProcessor
 from torchtitan.components.optimizer import OptimizersContainer
@@ -286,8 +286,27 @@ def moe_10b_2b() -> FaultTolerantTrainer.Config:
 
 
 def moe_10b_2b_sdpa() -> FaultTolerantTrainer.Config:
-    cfg = moe("10B_2B_sdpa", local_batch_size=2,
-              activation_checkpoint_mode="none")
+    # The 10B_2B_sdpa EP path uses ChunkedCELoss to avoid materializing full
+    # logits. On the current XPU/FSDP stack, FSDP-wrapping lm_head makes the
+    # chunked loss call mix local hidden-state tensors with DTensor weights.
+    # Leave lm_head replicated by default for this config and synchronize its
+    # grad in ChunkedCELoss. Callers can still opt out by setting the env var.
+    os.environ.setdefault("TT_MOE_REPLICATE_LM_HEAD", "1")
+    cfg = moe(
+        "10B_2B_sdpa",
+        local_batch_size=2,
+        activation_checkpoint_mode="none",
+    )
+    cfg.loss = ChunkedCELoss.Config(
+        num_chunks=64,
+        # Releasing the XPU allocator cache between each loss chunk causes
+        # oneCCL/Level Zero IPC handle churn in the EP/FSDP trainer. Let the
+        # allocator retain chunks; memory plateaus and 50-step EP=12 runs are
+        # stable with this disabled.
+        empty_cache_between_chunks=False,
+        keep_lm_head_unsharded_between_chunks=False,
+        sync_replicated_lm_head_grad=True,
+    )
     cfg.optimizer.lr = 2.2e-4
     cfg.lr_scheduler.decay_type = "cosine"
     cfg.lr_scheduler.min_lr_factor = 0.1

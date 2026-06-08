@@ -169,6 +169,7 @@ def set_gqa_inner_attention_local_map(
             in_placements=(qkv_placements, qkv_placements, qkv_placements),
             out_placements=(qkv_placements,) * num_outputs,
             in_grad_placements=(qkv_placements, qkv_placements, qkv_placements),
+            redistribute_inputs=True,
         ),
     )
 

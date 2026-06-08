@@ -6,6 +6,7 @@
 
 import dataclasses
 import math
+import os
 from dataclasses import dataclass
 
 import torch
@@ -25,6 +26,64 @@ from torchtitan.models.utils import get_moe_model_nparams_and_flops
 from torchtitan.protocols.module import Module
 from torchtitan.tools.logging import logger
 from torchtitan.tools.utils import has_cuda_capability
+
+
+def _env_flag_enabled(name: str) -> bool:
+    return os.environ.get(name, "").lower() in {"1", "true", "yes"}
+
+
+def _maybe_release_device_cache_between_attention_and_moe(x: torch.Tensor) -> None:
+    if not _env_flag_enabled("TT_MOE_EMPTY_CACHE_BETWEEN_ATTN_MOE"):
+        return
+    if x.device.type == "xpu":
+        torch.xpu.synchronize(x.device)
+        torch.xpu.empty_cache()
+    elif x.device.type == "cuda":
+        torch.cuda.synchronize(x.device)
+        torch.cuda.empty_cache()
+
+
+def _rank_for_layer_memory_debug() -> int:
+    for name in ("RANK", "PMI_RANK", "PALS_RANKID", "OMPI_COMM_WORLD_RANK"):
+        value = os.environ.get(name)
+        if value not in (None, ""):
+            return int(value)
+    return 0
+
+
+def _layer_memory_debug_enabled_for_rank() -> bool:
+    value = os.environ.get("TT_MOE_DEBUG_LAYER_MEMORY", "").lower()
+    if value in {"", "0", "false", "no"}:
+        return False
+    if value in {"1", "true", "yes", "rank0"}:
+        return _rank_for_layer_memory_debug() == 0
+    if value == "all":
+        return True
+    try:
+        return _rank_for_layer_memory_debug() == int(value)
+    except ValueError:
+        return False
+
+
+def _log_layer_memory(phase: str, layer_id: str, x: torch.Tensor) -> None:
+    if not _layer_memory_debug_enabled_for_rank():
+        return
+    if x.device.type == "xpu":
+        torch.xpu.synchronize(x.device)
+        allocated = torch.xpu.memory_allocated(x.device) / 1024**3
+        reserved = torch.xpu.memory_reserved(x.device) / 1024**3
+    elif x.device.type == "cuda":
+        torch.cuda.synchronize(x.device)
+        allocated = torch.cuda.memory_allocated(x.device) / 1024**3
+        reserved = torch.cuda.memory_reserved(x.device) / 1024**3
+    else:
+        allocated = reserved = 0.0
+    rank = _rank_for_layer_memory_debug()
+    print(
+        f"[rank{rank}] TT_MOE_LAYER_MEMORY layer={layer_id} phase={phase} "
+        f"alloc={allocated:.2f}GiB reserved={reserved:.2f}GiB",
+        flush=True,
+    )
 
 
 class Attention(BaseAttention):
@@ -182,6 +241,7 @@ class moeTransformerBlock(TransformerBlock):  # noqa: N801
         x = x + self.attention(
             self.attention_norm(x), freqs_cis, attention_masks, positions
         )
+        _maybe_release_device_cache_between_attention_and_moe(x)
         if self.moe_enabled:
             x = x + self.moe(self.ffn_norm(x))
         else:
@@ -303,3 +363,29 @@ class moeModel(Decoder):  # noqa: N801
                 + self.layers[0].attention.v_head_dim,
                 seq_len,
             )
+
+    def forward(
+        self,
+        tokens: torch.Tensor,
+        attention_masks: AttentionMasksType | None = None,
+        positions: torch.Tensor | None = None,
+    ):
+        if not _layer_memory_debug_enabled_for_rank():
+            return super().forward(tokens, attention_masks, positions)
+
+        h = self.tok_embeddings(tokens) if self.tok_embeddings is not None else tokens
+        _log_layer_memory("after_embeddings", "emb", h)
+
+        for layer_id, layer in self.layers.items():
+            _log_layer_memory("before", str(layer_id), h)
+            h = layer(h, self.freqs_cis, attention_masks, positions)
+            _log_layer_memory("after", str(layer_id), h)
+
+        h = self.norm(h) if self.norm is not None else h
+        _log_layer_memory("after_norm", "norm", h)
+
+        if self._skip_lm_head:
+            return h
+        output = self.lm_head(h) if self.lm_head is not None else h
+        _log_layer_memory("after_lm_head", "lm_head", output)
+        return output

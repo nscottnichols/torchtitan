@@ -255,6 +255,7 @@ class Module(nn.Module, Configurable):
                 out_placements=out_placements,
                 in_grad_placements=in_grad_placements,
                 device_mesh=mesh,
+                redistribute_inputs=lm.redistribute_inputs,
             )
 
         def with_redistribution(*args, **kwargs):
