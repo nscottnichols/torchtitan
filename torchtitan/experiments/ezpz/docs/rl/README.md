@@ -17,7 +17,9 @@ flash-attn).
 
 ## Tasks
 
-Tasks are pluggable via a registry. Use `--task <name>` to select:
+Tasks are pluggable via a registry. Use `--task <name>` to select. The
+choices are auto-populated in `--help` from
+[`rl/tasks/__init__.py`](../../rl/tasks/__init__.py):
 
 | Task | Description | Difficulty |
 |------|-------------|------------|
@@ -28,38 +30,162 @@ Tasks are pluggable via a registry. Use `--task <name>` to select:
 
 ### Adding a new task
 
-Create a module in `rl/tasks/`, define a dataset builder + reward functions,
-and call `register_task()`. See `tasks/sum_digits.py` for the pattern.
+Create a module in `rl/tasks/`, define a dataset builder + reward
+functions, and call `register_task()`. Import it from
+[`tasks/__init__.py`](../../rl/tasks/__init__.py) so it self-registers
+on package load — `--help` will pick it up automatically. See
+[`tasks/sum_digits.py`](../../rl/tasks/sum_digits.py) for the pattern.
+
+## AuroraGPT-2B checkpoint paths
+
+The AuroraGPT-2B SophiaG checkpoint (`global_step138650`, HF-format) is
+the recommended starting point on ALCF systems. It's a local checkpoint
+(no HF Hub download needed, no rate-limit risk) and `model_type=llama`
+so FSDP wrap-class auto-detection picks `LlamaDecoderLayer`.
+
+| Machine | Path |
+|---------|------|
+| Aurora | `/flare/AuroraGPT/AuroraGPT-v1/Experiments/AuroraGPT-2B/public/sophiag/hf/global_step138650` |
+| Sunspot | `/home/foremans/datascience/foremans/projects/saforem2/torchtitan/AuroraGPT-2B-sophiag-gs138650` |
 
 ## Quick Start
 
-```bash
-ezpz launch python3 -m torchtitan.experiments.ezpz.rl.train_grpo
-```
+The CLI uses `HfArgumentParser`, so every `GRPOConfig` + `TrainingArguments`
+field is exposed as a flag (191 total). Run `--help` for the full list. All
+flags use `snake_case` (e.g. `--per_device_train_batch_size`,
+`--max_steps`), not `--hyphen-form`.
 
-With CLI args:
+### Minimal (Sunspot, plain DDP)
 
 ```bash
 ezpz launch python3 -m torchtitan.experiments.ezpz.rl.train_grpo \
-    --model-name-or-path Qwen/Qwen3-0.6B \
     --task sum_digits \
-    --steps 50 \
-    --batch-size 1 \
-    --num-generations 2
+    --model_name_or_path /home/foremans/datascience/foremans/projects/saforem2/torchtitan/AuroraGPT-2B-sophiag-gs138650 \
+    --per_device_train_batch_size 1 \
+    --max_steps 50 \
+    --bf16
 ```
 
-Environment variables (`GRPO_MODEL`, `GRPO_TASK`, `GRPO_STEPS`, etc.) are
-also supported as fallbacks when CLI args are not provided.
+### Recommended (FSDP full-shard, 4N)
+
+```bash
+ezpz launch python3 -m torchtitan.experiments.ezpz.rl.train_grpo \
+    --task sum_digits \
+    --model_name_or_path /home/foremans/datascience/foremans/projects/saforem2/torchtitan/AuroraGPT-2B-sophiag-gs138650 \
+    --per_device_train_batch_size 1 --per_device_eval_batch_size 1 \
+    --bf16 --beta 0.0 \
+    --fsdp full_shard \
+    --max_steps 50
+```
+
+`--fsdp_transformer_layer_cls_to_wrap` defaults to `LlamaDecoderLayer`
+which matches AuroraGPT-2B's architecture; for other models the script
+auto-detects the right wrap class via `AutoConfig.model_type` (covers
+llama, llama4, qwen2, qwen3, mistral, mixtral, gemma, gemma2, phi, phi3,
+gpt_neox, gpt2, deepseek_v3, olmo, olmo2 — extend the map in
+[`train_grpo.py`](../../rl/train_grpo.py) `_DEFAULT_WRAP_CLS_BY_MODEL_TYPE`
+if you need more).
+
+### Aurora variant
+
+Same command, just swap the path:
+
+```bash
+ezpz launch python3 -m torchtitan.experiments.ezpz.rl.train_grpo \
+    --task sum_digits \
+    --model_name_or_path /flare/AuroraGPT/AuroraGPT-v1/Experiments/AuroraGPT-2B/public/sophiag/hf/global_step138650 \
+    --per_device_train_batch_size 1 --per_device_eval_batch_size 1 \
+    --bf16 --beta 0.0 --fsdp full_shard --max_steps 50
+```
+
+## What works under the hood (handled automatically)
+
+The script papers over several XPU/TRL/accelerate friction points that
+took empirical iteration to land. Documented here so you know what NOT
+to debug if you change something:
+
+1. **Rank-0 HF Hub prefetch + broadcast.** 48 ranks doing
+   `from_pretrained` concurrently against the same HF Hub repo trips
+   per-IP 429 rate limits. Rank 0 prefetches the model files; workers
+   load from the warm cache after a barrier. (No effect when
+   `--model_name_or_path` is a local path like the AuroraGPT paths above
+   — `snapshot_download` 404s but workers just read the local files.)
+
+2. **FSDP auto-detect for wrap class.** Picks the right `*DecoderLayer`
+   from the model's HF `model_type`. Override with
+   `--fsdp_transformer_layer_cls_to_wrap` if needed.
+
+3. **FSDP env bootstrap.** HF Trainer's internal `accelerate.Accelerator`
+   reads `ACCELERATE_USE_FSDP=true` + `FSDP_*` env vars at construction
+   time. Under `ezpz launch` (mpiexec) these aren't set automatically;
+   the script injects them before `GRPOTrainer.__init__` so `--fsdp
+   full_shard` actually shards.
+
+4. **`device_map="auto"` override.** TRL's `create_model_from_path`
+   defaults `device_map="auto"` which, under `ZE_FLAT_DEVICE_HIERARCHY=
+   FLAT`, places every rank's model on `xpu:11`. The script overrides
+   to `device_map=None` so HF Trainer's normal
+   `model.to(accelerator.device)` puts the model on the per-rank tile.
+
+5. **Activation-checkpointing migration.** When `--fsdp full_shard` is
+   on, `gradient_checkpointing=True` is silently migrated to
+   `fsdp_config["activation_checkpointing"]=True` to avoid the redundant
+   AllGather warning.
+
+6. **Chat template fallback.** Base/pretraining-only tokenizers (like
+   AuroraGPT-2B) ship without a chat template; the script injects a
+   minimal chatml-style template (preserves existing templates).
+
+## Observability (W&B)
+
+Every field of `EzpzGRPOArgs` and `EzpzGRPOConfig` (including all
+inherited `TrainingArguments` fields) is logged to W&B at run-init under
+`ezpz/*`, `train/*`, and `runtime/*` prefixes (~180 hyperparameter keys).
+
+`log_completions=True` is on by default — GRPO streams sample prompts +
+generated completions to a W&B table every `logging_steps`, so you can
+see what your model is actually outputting during training without
+adding any code. (Override with `--no_log_completions` if you want to
+disable it.)
+
+Metrics logged during training (every `logging_steps`):
+
+| Group | Keys |
+|-------|------|
+| Standard HF | `loss`, `grad_norm`, `learning_rate`, `epoch`, `num_tokens` |
+| Completions | `completions/mean_length`, `min_length`, `max_length`, `clipped_ratio`, `mean_terminated_length`, … |
+| Rewards | `rewards/<func_name>/mean`, `rewards/<func_name>/std`, `reward`, `reward_std`, `frac_reward_zero_std` |
+| GRPO objective | `entropy`, `kl` (only when `beta != 0`), `clip_ratio/{low,high,region}_{mean,min,max}` |
+| Timing | `step_time` |
 
 ## Dependencies
 
-- `trl` — install with `uv pip install --no-deps --no-cache --link-mode=copy trl`
+- `trl` — install with
+  `uv pip install --no-deps --no-cache --link-mode=copy trl`
   (use `--no-deps` to avoid pulling CUDA torch)
-- `transformers`, `datasets` — usually already installed
-- Model checkpoint downloaded from HF Hub (requires network access on
-  compute nodes via proxy)
+- `transformers`, `datasets`, `accelerate` — usually already installed
+- On Sunspot/Aurora, the AuroraGPT-2B paths above are pre-staged. For
+  HF Hub models, compute nodes need the ALCF proxy (set
+  `http_proxy=https_proxy=http://proxy.alcf.anl.gov:3128`).
 
-## Verified Results (Sunspot, 2026-04-15)
+## Verified Results
+
+### Sunspot 4N + FSDP full_shard, AuroraGPT-2B (2026-06-07, job 12468209)
+
+End-to-end smoke (48 ranks, 2 training steps for verification only):
+
+- Task: `sum_digits`, model: AuroraGPT-2B-sophiag-gs138650
+- `--bf16 --beta 0.0 --fsdp full_shard --max_steps 2 --per_device_train_batch_size 1`
+- Training: 21 seconds for 2 steps (init + 2 generate/score/update cycles)
+- W&B: [fearless-galaxy-48](https://wandb.ai/aurora_gpt/torchtitan.ezpz.rl/runs/jjzwmija)
+
+### Sunspot 4N + FSDP full_shard, Qwen3-0.6B (2026-06-07, job 12468205)
+
+Same harness, Qwen3-0.6B from HF Hub. Verified the
+`device_map="auto"` → `None` override path; reached
+`Training complete.` cleanly.
+
+### Sunspot 2N + DDP, Qwen3-0.6B (2026-04-15)
 
 **Config:** Qwen3-0.6B, 24 XPU tiles (2 nodes), 10 steps, batch=1,
 2 generations per prompt, 100 training samples.
@@ -78,7 +204,7 @@ Training time: 41.3s, 5.8 samples/sec.
 
 | File | Description |
 |------|-------------|
-| [`train_grpo.py`](../../rl/train_grpo.py) | Main entry point — task-agnostic GRPO loop |
+| [`train_grpo.py`](../../rl/train_grpo.py) | Main entry point — task-agnostic GRPO loop, FSDP wiring, W&B init |
 | [`tasks/__init__.py`](../../rl/tasks/__init__.py) | Task registry (`RLTask`, `register_task`, `get_task`) |
 | [`tasks/common.py`](../../rl/tasks/common.py) | Shared helpers (answer extraction, completion text) |
 | [`tasks/sum_digits.py`](../../rl/tasks/sum_digits.py) | Sum-of-digits task (dataset + rewards) |
