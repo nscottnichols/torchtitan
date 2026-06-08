@@ -13,27 +13,38 @@ def extract_answer(text: str) -> str | None:
     """Extract a numeric answer from model completion.
 
     Tries several patterns in order:
-    1. \\boxed{...} (LaTeX-style)
-    2. "answer is X" or "= X"
-    3. Last standalone number in the text
+    1. ``\\boxed{...}`` (LaTeX-style)
+    2. gsm8k ``#### N`` final-answer marker
+    3. ``answer is X`` / ``the answer is X``
+    4. The number after the LAST ``=`` (skipping intermediate ``=``
+       inside chain expressions / gsm8k ``<<a=b>>`` calculator hints)
+    5. Last standalone number in the text
     """
     # \\boxed{...}
     match = re.search(r"\\boxed\{([^}]+)\}", text)
     if match:
         return match.group(1).strip()
 
-    # "answer is X" or "the answer is X"
-    match = re.search(r"(?:the\s+)?answer\s+is\s+(\d+)", text, re.IGNORECASE)
+    # gsm8k final-answer marker: "#### 42"
+    match = re.search(r"####\s*(-?\d+)", text)
     if match:
         return match.group(1).strip()
 
-    # "= X" at end of expression
-    match = re.search(r"=\s*(\d+)", text)
+    # "answer is X" or "the answer is X"
+    match = re.search(r"(?:the\s+)?answer\s+is\s+(-?\d+)", text, re.IGNORECASE)
     if match:
         return match.group(1).strip()
+
+    # Number after the LAST `=`. Important: re.findall walks left-to-
+    # right but we want the LAST match because intermediate `=` values
+    # are chain-of-thought scratch (e.g. gsm8k <<6*12=72*12=864>> or
+    # the model's "= 720 ... = 8640" multi-step working).
+    eq_matches = re.findall(r"=\s*(-?\d+)", text)
+    if eq_matches:
+        return eq_matches[-1].strip()
 
     # Last standalone number
-    numbers = re.findall(r"\b(\d+)\b", text)
+    numbers = re.findall(r"\b(-?\d+)\b", text)
     if numbers:
         return numbers[-1]
 
