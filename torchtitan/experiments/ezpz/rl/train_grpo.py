@@ -205,6 +205,33 @@ def _ezpz_grpo_config_cls():
                 fsdp_cfg.setdefault("activation_checkpointing", True)
                 self.fsdp_config = fsdp_cfg
                 self.gradient_checkpointing = False
+
+            # When FSDP is on, force model_init_kwargs["device_map"]=None
+            # so TRL doesn't override it to "auto". TRL's
+            # create_model_from_path (trl/trainer/utils.py:1022) defaults
+            # device_map to "auto" which under ZE_FLAT_DEVICE_HIERARCHY=FLAT
+            # picks the last visible tile (xpu:11) on every process — every
+            # rank ends up with its model on xpu:11 regardless of local_rank,
+            # and FSDP's _get_compute_device check fires:
+            #   ValueError: Inconsistent compute device and `device_id` on
+            #   rank N: xpu:11 vs xpu:<local_rank>
+            # Setting device_map=None makes from_pretrained leave the model
+            # on CPU; HF Trainer then moves it to args.device (the per-rank
+            # accelerator.device = xpu:<local_rank>), and FSDP wraps cleanly.
+            if self.fsdp:
+                mik = self.model_init_kwargs
+                if mik is None:
+                    mik = {}
+                elif isinstance(mik, str):
+                    import json
+                    mik = json.loads(mik)
+                else:
+                    mik = dict(mik)
+                # Use setdefault so an explicit --model_init_kwargs from CLI
+                # still wins. None tells from_pretrained "don't dispatch".
+                if "device_map" not in mik:
+                    mik["device_map"] = None
+                self.model_init_kwargs = mik
             super().__post_init__()
 
     return EzpzGRPOConfig
