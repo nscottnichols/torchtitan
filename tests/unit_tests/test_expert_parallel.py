@@ -18,8 +18,13 @@ from torchtitan.models.common.moe import (
 )
 from torchtitan.models.common.token_dispatcher import (
     _MOE_FASTPATH_COUNTERS,
+    _equal_a2a_padding_overhead_ratio,
     _normal_equal_a2a_padding_enabled,
+    _normal_equal_a2a_padding_policy,
+    _normal_equal_a2a_padding_telemetry_enabled,
+    _normal_equal_a2a_padding_threshold,
     _record_moe_fastpath,
+    _record_moe_fastpath_stat,
     AllToAllTokenDispatcher,
     LocalTokenDispatcher,
     TorchAOTokenDispatcher,
@@ -74,17 +79,69 @@ class TestMoEFastPathCounters(unittest.TestCase):
             else:
                 os.environ["TT_MOE_DEBUG_FASTPATHS"] = previous
 
+    def test_counter_stats_track_count_sum_min_and_max(self):
+        previous = os.environ.get("TT_MOE_DEBUG_FASTPATHS")
+        os.environ["TT_MOE_DEBUG_FASTPATHS"] = "1"
+        _MOE_FASTPATH_COUNTERS.clear()
+        try:
+            _record_moe_fastpath_stat("example_stat", 7)
+            _record_moe_fastpath_stat("example_stat", 3)
+
+            self.assertEqual(_MOE_FASTPATH_COUNTERS["example_stat_count"], 2)
+            self.assertEqual(_MOE_FASTPATH_COUNTERS["example_stat_sum"], 10)
+            self.assertEqual(_MOE_FASTPATH_COUNTERS["example_stat_min"], 3)
+            self.assertEqual(_MOE_FASTPATH_COUNTERS["example_stat_max"], 7)
+        finally:
+            _MOE_FASTPATH_COUNTERS.clear()
+            if previous is None:
+                os.environ.pop("TT_MOE_DEBUG_FASTPATHS", None)
+            else:
+                os.environ["TT_MOE_DEBUG_FASTPATHS"] = previous
+
     def test_normal_equal_a2a_padding_is_environment_gated(self):
         previous = os.environ.pop("TT_MOE_NORMAL_EQUAL_A2A_PADDING", None)
         try:
             self.assertFalse(_normal_equal_a2a_padding_enabled())
+            self.assertEqual(_normal_equal_a2a_padding_policy(), "off")
             os.environ["TT_MOE_NORMAL_EQUAL_A2A_PADDING"] = "1"
             self.assertTrue(_normal_equal_a2a_padding_enabled())
+            self.assertEqual(_normal_equal_a2a_padding_policy(), "force")
+            os.environ["TT_MOE_NORMAL_EQUAL_A2A_PADDING"] = "adaptive"
+            self.assertTrue(_normal_equal_a2a_padding_enabled())
+            self.assertEqual(_normal_equal_a2a_padding_policy(), "adaptive")
         finally:
             if previous is None:
                 os.environ.pop("TT_MOE_NORMAL_EQUAL_A2A_PADDING", None)
             else:
                 os.environ["TT_MOE_NORMAL_EQUAL_A2A_PADDING"] = previous
+
+    def test_normal_equal_a2a_padding_telemetry_is_environment_gated(self):
+        previous = os.environ.pop("TT_MOE_NORMAL_EQUAL_A2A_PADDING_TELEMETRY", None)
+        try:
+            self.assertFalse(_normal_equal_a2a_padding_telemetry_enabled())
+            os.environ["TT_MOE_NORMAL_EQUAL_A2A_PADDING_TELEMETRY"] = "1"
+            self.assertTrue(_normal_equal_a2a_padding_telemetry_enabled())
+        finally:
+            if previous is None:
+                os.environ.pop("TT_MOE_NORMAL_EQUAL_A2A_PADDING_TELEMETRY", None)
+            else:
+                os.environ["TT_MOE_NORMAL_EQUAL_A2A_PADDING_TELEMETRY"] = previous
+
+    def test_normal_equal_a2a_padding_threshold_defaults_and_clamps(self):
+        previous = os.environ.pop("TT_MOE_NORMAL_EQUAL_A2A_PADDING_THRESHOLD", None)
+        try:
+            self.assertEqual(_normal_equal_a2a_padding_threshold(), 0.10)
+            os.environ["TT_MOE_NORMAL_EQUAL_A2A_PADDING_THRESHOLD"] = "0.25"
+            self.assertEqual(_normal_equal_a2a_padding_threshold(), 0.25)
+            os.environ["TT_MOE_NORMAL_EQUAL_A2A_PADDING_THRESHOLD"] = "-1"
+            self.assertEqual(_normal_equal_a2a_padding_threshold(), 0.0)
+            os.environ["TT_MOE_NORMAL_EQUAL_A2A_PADDING_THRESHOLD"] = "bad"
+            self.assertEqual(_normal_equal_a2a_padding_threshold(), 0.10)
+        finally:
+            if previous is None:
+                os.environ.pop("TT_MOE_NORMAL_EQUAL_A2A_PADDING_THRESHOLD", None)
+            else:
+                os.environ["TT_MOE_NORMAL_EQUAL_A2A_PADDING_THRESHOLD"] = previous
 
 
 class TestDeterministicScatterAdd(unittest.TestCase):
@@ -326,6 +383,26 @@ class TestForceLoadBalanceRouting(unittest.TestCase):
 
 
 class TestForceLoadBalanceSplits(unittest.TestCase):
+    def test_equal_a2a_padding_overhead_ratio_counts_dispatch_and_combine(self):
+        padded_tokens, ratio = _equal_a2a_padding_overhead_ratio(
+            input_splits=[8, 10, 9],
+            output_splits=[10, 7, 10],
+            equal_split_size=10,
+        )
+
+        self.assertEqual(padded_tokens, 6)
+        self.assertAlmostEqual(ratio, 6 / 54)
+
+    def test_equal_a2a_padding_overhead_ratio_rejects_empty_real_work(self):
+        padded_tokens, ratio = _equal_a2a_padding_overhead_ratio(
+            input_splits=[0, 0],
+            output_splits=[0, 0],
+            equal_split_size=4,
+        )
+
+        self.assertEqual(padded_tokens, 16)
+        self.assertEqual(ratio, float("inf"))
+
     def test_pad_and_compact_equal_splits_round_trip(self):
         x = torch.arange(10, dtype=torch.float32).reshape(5, 2)
         splits = [2, 1, 2]
@@ -347,6 +424,29 @@ class TestForceLoadBalanceSplits(unittest.TestCase):
             equal_split_size=2,
         )
         torch.testing.assert_close(compacted, x)
+
+    def test_equal_split_contracts_are_debug_gated(self):
+        x = torch.arange(8, dtype=torch.float32).reshape(4, 2)
+        previous = os.environ.pop("TT_MOE_DEBUG_DISPATCH_CONTRACTS", None)
+        try:
+            AllToAllTokenDispatcher._pad_to_equal_splits(
+                x,
+                splits=[1, 1],
+                equal_split_size=2,
+            )
+
+            os.environ["TT_MOE_DEBUG_DISPATCH_CONTRACTS"] = "1"
+            with self.assertRaisesRegex(AssertionError, "split sum"):
+                AllToAllTokenDispatcher._pad_to_equal_splits(
+                    x,
+                    splits=[1, 1],
+                    equal_split_size=2,
+                )
+        finally:
+            if previous is None:
+                os.environ.pop("TT_MOE_DEBUG_DISPATCH_CONTRACTS", None)
+            else:
+                os.environ["TT_MOE_DEBUG_DISPATCH_CONTRACTS"] = previous
 
     def test_direct_equal_split_routed_input_matches_sorted_then_padded(self):
         dispatcher = AllToAllTokenDispatcher(

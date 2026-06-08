@@ -10,6 +10,8 @@ from collections import Counter
 from dataclasses import dataclass
 
 import torch
+import torch.distributed as dist
+import torch.distributed.nn.functional as dist_nn_functional
 import torch.nn.functional as F
 from torch import nn
 from torch.distributed._functional_collectives import (
@@ -21,6 +23,7 @@ from torch.distributed.tensor import DeviceMesh
 from torchtitan.config import Configurable
 from torchtitan.ops.scatter_add import (
     deterministic_scatter_add,
+    deterministic_scatter_add_1d,
     deterministic_scatter_add_,
 )
 
@@ -75,8 +78,110 @@ def _record_moe_fastpath(name: str, count: int = 1) -> None:
     _MOE_FASTPATH_COUNTERS[name] += count
 
 
+def _record_moe_fastpath_max(name: str, value: int) -> None:
+    global _MOE_FASTPATH_ATEXIT_REGISTERED
+    if not _moe_fastpath_debug_enabled():
+        return
+    if torch.compiler.is_compiling():
+        return
+    if not _MOE_FASTPATH_ATEXIT_REGISTERED:
+        atexit.register(_print_moe_fastpath_counters)
+        _MOE_FASTPATH_ATEXIT_REGISTERED = True
+    if name not in _MOE_FASTPATH_COUNTERS or value > _MOE_FASTPATH_COUNTERS[name]:
+        _MOE_FASTPATH_COUNTERS[name] = value
+
+
+def _record_moe_fastpath_min(name: str, value: int) -> None:
+    global _MOE_FASTPATH_ATEXIT_REGISTERED
+    if not _moe_fastpath_debug_enabled():
+        return
+    if torch.compiler.is_compiling():
+        return
+    if not _MOE_FASTPATH_ATEXIT_REGISTERED:
+        atexit.register(_print_moe_fastpath_counters)
+        _MOE_FASTPATH_ATEXIT_REGISTERED = True
+    if name not in _MOE_FASTPATH_COUNTERS or value < _MOE_FASTPATH_COUNTERS[name]:
+        _MOE_FASTPATH_COUNTERS[name] = value
+
+
+def _record_moe_fastpath_stat(name: str, value: int) -> None:
+    _record_moe_fastpath(f"{name}_count")
+    _record_moe_fastpath(f"{name}_sum", value)
+    _record_moe_fastpath_max(f"{name}_max", value)
+    _record_moe_fastpath_min(f"{name}_min", value)
+
+
 def _normal_equal_a2a_padding_enabled() -> bool:
-    return os.environ.get("TT_MOE_NORMAL_EQUAL_A2A_PADDING", "").lower() in {
+    return _normal_equal_a2a_padding_policy() in {"force", "adaptive"}
+
+
+def _normal_equal_a2a_padding_policy() -> str:
+    value = os.environ.get("TT_MOE_NORMAL_EQUAL_A2A_PADDING", "").lower()
+    if value in {"1", "true", "yes", "force"}:
+        return "force"
+    if value == "adaptive":
+        return "adaptive"
+    return "off"
+
+
+def _normal_equal_a2a_padding_threshold() -> float:
+    value = os.environ.get("TT_MOE_NORMAL_EQUAL_A2A_PADDING_THRESHOLD", "0.10")
+    try:
+        threshold = float(value)
+    except ValueError:
+        threshold = 0.10
+    return max(threshold, 0.0)
+
+
+def _normal_equal_a2a_padding_telemetry_enabled() -> bool:
+    return os.environ.get("TT_MOE_NORMAL_EQUAL_A2A_PADDING_TELEMETRY", "").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+
+
+def _debug_dispatch_contracts_enabled() -> bool:
+    return os.environ.get("TT_MOE_DEBUG_DISPATCH_CONTRACTS", "").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+
+
+def _equal_a2a_padding_overhead_ratio(
+    *,
+    input_splits: list[int],
+    output_splits: list[int],
+    equal_split_size: int,
+) -> tuple[int, float]:
+    real_tokens = sum(input_splits) + sum(output_splits)
+    padded_tokens = sum(equal_split_size - split for split in input_splits) + sum(
+        equal_split_size - split for split in output_splits
+    )
+    if real_tokens <= 0:
+        return padded_tokens, float("inf")
+    return padded_tokens, padded_tokens / real_tokens
+
+
+def _sync_after_a2a_enabled() -> bool:
+    return os.environ.get("TT_MOE_SYNC_AFTER_A2A", "").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+
+
+def _sync_before_a2a_enabled() -> bool:
+    return os.environ.get("TT_MOE_SYNC_BEFORE_A2A", "").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+
+
+def _c10d_a2a_autograd_enabled() -> bool:
+    return os.environ.get("TT_MOE_C10D_A2A_AUTOGRAD", "").lower() in {
         "1",
         "true",
         "yes",
@@ -98,6 +203,70 @@ def _scatter_add_forward_or_autograd(
         return deterministic_scatter_add(out, index, src)
     _record_moe_fastpath("scatter_add_inplace_no_grad")
     return deterministic_scatter_add_(out, index, src)
+
+
+def _scatter_add_1d_forward_or_autograd(
+    out: torch.Tensor,
+    index: torch.Tensor,
+    src: torch.Tensor,
+    protected_input: torch.Tensor,
+) -> torch.Tensor:
+    if torch.is_grad_enabled() or _shares_storage(out, protected_input):
+        _record_moe_fastpath("scatter_add_1d_autograd_or_alias")
+        return deterministic_scatter_add_1d(out, index, src)
+    _record_moe_fastpath("scatter_add_inplace_no_grad")
+    scatter_index = index.reshape(-1, 1).expand(-1, src.shape[-1])
+    return deterministic_scatter_add_(out, scatter_index, src)
+
+
+def _sync_after_a2a_if_enabled(x: torch.Tensor) -> None:
+    if not _sync_after_a2a_enabled():
+        return
+    _record_moe_fastpath("sync_after_a2a")
+    if x.device.type == "xpu":
+        torch.xpu.synchronize(x.device)
+    elif x.device.type == "cuda":
+        torch.cuda.synchronize(x.device)
+
+
+def _sync_before_a2a_if_enabled(x: torch.Tensor) -> None:
+    if not _sync_before_a2a_enabled():
+        return
+    _record_moe_fastpath("sync_before_a2a")
+    if x.device.type == "xpu":
+        torch.xpu.synchronize(x.device)
+    elif x.device.type == "cuda":
+        torch.cuda.synchronize(x.device)
+
+
+def _all_to_all_single_autograd(
+    input: torch.Tensor,
+    output_split_sizes: list[int] | None,
+    input_split_sizes: list[int] | None,
+    mesh: DeviceMesh,
+) -> torch.Tensor:
+    _sync_before_a2a_if_enabled(input)
+    if not _c10d_a2a_autograd_enabled():
+        return all_to_all_single_autograd(
+            input,
+            output_split_sizes,
+            input_split_sizes,
+            mesh,
+        )
+
+    if output_split_sizes is None:
+        output_tokens = input.shape[0]
+    else:
+        output_tokens = sum(output_split_sizes)
+    output = input.new_empty((output_tokens, *input.shape[1:]))
+    _record_moe_fastpath("c10d_a2a_autograd")
+    return dist_nn_functional.all_to_all_single(
+        output,
+        input.contiguous(),
+        output_split_sizes,
+        input_split_sizes,
+        group=mesh.get_group(),
+    )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -123,6 +292,11 @@ class AllToAllDispatchMetadata(LocalDispatchMetadata):
     # Optional fast inverse for equal-count rank-major <-> expert-major layout.
     # Shape is (ep_size, num_local_experts, tokens_per_rank_expert).
     rank_major_shape: tuple[int, int, int] | None = None
+    # Optional rank-major per-(rank, expert) segment lengths. When available,
+    # combine can invert expert-major ordering with split/cat instead of a
+    # large indexed write, which is friendlier to the XPU Level Zero backend.
+    rank_major_segment_lens: list[int] | None = None
+    num_local_experts: int | None = None
     # Optional equal-split all-to-all metadata. When set, dispatch/combine pad
     # every peer segment to this size for the collective and compact afterward.
     equal_a2a_split_size: int | None = None
@@ -351,6 +525,7 @@ class AllToAllTokenDispatcher(LocalTokenDispatcher):
     def _can_use_equal_a2a_splits(splits: list[int]) -> bool:
         return len(splits) > 0 and min(splits) != max(splits)
 
+    @torch.compiler.disable
     def _global_equal_a2a_split_size(
         self,
         input_splits: list[int],
@@ -376,38 +551,180 @@ class AllToAllTokenDispatcher(LocalTokenDispatcher):
         )
         return int(global_max_per_rank.max().item())
 
+    def _normal_equal_a2a_adaptive_allowed(
+        self,
+        *,
+        input_splits: list[int],
+        output_splits: list[int],
+        equal_split_size: int,
+        device: torch.device,
+    ) -> bool:
+        padded_tokens, local_ratio = _equal_a2a_padding_overhead_ratio(
+            input_splits=input_splits,
+            output_splits=output_splits,
+            equal_split_size=equal_split_size,
+        )
+        if local_ratio == float("inf"):
+            return False
+
+        ratio = torch.tensor(
+            [local_ratio],
+            device=device,
+            dtype=torch.float32,
+        )
+        assert self.ep_mesh is not None
+        dist.all_reduce(ratio, op=dist.ReduceOp.MAX, group=self.ep_mesh.get_group())
+        global_worst_ratio = float(ratio.item())
+        self._record_normal_equal_a2a_padding_stats(
+            padded_tokens=padded_tokens,
+            local_ratio=local_ratio,
+            global_worst_ratio=global_worst_ratio,
+        )
+        threshold = _normal_equal_a2a_padding_threshold()
+        if global_worst_ratio <= threshold:
+            _record_moe_fastpath("normal_equal_a2a_padding_adaptive_dispatch")
+            return True
+        _record_moe_fastpath("normal_equal_a2a_padding_adaptive_skip")
+        return False
+
+    def _record_normal_equal_a2a_padding_stats(
+        self,
+        *,
+        padded_tokens: int,
+        local_ratio: float,
+        global_worst_ratio: float | None,
+    ) -> None:
+        _record_moe_fastpath_stat(
+            "normal_equal_a2a_padding_candidate_padded_tokens",
+            int(padded_tokens),
+        )
+        _record_moe_fastpath_stat(
+            "normal_equal_a2a_padding_local_overhead_bp",
+            int(round(local_ratio * 10000)),
+        )
+        if global_worst_ratio is not None:
+            _record_moe_fastpath_stat(
+                "normal_equal_a2a_padding_global_worst_overhead_bp",
+                int(round(global_worst_ratio * 10000)),
+            )
+
+    def _record_normal_equal_a2a_padding_stats_for_splits(
+        self,
+        *,
+        input_splits: list[int],
+        output_splits: list[int],
+        equal_split_size: int,
+        device: torch.device,
+        reduce_global: bool,
+    ) -> None:
+        padded_tokens, local_ratio = _equal_a2a_padding_overhead_ratio(
+            input_splits=input_splits,
+            output_splits=output_splits,
+            equal_split_size=equal_split_size,
+        )
+        if local_ratio == float("inf"):
+            return
+
+        global_worst_ratio = None
+        if reduce_global:
+            ratio = torch.tensor(
+                [local_ratio],
+                device=device,
+                dtype=torch.float32,
+            )
+            assert self.ep_mesh is not None
+            dist.all_reduce(ratio, op=dist.ReduceOp.MAX, group=self.ep_mesh.get_group())
+            global_worst_ratio = float(ratio.item())
+
+        self._record_normal_equal_a2a_padding_stats(
+            padded_tokens=padded_tokens,
+            local_ratio=local_ratio,
+            global_worst_ratio=global_worst_ratio,
+        )
+
     @staticmethod
+    def _assert_split_contract(
+        *,
+        name: str,
+        splits: list[int],
+        expected_tokens: int,
+    ) -> None:
+        if not _debug_dispatch_contracts_enabled():
+            return
+        if any(split < 0 for split in splits):
+            raise AssertionError(f"{name}: negative split in {splits}")
+        actual = sum(splits)
+        if actual != expected_tokens:
+            raise AssertionError(
+                f"{name}: split sum {actual} != expected tokens {expected_tokens}"
+            )
+
+    @staticmethod
+    @torch.compiler.disable
     def _pad_to_equal_splits(
         x: torch.Tensor,
         splits: list[int],
         equal_split_size: int,
     ) -> torch.Tensor:
+        AllToAllTokenDispatcher._assert_split_contract(
+            name="pad_to_equal_splits",
+            splits=splits,
+            expected_tokens=x.shape[0],
+        )
         if all(split == equal_split_size for split in splits):
             return x
-        pieces = []
-        offset = 0
+        padded_shape = (len(splits) * equal_split_size, *x.shape[1:])
+        padded = x.new_zeros(padded_shape)
+        src_offset = 0
+        dst_offset = 0
         for split in splits:
-            piece = x[offset : offset + split]
-            offset += split
-            if split < equal_split_size:
-                piece = F.pad(piece, (0, 0, 0, equal_split_size - split))
-            pieces.append(piece)
-        return torch.cat(pieces, dim=0)
+            if split:
+                padded[dst_offset : dst_offset + split].copy_(
+                    x[src_offset : src_offset + split]
+                )
+            src_offset += split
+            dst_offset += equal_split_size
+        if _debug_dispatch_contracts_enabled():
+            expected_tokens = len(splits) * equal_split_size
+            if padded.shape[0] != expected_tokens:
+                raise AssertionError(
+                    "pad_to_equal_splits: padded token count "
+                    f"{padded.shape[0]} != {expected_tokens}"
+                )
+        return padded
 
     @staticmethod
+    @torch.compiler.disable
     def _compact_equal_splits(
         x: torch.Tensor,
         splits: list[int],
         equal_split_size: int,
     ) -> torch.Tensor:
+        if _debug_dispatch_contracts_enabled():
+            expected_tokens = len(splits) * equal_split_size
+            if x.shape[0] != expected_tokens:
+                raise AssertionError(
+                    "compact_equal_splits: padded token count "
+                    f"{x.shape[0]} != {expected_tokens}"
+                )
         if all(split == equal_split_size for split in splits):
             return x
-        pieces = []
-        offset = 0
+        compact = x.new_empty((sum(splits), *x.shape[1:]))
+        src_offset = 0
+        dst_offset = 0
         for split in splits:
-            pieces.append(x[offset : offset + split])
-            offset += equal_split_size
-        return torch.cat(pieces, dim=0)
+            if split:
+                compact[dst_offset : dst_offset + split].copy_(
+                    x[src_offset : src_offset + split]
+                )
+            src_offset += equal_split_size
+            dst_offset += split
+        AllToAllTokenDispatcher._assert_split_contract(
+            name="compact_equal_splits",
+            splits=splits,
+            expected_tokens=compact.shape[0],
+        )
+        return compact
 
     @staticmethod
     def _force_load_balance_equal_split_routed_input(
@@ -609,25 +926,49 @@ class AllToAllTokenDispatcher(LocalTokenDispatcher):
                 not self.score_before_experts
                 and equal_a2a_split_size % (self.num_experts // ep_size) == 0
             )
-        elif (
-            _normal_equal_a2a_padding_enabled()
-            and not torch.compiler.is_compiling()
-            and self.sp_size == 1
-            and len(input_splits_list) > 0
-        ):
+        elif _normal_equal_a2a_padding_enabled() and self.sp_size == 1 and len(
+            input_splits_list
+        ) > 0:
+            if _debug_dispatch_contracts_enabled() and self.force_load_balance:
+                raise AssertionError(
+                    "normal equal-split padding reached force-load-balanced routing"
+                )
+            normal_equal_policy = _normal_equal_a2a_padding_policy()
             equal_a2a_split_size = self._global_equal_a2a_split_size(
                 input_splits_list,
                 num_tokens_per_expert.device,
                 num_tokens_per_expert.dtype,
             )
-            normal_equal_a2a_padding = True
-            _record_moe_fastpath("normal_equal_a2a_padding_dispatch")
-            _record_moe_fastpath(
-                "normal_equal_a2a_dispatch_padded_tokens",
-                sum(equal_a2a_split_size - split for split in input_splits_list),
-            )
-            dispatch_input_splits = None
-            dispatch_output_splits = None
+            adaptive_allowed = True
+            if normal_equal_policy == "adaptive":
+                adaptive_allowed = self._normal_equal_a2a_adaptive_allowed(
+                    input_splits=input_splits_list,
+                    output_splits=output_splits_list,
+                    equal_split_size=equal_a2a_split_size,
+                    device=num_tokens_per_expert.device,
+                )
+            else:
+                self._record_normal_equal_a2a_padding_stats_for_splits(
+                    input_splits=input_splits_list,
+                    output_splits=output_splits_list,
+                    equal_split_size=equal_a2a_split_size,
+                    device=num_tokens_per_expert.device,
+                    reduce_global=_normal_equal_a2a_padding_telemetry_enabled(),
+                )
+
+            if not adaptive_allowed:
+                equal_a2a_split_size = None
+                dispatch_input_splits = input_splits_list
+                dispatch_output_splits = output_splits_list
+            else:
+                normal_equal_a2a_padding = True
+                _record_moe_fastpath("normal_equal_a2a_padding_dispatch")
+                _record_moe_fastpath(
+                    "normal_equal_a2a_dispatch_padded_tokens",
+                    sum(equal_a2a_split_size - split for split in input_splits_list),
+                )
+                dispatch_input_splits = None
+                dispatch_output_splits = None
         else:
             dispatch_input_splits = input_splits_list
             dispatch_output_splits = output_splits_list
@@ -662,12 +1003,13 @@ class AllToAllTokenDispatcher(LocalTokenDispatcher):
                 )
 
         # All-to-all dispatch tokens to EP ranks
-        routed_input = all_to_all_single_autograd(
+        routed_input = _all_to_all_single_autograd(
             routed_input,
             dispatch_output_splits,
             dispatch_input_splits,
             self.ep_mesh,
         )
+        _sync_after_a2a_if_enabled(routed_input)
         if equal_a2a_split_size is not None:
             routed_input = self._compact_equal_splits(
                 routed_input,
@@ -683,7 +1025,12 @@ class AllToAllTokenDispatcher(LocalTokenDispatcher):
         #   (e0,r0), (e0,r1), ..., (e1,r0), (e1,r1), ...  (expert-major)
         num_local_experts = num_tokens_per_expert_group.shape[0] // ep_size
         num_tokens_per_expert_list = None
+        rank_major_segment_lens = None
         if uniform_local_count is None:
+            if num_tokens_per_expert_group.numel() > 0:
+                rank_major_segment_lens = (
+                    num_tokens_per_expert_group.detach().cpu().tolist()
+                )
             (
                 input_shape,
                 routed_input,
@@ -721,6 +1068,8 @@ class AllToAllTokenDispatcher(LocalTokenDispatcher):
             output_splits=output_splits_list,
             original_num_tokens=original_num_tokens,
             rank_major_shape=rank_major_shape,
+            rank_major_segment_lens=rank_major_segment_lens,
+            num_local_experts=num_local_experts,
             num_tokens_per_expert_list=num_tokens_per_expert_list,
             equal_a2a_split_size=equal_a2a_split_size,
             normal_equal_a2a_padding=normal_equal_a2a_padding,
@@ -806,7 +1155,13 @@ class AllToAllTokenDispatcher(LocalTokenDispatcher):
         )
 
     def _unpermute(
-        self, routed_output, input_shape, permuted_indices, rank_major_shape=None
+        self,
+        routed_output,
+        input_shape,
+        permuted_indices,
+        rank_major_shape=None,
+        rank_major_segment_lens=None,
+        num_local_experts=None,
     ):
         """Reverse expert-major reordering."""
         if rank_major_shape is not None:
@@ -821,6 +1176,27 @@ class AllToAllTokenDispatcher(LocalTokenDispatcher):
                 .transpose(0, 1)
                 .reshape(input_shape)
             )
+
+        if (
+            os.environ.get("TT_MOE_SEGMENT_CAT_UNPERMUTE", "").lower()
+            in {"1", "true", "yes"}
+            and rank_major_segment_lens is not None
+            and num_local_experts is not None
+        ):
+            ep_size = len(rank_major_segment_lens) // num_local_experts
+            expert_major_lens = [
+                rank_major_segment_lens[rank * num_local_experts + expert]
+                for expert in range(num_local_experts)
+                for rank in range(ep_size)
+            ]
+            expert_major_chunks = routed_output.split(expert_major_lens, dim=0)
+            rank_major_chunks = [
+                expert_major_chunks[expert * ep_size + rank]
+                for rank in range(ep_size)
+                for expert in range(num_local_experts)
+            ]
+            _record_moe_fastpath("segment_cat_unpermute")
+            return torch.cat(rank_major_chunks, dim=0)
 
         assert permuted_indices is not None
         out_unpermuted = routed_output.new_empty(input_shape)
@@ -863,6 +1239,8 @@ class AllToAllTokenDispatcher(LocalTokenDispatcher):
             metadata.input_shape,
             metadata.permuted_indices,
             metadata.rank_major_shape,
+            metadata.rank_major_segment_lens,
+            metadata.num_local_experts,
         )
         # All-to-all combine: returns AsyncCollectiveTensor — the a2a runs
         # on the NCCL stream and won't block until the tensor is accessed.
@@ -887,12 +1265,13 @@ class AllToAllTokenDispatcher(LocalTokenDispatcher):
             )
             combine_input_splits = None
             combine_output_splits = None
-        routed_output = all_to_all_single_autograd(
+        routed_output = _all_to_all_single_autograd(
             routed_output,
             combine_output_splits,
             combine_input_splits,
             self.ep_mesh,
         )
+        _sync_after_a2a_if_enabled(routed_output)
         if equal_a2a_split_size is not None:
             routed_output = self._compact_equal_splits(
                 routed_output,
@@ -935,10 +1314,9 @@ class AllToAllTokenDispatcher(LocalTokenDispatcher):
                 routed_output = routed_output[mask]
         else:
             token_indices_experts_sorted = metadata.token_indices_experts_sorted
-        scatter_index = token_indices_experts_sorted.reshape(-1, 1).expand(
-            -1, x.shape[-1]
+        out = _scatter_add_1d_forward_or_autograd(
+            out, token_indices_experts_sorted, routed_output, x
         )
-        out = _scatter_add_forward_or_autograd(out, scatter_index, routed_output, x)
         return out
 
 

@@ -5,6 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from dataclasses import dataclass
+import os
 from typing import Literal
 
 import torch
@@ -18,6 +19,25 @@ from torchtitan.models.common.linear import Linear
 from torchtitan.protocols.module import Module
 
 from .token_dispatcher import LocalTokenDispatcher
+
+
+def _sync_before_experts_enabled() -> bool:
+    return os.environ.get("TT_MOE_SYNC_BEFORE_EXPERTS", "").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+
+
+def _sync_before_experts_if_enabled(x: torch.Tensor) -> None:
+    if not _sync_before_experts_enabled():
+        return
+    if x.device.type == "xpu":
+        torch.xpu.synchronize(x.device)
+    elif x.device.type == "cuda":
+        torch.cuda.synchronize(x.device)
+
+
 class GroupedExperts(Module):
     @dataclass(kw_only=True, slots=True)
     class Config(Module.Config):
@@ -73,6 +93,7 @@ class GroupedExperts(Module):
             h, w2.bfloat16().transpose(-2, -1), offs=offsets
         ).type_as(x)
 
+    @torch.compiler.disable
     def forward(
         self,
         x: torch.Tensor,
@@ -89,6 +110,7 @@ class GroupedExperts(Module):
         routed_input, num_tokens_local, metadata = self.token_dispatcher.dispatch(
             x, top_scores, selected_experts_indices, num_tokens_per_expert
         )
+        _sync_before_experts_if_enabled(routed_input)
         routed_output = self._experts_forward(routed_input, num_tokens_local)
         return self.token_dispatcher.combine(routed_output, metadata, x, shared_experts)
 
@@ -327,6 +349,7 @@ class MoE(Module):
             persistent=False,
         )
 
+    @torch.compiler.disable
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Args:

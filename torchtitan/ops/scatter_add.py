@@ -20,6 +20,14 @@ def deterministic_scatter_add(
         torch.use_deterministic_algorithms(prev, warn_only=prev_warn_only)
 
 
+@torch.library.custom_op("torchtitan::deterministic_scatter_add_1d", mutates_args=())
+def deterministic_scatter_add_1d(
+    out: torch.Tensor, index: torch.Tensor, src: torch.Tensor
+) -> torch.Tensor:
+    index_2d = index.reshape(-1, 1).expand(-1, src.shape[-1])
+    return deterministic_scatter_add(out, index_2d, src)
+
+
 def deterministic_scatter_add_(
     out: torch.Tensor, index: torch.Tensor, src: torch.Tensor
 ) -> torch.Tensor:
@@ -34,6 +42,11 @@ def deterministic_scatter_add_(
 
 
 @deterministic_scatter_add.register_fake
+def _(out: torch.Tensor, index: torch.Tensor, src: torch.Tensor) -> torch.Tensor:
+    return torch.empty_like(out)
+
+
+@deterministic_scatter_add_1d.register_fake
 def _(out: torch.Tensor, index: torch.Tensor, src: torch.Tensor) -> torch.Tensor:
     return torch.empty_like(out)
 
@@ -58,4 +71,28 @@ def _setup_context(
 deterministic_scatter_add.register_autograd(
     _backward,
     setup_context=_setup_context,
+)
+
+
+def _backward_1d(
+    ctx: torch.autograd.function.FunctionCtx, grad_output: torch.Tensor
+) -> tuple[torch.Tensor, None, torch.Tensor]:
+    (index,) = ctx.saved_tensors  # pyrefly: ignore[missing-attribute]
+    index_2d = index.reshape(-1, 1).expand(-1, grad_output.shape[-1])
+    grad_src = torch.gather(grad_output, dim=0, index=index_2d)
+    return grad_output, None, grad_src
+
+
+def _setup_context_1d(
+    ctx: torch.autograd.function.FunctionCtx,
+    inputs: tuple[torch.Tensor, torch.Tensor, torch.Tensor],
+    output: torch.Tensor,
+) -> None:
+    _out, index, _src = inputs
+    ctx.save_for_backward(index)
+
+
+deterministic_scatter_add_1d.register_autograd(
+    _backward_1d,
+    setup_context=_setup_context_1d,
 )
