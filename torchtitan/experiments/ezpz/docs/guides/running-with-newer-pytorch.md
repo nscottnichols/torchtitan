@@ -89,14 +89,14 @@
 
 [^ezpz-setup]: Explicitly, the `ezpz_load_modules` sets:
 
-   ```bash
-   module load oneapi/release/2025.3.1 hdf5 pti-gpu
-   export ZE_FLAT_DEVICE_HIERARCHY=FLAT
-   export CCL_PROCESS_LAUNCHER=pmix
-   export CCL_OP_SYNC=1
-   export ONEAPI_DEVICE_SELECTOR="opencl:gpu;level_zero:gpu"
-   export TORCH_CPP_LOG_LEVEL=ERROR
-   ```
+     ```bash
+     module load oneapi/release/2025.3.1 hdf5 pti-gpu
+     export ZE_FLAT_DEVICE_HIERARCHY=FLAT
+     export CCL_PROCESS_LAUNCHER=pmix
+     export CCL_OP_SYNC=1
+     export ONEAPI_DEVICE_SELECTOR="opencl:gpu;level_zero:gpu"
+     export TORCH_CPP_LOG_LEVEL=ERROR
+     ```
 
 
 ## Running at Large Scale (> 512 nodes)
