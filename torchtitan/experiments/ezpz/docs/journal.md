@@ -4,6 +4,130 @@ Running log of what's happening, session by session. Most recent first.
 
 ---
 
+## 2026-06-08 (aurora pm) — 80B 4N validated end-to-end on Aurora + 256N NaN + chart wrapper
+
+Big session covering several threads:
+
+### 1. 80B production stack validated end-to-end at 4N (Aurora)
+
+Spent ~3h chasing what looked like the long-pending "80B model-init
+silent hang at 4N+" regression (pending since the 2026-06-06
+session). Iterated through 5 PBS-script attempts (8530199, 8530216,
+8530243, 8530800 + one mid-iteration kill via test.sh ssh-allocation
+8530807). The final attempt
+(`/flare/.../.interactive-80b-4n-r7-direct-*.log`) worked cleanly:
+
+- Loss descent: **12.93 → 12.03 over 10 steps** (-0.91 nats)
+- MFU steady at **~17.9%** (matches the May 5 12466025 + Sunspot
+  12468197 baselines)
+- Memory **88.97%** at peak (4N is dense)
+- **Step-10 sync checkpoint save fired** at 14:06:22 and **landed on
+  disk**: 904 GB across 48 .distcp shards + .metadata, matching the
+  Sunspot reference exactly. Sync mode + xccl workaround validated.
+
+The stack of fixes that got us there (in order of discovery):
+
+1. **80b-v2 repo was 229 commits behind** origin/ezpz. Pulled to get
+   `8031d1d3` (xccl_split_group_workaround for the `split_group`
+   RuntimeError) + `ce321caae` (CHECKPOINT_ASYNC_MODE=disabled
+   default) + the May/June 80B-prod-sync-ckpt validation work.
+2. **80b-v2 .venv was symlinked to 2b-v2 .venv** — would have polluted
+   the 2B chain. Broke the symlink (`cp -a` 8.5GB), installed ezpz
+   0.18.7 (from the `yeet-retry-on-rsync-failure` branch) +
+   `trl==1.5.1` + `spmd_types==0.2.1` (the latter unblocks the
+   upstream `import spmd_types as spmd` in
+   `torchtitan/components/loss.py` since commit `fec0c175d`).
+3. **Patched blendcorpus shipped a deadlocking global
+   `torch.distributed.barrier()`** in `_build_index_mappings`.
+   `BlendableDataset.__getitem__` is lazy per-corpus, so different
+   ranks hit the barrier on different corpora at different wall-clock
+   times → at 4N+ some ranks advance into `train_step` while others
+   sit at the barrier → 30 min wait → ezpz watchdog SIGTERM. Pinned
+   this down via `py-spy dump --pid` from ssh into the head node
+   (rank 0 stuck at `barrier (torch/distributed/distributed_c10d.py:5234)`
+   inside `_build_index_mappings:1141`, rank N+ already in
+   `train_step → dataloader.__next__ → multiprocessing.Queue.get`).
+   Reverted the barrier in the source venv (the existing
+   `_load_with_retry` already handles the EOFError race it was
+   supposed to protect against).
+4. **PBS-script invocation was missing `export ZE_FLAT_DEVICE_HIERARCHY=FLAT`**
+   on the inner shell — caused `_infer_topology` to see 6 GPUs/host
+   instead of 12 and reject the launch with `ngpus must be > 0 and
+   <= 24, got 48`. Added it to the inner-shell setup.
+5. The final r7 run swapped in: patched blendcorpus + xccl workaround
+   + spmd_types + correct FLAT + the inner-shell env block. ssh-launched
+   foreground from the test.sh allocation head node so I could
+   `py-spy` and Ctrl-C without watchdog interference.
+
+Tarball rebuilt with the barrier-removed blendcorpus baked in
+(`.venv.tar.gz.bak-pre-barrier-removal-20260608-090613` preserved).
+
+### 2. 80B 256N smoke — training works, but loss NaNs immediately
+
+Submitted 8530891 (256N, NHOSTS_TRAIN=256, TRAINING_STEPS=110, sync
+ckpt, LR=1e-6 default):
+
+- Setup (compile, init, dataset, mesh) all clean
+- Throughput **110 TPS/GPU / 20.3% MFU** — actually slightly better
+  per-GPU than 4N's 98 / 17.9% (less compile overhead at larger scale)
+- **Step 1**: loss=12.94 grad_norm=4.94 — clean
+- **Step 2**: grad_norm=NaN
+- **Step 3 onward**: loss=NaN forever
+- Job walltime-killed at step 79 (1h cap), step-100 ckpt save never
+  fired
+
+Configured LR scheduler is correct (`warmup_steps=200,
+decay_ratio=0.8, decay_type=linear` = classic WSD), but at
+`TRAINING_STEPS=110` the scheduler clamps warmup to 110, so step-2
+LR is effectively 2/110 × 1e-6 ≈ 1.8e-8 (essentially zero). Even
+with that tiny LR the first optimizer step produces NaN grads — so
+this is **not just "LR too high at GBS=1536"**; something else is
+biting on the first backward at scale.
+
+Open hypotheses (still TBD):
+- bf16 overflow in attention/MLP at GBS=1536 (vs 4N's GBS=24)
+- TP=2 loss-reduction bug (CLAUDE.md notes `_dist_reduce`
+  short-circuits DTensor on orthogonal meshes since 2026-04-27);
+  local workaround in `trainer.py` may not fully cover the grad-norm
+  path
+- AdamW fp32-master second-moment overflow with these activations
+
+Submitted 8531345 with `LR=1e-7` (10× smaller) at TP=2 same as the
+NaN run — but it died from bad-node SIGSEGV (`rank 438 died from
+signal 11` on `x4408c1s3b0n0`) at 177s. Resubmitted as 8531721 with
+`FAILOVER_MAX_RETRIES=2` (a misjudgment to set 0 on the first
+attempt — even when the failure-mode-under-test isn't bad-node,
+surviving allocation/yeet/init still wants retries). 8531721
+currently Q'd waiting for a 256N debug-scaling slot.
+
+### 3. Evals + chart refresh
+
+- Submitted 2B 256N evals for step-69000 (8531449) and step-69900
+  (8531450). step-69900 came back clean: HSn 0.5552, ARC-E 0.5939,
+  ARC-C 0.3294, Wino **0.5627 (best yet)**. Other tasks within noise.
+- Wrote `scripts/update_all_charts.sh` to wrap the six per-script
+  plot invocations (`utils/plot_production.py`,
+  `utils/plot_production_combined.py`,
+  `utils/plot_production_wandb.py`, `eval/plot_evals_combined.py`,
+  `docs/evals/agpt/{2b,20b}/plot_v1_vs_v2.py`) into a single parallel
+  runner with per-script logs. Smoke: 50 figure files refreshed in
+  294s, 0/6 failures.
+
+### 4. Production chain status (no change)
+
+All 3 canonical chains still Q+H — `small` queue is severely
+contended (78 total / 68 Q / 3 R / 7 H). Last R for prod chains:
+- 2B 256N (8519833): step-69900, 2026-06-06 18:07 (cleanly walltime'd)
+- 2B 512N: step-30500, 2026-05-30 07:53 (idle 9 days)
+- 20B 512N: step-4400, 2026-05-29 11:43 (idle 10 days)
+
+8521627 (2B 512N cont) made it to R briefly on 2026-06-07 21:12 but
+died at 8min when 1 of 522 nodes failed yeet-env rsync (the very
+failure mode my `yeet-retry-on-rsync-failure` ezpz PR #160 fixes).
+Chain still alive via failover (cont10 = 8521631 next up).
+
+---
+
 ## 2026-06-08 — RL polish + first real SFT path (gsm8k / metamathqa / mix) + 32N XCCL pain
 
 Long session, three intertwined threads. Tracked in tasks #66–#75.
