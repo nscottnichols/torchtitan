@@ -310,12 +310,23 @@ def main() -> None:
     # requests (job 12468217 died this way with HTTP 429 storms +
     # ".incomplete/dataset_info.json not found" cascade failures).
     import torch.distributed as dist
+    from datetime import timedelta
+
     if rank == 0:
         log.info(f"[prefetch] rank 0 building SFT dataset (warms HF cache)...")
         dataset = sft_ds.build()
         log.info(f"[prefetch] rank 0 cache warm for {ezpz_args.sft_dataset!r}")
     if dist.is_initialized():
-        dist.barrier()
+        # Long timeout — rank 0 may take many minutes to build a large
+        # interleaved mix (OpenMathInstruct-2 is 14M rows; even with
+        # the HF .map() cache warm, instantiation + interleave setup
+        # is ~20s+; cold first run is ~10 min). The PyTorch default
+        # ProcessGroup timeout is 10 min, but on Sunspot the underlying
+        # oneCCL barrier errors out much sooner (~30s) with
+        # `atl_comm->wait fails with status: 1` — caught this in
+        # job 12468348 where rank 0 was still mid-build when workers
+        # hit the default-timeout barrier and crashed.
+        dist.barrier(timeout=timedelta(minutes=30))
     if rank != 0:
         dataset = sft_ds.build()
     log.info(f"[rank {rank}] Built SFT dataset: {len(dataset)} samples")
