@@ -29,7 +29,12 @@ from typing import Optional
 import ezpz
 import ezpz.distributed
 
-from torchtitan.experiments.ezpz.rl.datasets_sft import SFT_REGISTRY, get_sft_dataset
+from torchtitan.experiments.ezpz.rl.datasets_sft import (
+    SFT_REGISTRY,
+    _is_mix_spec,
+    _parse_mix_spec,
+    get_sft_dataset,
+)
 # Reuse the helpers from train_grpo so we don't drift between the two
 # training entry points.
 from torchtitan.experiments.ezpz.rl.train_grpo import (
@@ -49,19 +54,26 @@ def _sft_dataset_help() -> str:
     if not SFT_REGISTRY:
         return "SFT dataset name (registry is empty — no datasets imported?)."
     rows = "; ".join(f"{n}: {d.description}" for n, d in sorted(SFT_REGISTRY.items()))
-    return f"SFT dataset from torchtitan.experiments.ezpz.rl.datasets_sft registry. Choices: {rows}"
+    return (
+        f"SFT dataset. Either a registered name from "
+        f"torchtitan.experiments.ezpz.rl.datasets_sft (choices below) "
+        f"OR a mix-spec like 'tulu-3-sft-mixture:0.5,gsm8k:0.5' that "
+        f"interleaves multiple registered datasets at the given (auto-"
+        f"renormalized) weights. Choices: {rows}"
+    )
 
 
 @dataclass
 class EzpzSFTArgs:
     """ezpz-side CLI args that aren't part of SFTConfig."""
 
+    # NOTE: no `choices=` because we also accept a mix-spec string
+    # (e.g. 'tulu-3-sft-mixture:0.5,gsm8k:0.5'). Validation moved into
+    # __post_init__ below — bare names must be in SFT_REGISTRY, mix
+    # specs must parse cleanly and reference only registered names.
     sft_dataset: str = field(
         default="gsm8k",
-        metadata={
-            "help": _sft_dataset_help(),
-            "choices": sorted(SFT_REGISTRY) or None,
-        },
+        metadata={"help": _sft_dataset_help()},
     )
     model_name_or_path: str = field(
         default="",
@@ -96,6 +108,32 @@ class EzpzSFTArgs:
             )
         },
     )
+
+    def __post_init__(self) -> None:
+        # Validate sft_dataset early so a typo doesn't cost a model
+        # load + dataset prefetch before failing. Two valid shapes:
+        # bare name (must be in SFT_REGISTRY) or mix-spec (must parse
+        # and reference only registered names).
+        name = self.sft_dataset
+        if _is_mix_spec(name):
+            try:
+                component_names, _weights = _parse_mix_spec(name)
+            except ValueError as e:
+                raise ValueError(f"Bad --sft_dataset {name!r}: {e}") from e
+            missing = [n for n in component_names if n not in SFT_REGISTRY]
+            if missing:
+                available = ", ".join(sorted(SFT_REGISTRY))
+                raise ValueError(
+                    f"--sft_dataset mix references unknown component(s) "
+                    f"{missing}. Available: {available}"
+                )
+        elif name not in SFT_REGISTRY:
+            available = ", ".join(sorted(SFT_REGISTRY))
+            raise ValueError(
+                f"--sft_dataset {name!r} is not a registered name and not "
+                f"a mix-spec (mix-specs contain ':'). Available registered "
+                f"names: {available}"
+            )
 
 
 def _ezpz_sft_config_cls():
