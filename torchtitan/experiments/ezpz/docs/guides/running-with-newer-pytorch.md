@@ -14,27 +14,30 @@
    cd torchtitan
    ```
 
-1. Load modules and export environment variables:
+1. Load modules and export environment variables[^ezpz-setup]:
 
    ```bash
-   module load python
-   module load oneapi/release/2025.3.1 hdf5 pti-gpu
-   export ZE_FLAT_DEVICE_HIERARCHY=FLAT
-   export CCL_PROCESS_LAUNCHER=pmix
-   export CCL_OP_SYNC=1
-   export ONEAPI_DEVICE_SELECTOR="opencl:gpu;level_zero:gpu"
-   export TORCH_CPP_LOG_LEVEL=ERROR
+   export http_proxy="http://proxy.alcf.anl.gov:3128"
+   export https_proxy="http://proxy.alcf.anl.gov:3128"
+   export no_proxy="localhost,127.0.0.1,*.alcf.anl.gov,*.anl.gov"
+   source <(curl -fsSL https://bit.ly/ezpz-utils) && ezpz_setup_job && ezpz_load_modules
    ```
 
 1. Create venv:
 
    ```bash
+   # to use the python from `/opt/aurora/.../python-3.12.12-xxx/bin/python3`
+   module load python
+
+   # create venv
    uv venv \
        --system-site-packages \
        --relocatable \
        --no-cache \
        --link-mode=copy \
        --python=$(which python3)
+
+   # activate venv
    source .venv/bin/activate
    ```
 
@@ -47,10 +50,14 @@
        --upgrade
    ```
 
+   - **NOTE** (2026-06-09): The _nightly_ PyTorch 2.13 has missing symbols and
+     is **currently** broken.  
+     The latest (confirmed) functional PyTorch 2.13 wheel is `torch==2.13.0.dev20260519+xpu`
+
 1. Install dependencies:
 
    ```bash
-   uvi torchcomms tyro tensorboard deepspeed mpi4py
+   uvi spmd_types torchcomms tyro tensorboard deepspeed mpi4py
    uvi "git+https://github.com/zhenghh04/blendcorpus"
    uvi "git+https://github.com/saforem2/ezpz"
    ```
@@ -79,6 +86,18 @@
        --checkpoint.no-enable \
        --training.local-batch-size=2
    ```
+
+[^ezpz-setup]: Explicitly, the `ezpz_load_modules` sets:
+
+     ```bash
+     module load oneapi/release/2025.3.1 hdf5 pti-gpu
+     export ZE_FLAT_DEVICE_HIERARCHY=FLAT
+     export CCL_PROCESS_LAUNCHER=pmix
+     export CCL_OP_SYNC=1
+     export ONEAPI_DEVICE_SELECTOR="opencl:gpu;level_zero:gpu"
+     export TORCH_CPP_LOG_LEVEL=ERROR
+     ```
+
 
 ## Running at Large Scale (> 512 nodes)
 
