@@ -88,11 +88,6 @@ MFU baseline (4N validation): ~17.8%, identical to Sunspot reference.
    splitting`, the workaround is not installed — see
    [`docs/upstream-issues/xccl_split_group_unsupported.md`](../../upstream-issues/xccl_split_group_unsupported.md).
 
-4. **`ZE_FLAT_DEVICE_HIERARCHY=FLAT`** in the runtime env. Without it,
-   each tile-pair shows as 1 device — `_infer_topology` sees 24 GPUs at
-   4N (instead of 48) and rejects `np=48`. The submit scripts set it;
-   if you're launching interactively, set it yourself.
-
 ## Interactive launch (4N smoke validation)
 
 Use this to verify your stack end-to-end before submitting at scale.
