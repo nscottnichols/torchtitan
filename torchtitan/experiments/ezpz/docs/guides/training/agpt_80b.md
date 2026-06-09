@@ -67,15 +67,12 @@ MFU baseline (4N validation): ~17.8%, identical to Sunspot reference.
 2. **Extra deps installed** beyond the venv-guide baseline:
 
    ```bash
-   uvi --no-deps spmd_types==0.2.1 trl==1.5.1
+   uvi --no-deps spmd_types
    ```
 
-   - `spmd_types` is imported by upstream `torchtitan/components/loss.py`
-     since fec0c175d. Skipping it gives `ModuleNotFoundError` at
-     model-init time.
-   - `trl` is needed by the FaultTolerantTrainer's RL/SFT hooks even if
-     you're doing pure pretraining; missing it gives a deferred
-     `ModuleNotFoundError` partway through trainer init.
+   `spmd_types` is imported by upstream `torchtitan/components/loss.py`
+   since fec0c175d. Skipping it gives `ModuleNotFoundError` at
+   model-init time.
 
 3. **xccl `split_group` workaround installed**. Already lives in
    `torchtitan/experiments/ezpz/xccl_split_group_workaround.py` and is
