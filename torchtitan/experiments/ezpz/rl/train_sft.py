@@ -311,10 +311,34 @@ def main() -> None:
     # ".incomplete/dataset_info.json not found" cascade failures).
     import torch.distributed as dist
     from datetime import timedelta
+    import threading
+    import time
+
+    def _rank0_progress_beacon(stop_event, label):
+        """Print a heartbeat every 30s so it's obvious rank 0 is still
+        alive during a long dataset build. Without this, builds that
+        take 5-15 min (e.g. interleave_datasets with OpenMathInstruct-2's
+        14M rows) look identical to a hang from the outside — log
+        stays silent for ~10 min while ps shows 100% CPU.
+        """
+        t0 = time.monotonic()
+        while not stop_event.wait(timeout=30):
+            log.info(f"[prefetch] rank 0 still building {label} ({time.monotonic()-t0:.0f}s elapsed)")
 
     if rank == 0:
         log.info(f"[prefetch] rank 0 building SFT dataset (warms HF cache)...")
-        dataset = sft_ds.build()
+        beacon_stop = threading.Event()
+        beacon = threading.Thread(
+            target=_rank0_progress_beacon,
+            args=(beacon_stop, ezpz_args.sft_dataset),
+            daemon=True,
+        )
+        beacon.start()
+        try:
+            dataset = sft_ds.build()
+        finally:
+            beacon_stop.set()
+            beacon.join(timeout=5)
         log.info(f"[prefetch] rank 0 cache warm for {ezpz_args.sft_dataset!r}")
     if dist.is_initialized():
         # Long timeout — rank 0 may take many minutes to build a large
