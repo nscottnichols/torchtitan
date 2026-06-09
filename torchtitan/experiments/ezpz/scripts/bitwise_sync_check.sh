@@ -103,15 +103,25 @@ git worktree add --detach "${WT_PRE}" "${PRE_MERGE_SHA}" 2>&1 | tee -a "${LOG_DI
 ln -sf "${SUBMIT_DIR}/.venv" "${WT_HEAD}/.venv"
 ln -sf "${SUBMIT_DIR}/.venv" "${WT_PRE}/.venv"
 
+# `assets/hf/*` is gitignored (HF tokenizer dirs are too big to track),
+# so each worktree has an empty `assets/hf/` but training needs
+# `./assets/hf/gemma-7b/tokenizer.model` (relative path resolved against
+# the worktree CWD). Symlink the main repo's assets/hf into each
+# worktree — same trick the other long-lived worktrees use.
+mkdir -p "${WT_HEAD}/assets" "${WT_PRE}/assets"
+ln -sf "${SUBMIT_DIR}/assets/hf" "${WT_HEAD}/assets/hf"
+ln -sf "${SUBMIT_DIR}/assets/hf" "${WT_PRE}/assets/hf"
+
 cleanup() {
     local rc=$?
     cd "${SUBMIT_DIR}" 2>/dev/null || true
     echo "==================================================" | tee -a "${LOG_DIR}/run.log"
     echo "cleanup: removing worktrees" | tee -a "${LOG_DIR}/run.log"
     echo "==================================================" | tee -a "${LOG_DIR}/run.log"
-    # Drop the .venv symlinks first so worktree remove doesn't try to
-    # crawl into the venv (which would be slow and pointless).
+    # Drop the .venv + assets/hf symlinks first so `worktree remove`
+    # doesn't try to crawl into them (slow and pointless).
     rm -f "${WT_HEAD}/.venv" "${WT_PRE}/.venv"
+    rm -f "${WT_HEAD}/assets/hf" "${WT_PRE}/assets/hf"
     git worktree remove --force "${WT_HEAD}" 2>&1 | tee -a "${LOG_DIR}/run.log" || true
     git worktree remove --force "${WT_PRE}" 2>&1 | tee -a "${LOG_DIR}/run.log" || true
     rmdir "${WT_BASE}" 2>/dev/null || true
