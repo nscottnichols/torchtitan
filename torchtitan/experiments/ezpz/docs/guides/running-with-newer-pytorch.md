@@ -93,6 +93,44 @@
        --training.local-batch-size=2
    ```
 
+   - <details closed><summary>AuroraGPT-20B:</summary>
+
+     ```bash
+     MODULE=ezpz.agpt
+     CONFIG=agpt_20b
+     ezpz launch python3 -m torchtitan.experiments.ezpz.train \
+         --module="${MODULE}" \
+         --config="${CONFIG}" \
+         --training.steps=10 \
+         --checkpoint.no-enable \
+         --training.local-batch-size=2
+     ```
+
+     </details>
+
+   - <details closed><summary>AuroraGPT-80B:</summary>
+
+     ```bash
+     MODULE=ezpz.agpt
+     CONFIG=agpt_80b
+     ezpz launch python3 -m torchtitan.experiments.ezpz.train \
+         --module="${MODULE}" \
+         --config="${CONFIG}" \
+         --training.steps=10 \
+         --checkpoint.no-enable \
+         --training.local-batch-size=1 \
+         --optimizer=adamw \
+         --optimizer.lr=1e-6 \
+         --parallelism.tensor-parallel-degree=2 \
+         --compile.no-enable
+     ```
+
+     See [`guides/training/agpt_80b.md`](training/agpt_80b.md) for the
+     full 80B walkthrough (prerequisites, expected step-by-step
+     numbers, scale-out, known issues).
+
+     </details>
+
 [^ezpz-setup]: Explicitly, the `ezpz_load_modules` sets:
 
      ```bash
