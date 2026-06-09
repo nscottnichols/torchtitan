@@ -5,15 +5,26 @@
 
 ## v2 — 2B @ 256N — SophiaG LR=2.28e-5 (fp32 master)
 
-> Status: chain at step **55,000** as of 2026-05-30 (last R was `8508020`
-> walltime-exit 2026-05-27 21:33; `8508977` cont was pals-RPC infra
-> failure exit 127). +1 continuation `8513544` (`afterany:8508977`) Q
-> for 256N slot since 2026-05-28 23:20 (>24h Q wait — Aurora capacity
-> tight on Fri/weekend). Chain advanced **+5,334 steps** since the
-> last README refresh (49,666 → 55,000), persisting ~54 ckpts at
-> 100-step intervals. Async-mode remains stable at 256N — only 512N+
-> hits the async-save cluster cascade documented on the 2B/20B 512N
-> pages. Loss tracking flat ~2.67-2.68 (eval plateau in HSn 0.547-0.553).
+> Last updated: 2026-06-09
+>
+> Status: chain at step **69,900** as of 2026-06-06 18:07 (last R was
+> `8519833` walltime-exit clean). Chain advanced **+21,600 steps**
+> since the last README refresh (48,300 → 69,900), persisting **216
+> ckpts** at 100-step intervals. Five dispatches landed across the
+> 5/28 → 6/6 window: `8508977` (cont4, 5/28 pals-RPC infra failure,
+> persisted ~5 ckpts step-53800..54200 before bailing), `8513544`
+> (cont5, 5/30 walltime to step-59700), `8516364` (cont6, 6/1
+> walltime to step-64900), `8516365` (cont7, 6/4 pals-RPC infra
+> failure at init, no ckpts), and `8519833` (cont8, 6/6 walltime to
+> step-69900 — clean, advanced step 65,000 → 69,900 = +4,900 steps
+> in ~11h). Async-mode remained stable across all dispatches at 256N
+> — only 512N+ hits the async-save cluster cascade documented on the
+> 2B/20B 512N pages. Loss flat ~2.66-2.67 (eval plateau in HSn
+> 0.554-0.558; **step-69900 Winogrande 0.5627 is best yet**, see
+> [`docs/evals/agpt/2b/`](../../../../evals/agpt/2b/README.md) row
+> for step 69,900). Continuation chain stays **+2 deep**: `8521626`
+> (cont9, `afterany:8519833`) is Q for the next 256N slot since
+> 2026-06-03 07:20, with `8521630` H'd behind it.
 >
 > Earlier runs: 8459818 (initial, NODE_FAIL @ 2070), 8470100 / 8470101
 > (chain1/chain2 walltime to step ~10,723). Loss tracking the
@@ -60,19 +71,59 @@
 | [`8505252`](#log-8505252) | 2026-05-24 | 12h | 30,700 → 36,528 | ~1,000 | ~3.8% | Done (walltime, exit -29). Async mode. `afterany` continuation of 8505175. Persisted **57 ckpts** step-30800..step-36500, ended at loss **2.71**. |
 | [`8507195`](#log-8507195) | 2026-05-25 → 2026-05-26 | 12h | ~36,528 → **42,515** | ~1,000 | ~3.8% | Done (walltime, exit -29). Async mode. `afterany` continuation of 8505252 (22:41 → 10:35). Persisted **~57 ckpts** step-36800..step-42500, ended at loss **2.69**. |
 | [`8507198`](#log-8507198) | 2026-05-26 | 12h | 42,500 → **48,329** | ~1,000 | ~3.8% | Done (walltime, exit -29). Async mode. `afterany` continuation of 8507195 (08:02 → 20:02). Persisted **~57 ckpts** step-42600..step-48300, ended at loss **2.68**. |
-| [`8508020`](#log-8508020) | 2026-05-27 (R) | 12h | 48,300 → **49,666+** | ~1,000 | ~3.8% | **Running** (started 09:32, expected end 21:32). Async mode. `afterany` continuation of 8507198. At 12:37 snapshot: step **49,666**, loss **2.68**. |
+| [`8508020`](#log-8508020) | 2026-05-27 | 12h | 48,300 → **49,666** (last log; ckpts ran to step-54900-ish in async) | ~1,000 | ~3.8% | Done (walltime, exit -29). Async mode. `afterany` continuation of 8507198 (09:32 → 21:33). Persisted ckpts through step-54700. Loss **2.68**. |
+| [`8508977`](#log-8508977) | 2026-05-28 | <4h | 53,700 → 55,026 (last log) | ~1,000 | ~3.8% | **pals-RPC infra failure** (RPC launch could not forward to compute node). Async mode. `afterany` continuation of 8508020 (started 10:53, RPC error storm and exit before 14:39). Persisted **~5 ckpts** step-53800..step-54200, loss **2.67**. Same `Couldn't forward RPC launch` pattern as documented in `project_aurora_pals_rpc_launch_failure.md`. |
+| [`8513544`](#log-8513544) | 2026-05-30 | 12h | 55,001 → **59,750** (last log) | ~3,000-3,500 peak | ~10-13% peak | Done (walltime, exit -29: `walltime 43206 exceeded limit 43200`). Async mode. `afterany` continuation of 8508977 (08:04 → 19:49). Persisted **~47 ckpts** step-55100..step-59700, ended at loss **2.676**. |
+| [`8516364`](#log-8516364) | 2026-06-01 | 12h | 59,701 → **64,922** (last log) | ~1,000 | ~3.8% | Done (walltime, exit -29: `walltime 43213 exceeded limit 43200`). Async mode. `afterany` continuation of 8513544 (05:37 → 17:20). Persisted **~52 ckpts** step-59800..step-64900, ended at loss **2.666**. |
+| [`8516365`](#log-8516365) | 2026-06-04 | <1h | n/a (failed at init) | — | — | **pals-RPC infra failure** at init (same `Couldn't forward RPC launch` + rank death signals 15). No steps run, no ckpts persisted. `afterany` continuation of 8516364 (mtime 6/4 11:02). |
+| [`8519833`](#log-8519833) | 2026-06-06 | 11h | 64,901 → **69,914** (last log) | ~1,000 | ~3.8% | Done (walltime, exit -29: `walltime 43209 exceeded limit 43200`). Async mode. `afterany` continuation of 8516365 (07:05 → 18:08; last ckpt step-69900 at 18:07:17). Persisted **~50 ckpts** step-65000..step-69900, ended at loss **2.659**. **Clean walltime exit**, no infra issues. |
 
-**Latest checkpoint:** step-48300 (8507198 last persisted; 8508020 R still in first ckpt interval at snapshot)
+**Latest checkpoint:** step-69900 (8519833 last persisted, 2026-06-06 18:07:17)
 
-**Cumulative steps:** 49,666+ (8508020 R as of 2026-05-27 12:37)
+**Cumulative steps:** 69,900 (as of 2026-06-06 18:07; chain idle pending next 256N slot for `8521626`)
 
-**Tokens consumed:** 49,666 × 6,144 × 8,192 = **2.50T tokens** (53.5% of 4.67T target)
+**Tokens consumed:** 69,900 × 6,144 × 8,192 = **3.52T tokens** (75.4% of 4.67T target)
 
-> **Note:** 2026-05-24 → 2026-05-27 chain has now advanced step 25,500
-> → **49,666+** (+24,166+ steps) across 5 dispatches; **~179 ckpts
-> persisted** in async mode (no cascade failures at 256N across any
-> dispatch). Compare to 2B/20B 512N pages where the async-save cluster
+**Loss:** ~2.66 (step-69900 log range 2.659-2.667)
+
+> **Note:** 2026-05-24 → 2026-06-06 chain has now advanced step 25,500
+> → **69,900** (+44,400 steps) across 10 dispatches; **~395 ckpts
+> persisted** in async mode. Two of the ten dispatches were pals-RPC
+> infra failures (8508977 partial, 8516365 init-only); the remaining
+> eight all walltime-exited cleanly with no async-save cascade at
+> 256N. Compare to 2B/20B 512N pages where the async-save cluster
 > cascade forced a switch to sync mode at 6,144 ranks.
+
+### Recent evals
+
+Pulled from the canonical sweep table at
+[`docs/evals/agpt/2b/`](../../../../evals/agpt/2b/README.md). Latest
+evaluated ckpt is step-69900 (landed 2026-06-08). Metric is
+`acc_norm,none` for HellaSwag / ARC; `acc,none` for Winogrande.
+
+| Step | Tokens (B) | HellaSwag | ARC-Easy | ARC-Chall | Winogrande |
+|-----:|-----------:|----------:|---------:|----------:|-----------:|
+| 64,000 | 3221.4 | 0.5538 | 0.6040 | 0.3336 | 0.5549 |
+| 66,000 | 3321.9 | 0.5577 | 0.5918 | 0.3302 | 0.5462 |
+| 68,000 | 3422.6 | 0.5577 | 0.5905 | 0.3302 | 0.5509 |
+| **69,900** | **3518.0** | **0.5552** | **0.5939** | **0.3294** | **0.5627** |
+
+Step-69900 sets a new best on Winogrande (0.5627, +0.8pp over the
+prior step-64000 high of 0.5549). HellaSwag/ARC plateau pattern
+documented in the evals README remains: each new 2k-step window
+shifts the four-metric vector by <1pp in any direction now that we're
+~3.5T tokens in.
+
+### Continuation chain
+
+- **Next up:** `8521626` (cont9, `afterany:8519833`) Q for next 256N
+  slot since 2026-06-03 07:20.
+- **Behind it:** `8521630` (cont10) H'd behind 8521626 — chain stays
+  **+2 deep** so a clean walltime exit on cont9 will immediately
+  release cont10 onto the next available 256N slot.
+- Submit script unchanged: `scripts/submit_agpt_2b_aurora_venv.sh`
+  with the same env (LBS=2, GBS=6144, SophiaG LR=2.28e-5, fp32 master,
+  async ckpt mode, ckpt-interval=100, keep-latest-k=0).
 
 ### Logs
 
@@ -86,3 +137,8 @@
 | <a id="log-8507195"></a>`8507195` | `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n256-v2-failover-cont.o8507195` |
 | <a id="log-8507198"></a>`8507198` | `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n256-v2-failover-cont2.o8507198` |
 | <a id="log-8508020"></a>`8508020` | `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n256-v2-failover-cont3.o8508020` |
+| <a id="log-8508977"></a>`8508977` | `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n256-v2-failover-cont4.o8508977` |
+| <a id="log-8513544"></a>`8513544` | `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n256-v2-failover-cont5.o8513544` |
+| <a id="log-8516364"></a>`8516364` | `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n256-v2-failover-cont6.o8516364` |
+| <a id="log-8516365"></a>`8516365` | `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n256-v2-failover-cont7.o8516365` |
+| <a id="log-8519833"></a>`8519833` | `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n256-v2-failover-cont8.o8519833` |

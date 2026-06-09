@@ -1,16 +1,18 @@
 # Production Training — agpt 20B @ 512 nodes
 
+> **Last updated:** 2026-06-09
+>
 > **This is the canonical 20B production chain.**
 >
-> **Status:** chain at step **4,400** (~442B tokens), loss **2.51** as
-> of 2026-05-30. `8509393` walltime-exited cleanly on 2026-05-29 12:01
-> at step 4,419 (step-4,400 ckpt durable; 19 in-memory steps past
-> ckpt save wasted). +1 continuation `8513546` auto-released H→Q;
-> still Q for 512N slot since 12:01 (>12h Q wait — Aurora capacity
-> tight on Fri/weekend). +2 continuation `8514610` H behind 8513546.
-> Chain persisted **+11 ckpts** (step-3,300 → step-4,400) since
-> 2026-05-27 resume. Sync-mode workaround still holding cleanly
-> across all dispatches. See [`Recovery`](#recovery) below.
+> **Status:** persisted at step **4,400** (~442.9B tokens, 9.5% of
+> 4.67T target), loss **2.51** as of 2026-05-29 (step-4,400 ckpt,
+> 244 GB, complete). Chain has been **stalled ~10 days in Q+H since
+> 2026-05-29** — Aurora `small` queue heavily contended. Five
+> dispatches did run in this window (`8513546`, `8514610`, `8516701`,
+> `8521624`, `8521625`) but **none persisted a new checkpoint past
+> step-4,400** — see [`Recovery`](#recovery). Active continuation
+> `8521628` (cont10) Q'd in `small` since 2026-06-03 07:20;
+> `8521632` (cont11) H'd behind it.
 >
 > **Latest eval (step-4,400, 2026-05-29):**
 > HSn **0.6346** (+0.7pp from step-4,300), ARC-E 0.6641 (flat),
@@ -66,12 +68,18 @@
 | [`8507197`](#log-8507197) | 2026-05-25 → 2026-05-26 | 12h | 2,043 → **2,686** | 2.86 → **2.72** | ~355 | ~17.8% | Done (walltime, exit -29). **SYNC mode.** `afterany` continuation, ran 21:12 → 09:01. 6 ckpts step-2100..step-2600 persisted. |
 | [`8507200`](#log-8507200) | 2026-05-26 → 2026-05-27 | 12h | 2,600 → **3,270** | 2.72 → **2.65** | ~355 | ~17.8% | Done (walltime, exit -29). **SYNC mode.** `afterany` continuation of 8507197, ran 21:01 → 03:43. 6 ckpts step-2700..step-3200 persisted. |
 | [`8508214`](#log-8508214) | 2026-05-27 → 2026-05-28 | 12h | 3,270 → **3,806** | 2.71 → **2.60** | ~340 | ~17% | Done (walltime exit -29). **SYNC mode.** `afterany` continuation of 8507200; ~14h Q delay in `small` queue, started 21:26. 6 ckpts step-3300..step-3800 persisted. |
+| [`8509393`](#log-8509393) | 2026-05-28 → 2026-05-29 | 12h | 3,806 → **4,419** | 2.60 → **2.51** | ~336 | ~16.8% | Done (walltime exit -29). **SYNC mode.** `afterany` continuation; ran until 12:01. 6 ckpts step-3900..step-4400 persisted. 19 in-memory steps past last ckpt save wasted. |
+| [`8513546`](#log-8513546) | 2026-05-30 → 2026-05-31 | 12h | 4,400 → — | — | — | — | **SYNC mode.** `afterany` continuation. Failover wrapper retried multiple attempts, all exited 143. **No new ckpt persisted past step-4,400.** |
+| [`8514610`](#log-8514610) | 2026-05-31 → 2026-06-01 | 12h | 4,400 → — | — | — | — | **SYNC mode.** `afterany` continuation. Hit `MemoryError: std::bad_alloc` in `torch.distributed` (same intermittent 6,144-rank init failure as 8466848). Failover retries also failed. **No new ckpt persisted past step-4,400.** |
+| [`8516701`](#log-8516701) | 2026-06-02 | 12h | 4,400 → **4,501** (in-RAM) | 2.51 → 2.51 | ~330 | ~16.5% | **SYNC mode.** `afterany` continuation. Trainer advanced to step 4,501 by 22:39, then PBS killed mid-checkpoint-save at 22:38:49 → left **empty 4-KB `step-4500/` dir** (no `.distcp` shards). Failover wrapper retried (exit 127) without recovery. **No new ckpt persisted past step-4,400.** See [Recovery](#recovery). |
+| [`8521624`](#log-8521624) | 2026-06-04 | 12h | 4,400 → **4,520** (in-RAM) | 2.51 → 2.51 | ~225 | ~11.2% | **SYNC mode.** `afterany` continuation. Ran 11:04 → 15:58 (4h54m), Exit_status 143 (SIGTERM). Trainer advanced to step 4,520 in-RAM but the only ckpt-dir candidate (step-4,500) was the empty placeholder from 8516701 — no shards landed in this run either. **No new ckpt persisted past step-4,400.** |
+| [`8521625`](#log-8521625) | 2026-06-06 | 12h | 4,400 → **4,600** (in-RAM) | 2.51 → 2.50 | ~341 | ~17.0% | **SYNC mode.** `afterany` continuation, ran 02:39 → 13:14 (10h34m), Exit_status 143. Trainer reached step 4,600 in-RAM. No new persisted ckpt — empty `step-4500/` placeholder still in the way. **No new ckpt persisted past step-4,400.** |
 
-**Latest checkpoint:** step-3200 (8507200, sync mode, saving every 100 steps)
+**Latest checkpoint:** step-4,400 (8509393, 2026-05-29 11:43, sync mode, 244 GB, 6,144 valid `.distcp` shards)
 
-**Cumulative steps:** 3,270
+**Cumulative steps:** 4,400
 
-**Tokens consumed:** 3,270 × 12,288 × 8,192 = **329B tokens** (7.0% of 4.67T target)
+**Tokens consumed:** 4,400 × 12,288 × 8,192 = **442.9B tokens** (9.5% of 4.67T target)
 
 ### Recovery
 
@@ -103,6 +111,37 @@ Note the preflight gotcha from that 2B work: the wrapper's default
 120s smoke-test timeout doesn't scale to 6,144-rank DDP init.
 Default is now 600s + `--train-iters 5`.
 
+#### Recent issues (2026-05-29 → 2026-06-09)
+
+- **2026-05-29 → present (~10 days): chain stalled in queue.** Aurora
+  `small` queue has been heavily contended. Six continuations
+  (`8513546`, `8514610`, `8516701`, `8521624`, `8521625`, `8521628`)
+  have been Q'd over this window; the first five ran (the last,
+  `8521628`, is still Q at the time of writing) and **none of
+  those five persisted a new checkpoint past step-4,400.**
+- **2026-06-02 22:38:49: empty `step-4500/` placeholder created.**
+  `8516701` advanced to step 4,500 in-RAM and entered the
+  checkpoint-save path; PBS killed the job mid-save before any
+  `.distcp` shard landed. The resulting `step-4500/` directory was
+  4 KB with zero shards — a non-resumable placeholder. Subsequent
+  continuations (`8521624`, `8521625`) saw the empty dir, never
+  successfully replaced it, and so could not save fresh ckpts past
+  step-4,400 either.
+- **2026-06-06: empty placeholder renamed to unblock chain resume.**
+  `step-4500/` was renamed to
+  `step-4500.bak-empty-20260606-170503/` (preserved per the
+  `backup`-instead-of-`rm` rule) so the next dispatched continuation
+  resumes cleanly from step-4,400 without the half-written `step-4500/`
+  in the way.
+- **Walltime is the proximate killer.** All five dispatches that ran
+  in this window exited 143 (SIGTERM). At ~340 TPS/GPU sync mode the
+  20B 512N config has very little margin: a 12h slot covers ~600
+  steps of training but checkpoint saves cost ~21min each, so a
+  late-arrival start that crosses a 100-step boundary inside the save
+  window is at high risk of losing the save to walltime SIGTERM.
+  This is the same "in-RAM steps past last ckpt save wasted" pattern
+  that cost 8509393 19 steps on 2026-05-29.
+
 ### Logs
 
 | Job ID | Path |
@@ -118,5 +157,11 @@ Default is now 600s + `--train-iters 5`.
 | <a id="log-8507197"></a>`8507197` | `/flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/agpt-20b-n512-v2-failover-sync-cont.o8507197` |
 | <a id="log-8507200"></a>`8507200` | `/flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/agpt-20b-n512-v2-failover-sync-cont2.o8507200` |
 | <a id="log-8508214"></a>`8508214` | `/flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/agpt-20b-n512-v2-failover-sync-cont3.o8508214` |
+| <a id="log-8509393"></a>`8509393` | `/flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/agpt-20b-n512-v2-failover-sync-cont4.o8509393` |
+| <a id="log-8513546"></a>`8513546` | `/flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/agpt-20b-n512-v2-failover-sync-cont5.o8513546` |
+| <a id="log-8514610"></a>`8514610` | `/flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/agpt-20b-n512-v2-failover-sync-cont6.o8514610` |
+| <a id="log-8516701"></a>`8516701` | `/flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/agpt-20b-n512-v2-failover-sync-cont7.o8516701` |
+| <a id="log-8521624"></a>`8521624` | `/flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/agpt-20b-n512-v2-failover-sync-cont8.o8521624` |
+| <a id="log-8521625"></a>`8521625` | `/flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz/agpt-20b-n512-v2-failover-sync-cont9.o8521625` |
 
 > **Note on 8466848 crash:** `set_determinism` calls `torch.distributed.broadcast(seed_tensor, src=0)` and one rank hit `std::bad_alloc`. This is the same failure mode that killed both 1024N attempts (8463182, 8463183) on 2026-05-04 — but at 6,144 ranks (512N) instead of 12,288 (1024N). The previous 20B 512N run (8463628, 4 days earlier) succeeded at the same scale and same script, and so does the resubmit (8479579), so it's intermittent. See [`memory/project_1024n_init_crash.md`](.) — that memory's "1024N only" claim is stale; the bug fires unpredictably at 512N+ but is not reliably triggered.
