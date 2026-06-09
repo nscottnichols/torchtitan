@@ -1,20 +1,38 @@
 # Production Training — agpt 2B @ 512 nodes
 
+> **Last updated: 2026-06-09.**
+>
 > **This is the canonical 2B production chain.**
 >
-> **Status:** chain at step **30,400** as of 2026-05-30 (last R was
-> `8508753` walltime-exit 2026-05-27, then `8509042` cont crashed in
-> `set_determinism std::bad_alloc` at 6,144 ranks — documented
-> intermittent). +1 continuation `8513545` (`afterany:8509042`) Q for
-> 512N slot since 2026-05-28 23:20 (>24h Q wait — Aurora capacity
-> tight on Fri/weekend). Chain advanced **+3,294 steps** since the
-> last README refresh (27,106 → 30,400), persisting ~33 ckpts at
-> 100-step intervals. Sync-mode workaround for async-cascade continues
+> **Status:** chain pinned at step **30,500** since **2026-05-30 07:53**
+> — **stalled ~10 days** waiting on the Aurora `small` queue. The
+> stall is *not* a training-stack failure; the chain is healthy and
+> simply has not held a 512N slot for sustained training since the
+> last R cleared. The one brief R event in the stall window was
+> `8521627` (cont9), which ran for **~8 minutes** on **2026-06-07
+> 21:12 → 21:20** and died in yeet-env before training started:
+> 1 of 522 nodes (`x4112c1s7b0n0`) failed `rsync` with
+> `Connection reset by 10.112.164.235 port 22` after the 120s
+> per-node timeout. The other 521 nodes copied the venv tarball
+> cleanly in ~20s each. No checkpoints were written past
+> step-30,500. Loss **2.71**, tokens **3.07T (65.7% of 4.67T
+> target)**. Sync-mode workaround for the async-cascade continues
 > to hold; the async-mode runs (`8505176` and earlier) had been pinned
-> at step-13,300 for two weeks. Loss **2.71** at step-30,400.
+> at step-13,300 for two weeks before the sync-mode pivot.
+>
+> **Next up:** `8521631` (cont10) Q in `small`; will resume from
+> step-30,500 once a 512N slot opens.
+>
+> **Mitigation for the yeet-env transient:** ezpz
+> [PR #160](https://github.com/saforem2/ezpz/pull/160)
+> (`yeet-retry-on-rsync-failure`) adds per-target rsync retries
+> gated by `EZPZ_YEET_RSYNC_RETRIES` (default 2). Not yet deployed
+> to the v2 production venv pending PR review — a single bad-node
+> rsync timeout currently kills the whole job.
 >
 > **Eval scores:** see [`docs/evals/agpt/2b/`](../../../../evals/agpt/2b/README.md)
-> for the current v2 lm-eval results.
+> for the current v2 lm-eval results (last evaluated v2 512N
+> checkpoint is **step-30,000**).
 
 ## v2 — 2B @ 512N — SophiaG LR=2.28e-5 (fp32 master)
 
@@ -58,12 +76,14 @@
 | [`8507196`](#log-8507196) | 2026-05-25 → 2026-05-26 | 11h+ | 13,300 → ~**20,989** | 2.76 → **2.74** | ~2,700 | ~10% | **SYNC mode.** Resumed from step-13,300, ran through 21:12 → 08:17. Trained cleanly to step **20,989** in-memory, persisted **+76 ckpts** before all 3 wrapper attempts tripped an **Aurora pals-RPC infra failure** (exit 127 in launch phase, 3 different "bad" nodes swapped — pals failures the wrapper cannot recover from). See `memory/project_aurora_pals_rpc_launch_failure.md`. |
 | [`8507199`](#log-8507199) | 2026-05-26 | 12h | 20,900 → **25,967** | 2.74 → **2.72** | ~2,700 | ~10% | Done (walltime, exit -29). **SYNC mode.** `afterany` continuation, ran 09:24 → 21:26. Persisted **~50 ckpts** step-21000..step-25900. |
 | [`8508753`](#log-8508753) | 2026-05-27 → 2026-05-28 | 12h | 25,900 → **30,484** | 2.72 → **2.71** | ~2,700 | ~10% | Done (walltime exit -29). **SYNC mode.** `afterany` continuation of 8507199, ran 09:19 → 21:19. +80 ckpts step-22600..step-30400 persisted. |
+| (~5–9 day Q wait — Aurora `small` queue saturated) | 2026-05-30 → 2026-06-07 | — | — | — | — | — | **No R events.** Chain pinned at step-30,500 since 2026-05-30 07:53. |
+| [`8521627`](#log-8521627) | 2026-06-07 | ~8 min | (none) | (none) | — | — | **Failed in yeet-env preflight, no training.** `afterany` cont9. R 21:12 → E 21:20. 1 of 522 nodes (`x4112c1s7b0n0`) tripped a 120s rsync timeout with `Connection reset by 10.112.164.235 port 22`; the other 521 nodes finished the tarball copy in ~20s each. yeet-env reported `1/522 node(s) failed`, the failover wrapper bailed (exit 1), and no checkpoints were written past step-30,500. See **Recent issues** below. |
 
-**Latest checkpoint:** step-25900 (8507199 last persisted; 8508753 R still in first ckpt interval at snapshot)
+**Latest checkpoint:** step-30500 (8508753 last persisted; cont9 wrote nothing past it)
 
-**Cumulative steps:** 27,106+ (8508753 R as of 2026-05-27 12:37)
+**Cumulative steps:** 30,500 (chain pinned since 2026-05-30 07:53)
 
-**Tokens consumed:** 27,106 × 12,288 × 8,192 = **2.73T tokens** (58.4% of 4.67T target)
+**Tokens consumed:** 30,500 × 12,288 × 8,192 = **3.07T tokens** (65.7% of 4.67T target)
 
 ### Recovery
 
@@ -94,6 +114,32 @@ default 120s smoke-test timeout doesn't scale to 6,144-rank DDP
 init, so all three attempts watchdog-tripped before any real
 training. Default is now 600s + `--train-iters 5`.
 
+### Recent issues
+
+- **Aurora `small` queue stall (2026-05-30 → present).** Chain has
+  not held a 512N slot for sustained training in ~10 days. There
+  is nothing wrong with the model, the venv, or the failover
+  wrapper — the queue itself has been saturated. `8521631` (cont10)
+  is the next-up afterany continuation and will resume from
+  step-30,500 the moment a slot opens. Cross-chain note: the
+  separately-tracked **256N** 2B chain has its own pair of held
+  continuations (`8521626` / `8521630`) — they belong to that
+  trajectory, not this one. `8521632` (H in `small`) is part of
+  the **20B** chain, also unrelated to this page.
+- **yeet-env single-bad-node rsync transient (2026-06-07, job
+  `8521627`).** One node out of 522 dropped its incoming rsync
+  connection (`Connection reset by 10.112.164.235 port 22`) and
+  hit the 120s per-target timeout. The other 521 nodes finished
+  in ~20s each, so the venv tarball was effectively broadcast,
+  but yeet-env's exit code reflects the single failure and the
+  failover wrapper bails before training starts. Same failure
+  mode the user's
+  [ezpz PR #160](https://github.com/saforem2/ezpz/pull/160)
+  (`yeet-retry-on-rsync-failure`) is intended to fix: it adds
+  per-target rsync retries controlled by
+  `EZPZ_YEET_RSYNC_RETRIES` (default 2). Not yet deployed to the
+  v2 prod venv pending PR review.
+
 ### Logs
 
 | Job ID | Path |
@@ -112,3 +158,4 @@ training. Default is now 600s + `--train-iters 5`.
 | <a id="log-8507196"></a>`8507196` | `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n512-v2-failover-sync-cont.o8507196` |
 | <a id="log-8507199"></a>`8507199` | `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n512-v2-failover-sync-cont2.o8507199` |
 | <a id="log-8508753"></a>`8508753` | `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n512-v2-failover-sync-cont3.o8508753` |
+| <a id="log-8521627"></a>`8521627` | `/flare/AuroraGPT/foremans/runs/agpt-2b-v2/torchtitan-ezpz/agpt-2b-n512-v2-failover-sync-cont9.o8521627` (yeet-env transient — 1/522 nodes failed rsync, training never started) |
