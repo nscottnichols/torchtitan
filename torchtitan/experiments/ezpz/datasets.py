@@ -41,6 +41,50 @@ for _noisy in ("httpx", "huggingface_hub", "urllib3"):
     logging.getLogger(_noisy).setLevel(logging.WARNING)
 
 
+def _rank0_prefetch_then_barrier(dataset_path: str, **kwargs: Any) -> Any:
+    """Call ``load_dataset`` on rank 0 first to populate the HF cache
+    (dataset_info.json + parquet file-listing manifests), barrier, then
+    let worker ranks call it and hit the warm local cache.
+
+    Why: at 32N (384 ranks) HF Hub's per-IP rate limit (1000 req / 5min)
+    is blown immediately because every rank does a fresh
+    ``GET /api/datasets/<repo>/tree?recursive=true`` listing. Job 12468290
+    died here with 429s on ``allenai/olmo-mix-1124``. Pre-warming the
+    cache from one rank collapses the metadata-API surface to ~O(1)
+    requests; the actual data streaming after that is per-rank but the
+    rate-limit-prone metadata calls are local-cache hits.
+
+    Falls back to plain ``load_dataset`` when torch.distributed isn't
+    initialized (single-process / interactive runs).
+    """
+    try:
+        import torch.distributed as dist
+    except Exception:
+        return load_dataset(dataset_path, **kwargs)
+
+    if not dist.is_available() or not dist.is_initialized():
+        return load_dataset(dataset_path, **kwargs)
+
+    rank = dist.get_rank()
+    if rank == 0:
+        log.info(
+            f"[ezpz/datasets] rank 0 prefetching {dataset_path!r} "
+            f"to warm HF cache (avoids 429 storms at scale)"
+        )
+        # Eagerly resolve the dataset on rank 0. For streaming=True this
+        # is cheap (just metadata + first shard listing); for non-streaming
+        # this downloads the whole thing — which is also fine since the
+        # cache will be reused by everyone.
+        ds = load_dataset(dataset_path, **kwargs)
+        log.info(f"[ezpz/datasets] rank 0 cache warm for {dataset_path!r}")
+        dist.barrier()
+        return ds
+
+    # Worker ranks wait, then hit the warm cache.
+    dist.barrier()
+    return load_dataset(dataset_path, **kwargs)
+
+
 def _make_loader(
     *,
     config_name: str | None = None,
@@ -62,7 +106,7 @@ def _make_loader(
         }
         if config_name is not None:
             kwargs["name"] = config_name
-        return load_dataset(dataset_path, **kwargs)
+        return _rank0_prefetch_then_barrier(dataset_path, **kwargs)
 
     return _load
 
@@ -76,7 +120,11 @@ def _make_local_loader(
     """Build a loader for local parquet/arrow files."""
 
     def _load(dataset_path: str) -> Any:
-        return load_dataset(
+        # Local files don't hit HF Hub rate limits but we still funnel
+        # through the same prefetch+barrier path so all ranks see a
+        # consistent file listing (avoids any rank-vs-rank disagreement
+        # about which parquet shards exist).
+        return _rank0_prefetch_then_barrier(
             "parquet",
             data_dir=data_dir,
             split=split,
