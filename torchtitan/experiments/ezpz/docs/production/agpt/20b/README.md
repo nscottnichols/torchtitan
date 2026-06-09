@@ -7,15 +7,16 @@
 > [`../historical/v1-bf16/`](../historical/v1-bf16/README.md) along
 > with the diagnosis link.
 
-## All 20B chains overlaid
+## All chains overlaid (every dense agpt trajectory)
 
-![all 20B chains](figures/all_20b_chains.svg)
+![all dense agpt chains](../../figures/all_production_training.svg)
 
-Combined view of every 20B production trajectory plotted against
-tokens consumed (log-scale): TT v2 256N (per-token comparator, one-off
-NODE_FAIL run) + TT v2 512N sync (canonical chain). Regenerate via
-`scripts/update_all_charts.sh` (calls
-`utils/plot_production_combined.py --model 20b`).
+Cross-model overview: every 20B trajectory (TT v2 256N + TT v2 512N)
+**alongside** every 2B trajectory (MDS-reference + TT v2 256N + TT v2
+512N), all overlaid on shared axes vs tokens consumed (log-scale).
+Three panels: training loss / TPS-per-GPU / MFU. Use this to read 20B's
+per-token efficiency advantage directly against the 2B chains.
+Refreshed via `scripts/update_all_charts.sh`.
 
 ## 🏁 Headline (2026-06-09)
 

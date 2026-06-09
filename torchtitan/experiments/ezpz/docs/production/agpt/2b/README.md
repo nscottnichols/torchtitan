@@ -7,15 +7,15 @@
 > [`../historical/v1-bf16/`](../historical/v1-bf16/README.md) along
 > with the diagnosis link.
 
-## All 2B chains overlaid
+## All chains overlaid (every dense agpt trajectory)
 
-![all 2B chains](figures/all_2b_chains.svg)
+![all dense agpt chains](../../figures/all_production_training.svg)
 
-Combined view of every 2B production trajectory, plotted against
-tokens consumed (log-scale): MDS-reference (SophiaG, 256N) + TT v2
-256N async + TT v2 512N sync + the sqrt(2)-LR fork. Regenerate via
-`scripts/update_all_charts.sh` (calls
-`utils/plot_production_combined.py --model 2b`).
+Cross-model overview: every 2B trajectory (MDS-reference + TT v2 256N +
+TT v2 512N) **alongside** every 20B trajectory (TT v2 256N + TT v2 512N),
+all overlaid on shared axes vs tokens consumed (log-scale). Three panels:
+training loss / TPS-per-GPU / MFU. Use this to compare 2B-vs-20B per
+token on the same axes. Refreshed via `scripts/update_all_charts.sh`.
 
 ## Snapshot
 
