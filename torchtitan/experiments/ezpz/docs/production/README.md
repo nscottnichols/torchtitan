@@ -2,7 +2,7 @@
 
 > **Living document** — updated as jobs complete and new runs are submitted.
 >
-> Last updated: 2026-05-28
+> Last updated: 2026-06-08
 
 ## Scaling Performance
 
@@ -47,9 +47,9 @@ python3 -m torchtitan.experiments.ezpz.utils.plot_production_combined
 
 | Model | Nodes | Cumulative steps | Loss | Tokens | Latest job | Status |
 |-------|------:|-----------------:|-----:|-------:|------------|--------|
-| 2B  | 512 | **30,484** (persisted) | **2.71** | **3.07T** (65.7%) | [`8510693`](agpt/2b/n512/README.md) Q (sync-mode) | **🏁 Sync-mode workaround holding through 8508753 walltime.** Chain advanced step 13,300 → 30,484 (+17,184) across 8506221 + 8507196 (pals-RPC fail, +76 persisted) + 8507199 + 8508753. Next cont 8509042 crashed in `set_determinism` `std::bad_alloc` (intermittent 6,144-rank issue); 8510693 cont5 Q for slot. |
-| 20B | 512 | **3,806** (persisted) | **2.60** | **382B** (8.2%) | [`8509393`](agpt/20b/n512/README.md) Q (sync-mode) | **🏁 20B 512N sync now beats 2B 256N async on every benchmark per token.** Chain has advanced step 800 → 3,806 (+3,006) since 2026-05-24 across 8505258 + 8505259 + 8507197 + 8507200 + 8508214. ARC-Easy 0.678, HellaSwag norm 0.611 at step-3,800. |
-| 80B | 256 | — | — | — | [`8505222`](agpt/80b/n512/README.md) F (5 retries exhausted) | All dispatches since 2026-05-11 fail. Two distinct failure modes documented: [80B SIGSEGV cascade](../experiments/agpt/aurora/20260524-80b-256n-sigsegv-cascade-8505222.md) (production scale) + [blendcorpus EOFError race](../guides/known-bugs/blendcorpus-eoferror-race.md) (8N smoke). Mitigations identified, not yet retested. |
+| 2B  | 512 | **30,500** (persisted) | **2.71** | **3.07T** (65.7%) | [`8521631`](agpt/2b/n512/README.md) Q (sync-mode) | **Q+H for 10 days — Aurora `small` queue contention.** Last R was 8521627 (cont9) on 2026-06-07 21:12, died 8 min in when 1 of 522 nodes failed yeet-env rsync (the failure mode fixed by [ezpz PR #160](https://github.com/saforem2/ezpz/pull/160) but not yet deployed to v2 prod venv pending review). Cont10 (8521631) Q for next 512N slot. |
+| 20B | 512 | **4,400** (persisted) | **3.46** | **442.9B** (9.5%) | [`8521628`](agpt/20b/n512/README.md) Q (sync-mode) | **Q+H for 10 days — same Aurora `small` queue contention.** step-4500 was an empty placeholder from a mid-save kill (renamed `.bak-empty-20260606-170503`); next continuation resumes from step-4400 (244 GB, complete). Cont (8521628) Q for next 512N slot. |
+| 80B | 4 | **10** (smoke) | **12.03** | smoke | [`int-r7`](agpt/80b/n4/README.md) ✅ end-to-end validated | **2026-06-08: 80B production stack validated end-to-end at 4N on Aurora.** Loss 12.93 → 12.03 over 10 steps, ~17.9% MFU, sync ckpt fired at step-10 + landed cleanly (904 GB, 48 distcp shards) — matches Sunspot 12468197 reference. 5-bug stack documented in journal: repo-behind, venv-symlink, blendcorpus barrier deadlock (found via py-spy), missing FLAT, env block. 256N attempt 8530891 trained but **loss NaN'd at step 2** — open hypotheses on bf16 / TP=2 loss-reduction / fp32 second-moment. LR=1e-7 retry (8531721) Q for slot. |
 
 > **Failover wrapper production-validated 2026-05-23**: [`8505298`](agpt/2b/n256/README.md) (2B 8N smoke) caught a real silent hang at step 37, watchdog tripped, blind-swapped the bad node, attempt-2 recovered cleanly + persisted DCP checkpoints. **First end-to-end real-world validation of the swap-and-retry path on a true silent-hang failure.** See [incident report](../experiments/agpt/aurora/20260523-failover-silent-hang-recovery-8505298.md).
 
@@ -57,7 +57,7 @@ python3 -m torchtitan.experiments.ezpz.utils.plot_production_combined
 
 | Model | Nodes | Cumulative steps | Loss | Tokens | Latest job | Status |
 |-------|------:|-----------------:|-----:|-------:|------------|--------|
-| 2B  | 256 | **55,026** (persisted) | **2.67** | **2.77T** (59.3%) | [`8510692`](agpt/2b/n256/README.md) Q | Async-mode stable at 256N across 10 dispatches since 2026-05-23. Chain has advanced step 25,500 → 55,026 (+29,526 in 5 days). Most recent dispatch 8508977 crashed at exit 127 (Aurora pals-RPC infra fail, not failover-recoverable); 8510692 cont5 Q for slot. Plateau in eval scores around ARC-Easy 0.594 / HellaSwag norm 0.550 — model has saturated on this LR/data mix. |
+| 2B  | 256 | **69,900** (persisted) | **2.67** | **3.52T** (75.4%) | [`8521626`](agpt/2b/n256/README.md) Q | Async-mode chain advanced 55,026 → 69,900 (+14,874 across 8 dispatches since 2026-05-28). Last dispatch 8519833 walltime-finished cleanly at step-69900 on 2026-06-06. Step-66K / 68K / 69.9K evals show plateau: HSn ~0.555, ARC-E ~0.59, ARC-C ~0.33, **Wino 0.5627 (best yet at step-69900)**. Cont6 (8521626) Q for next 256N slot. |
 | 20B | 256 | **1,125** (persisted) | **3.28** | **113B** (2.4%) | [`8505255`](agpt/20b/n256/README.md) F (12h walltime) | Sync-mode 12h dispatch reached step 1,125 cleanly. No continuation queued (256N is per-token comparator; canonical chain is 512N). |
 
 ### Other jobs
