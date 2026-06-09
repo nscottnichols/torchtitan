@@ -153,9 +153,19 @@ run_one() {
     local NGPUS_LOCAL="${NHOSTS:-$NNODES}"
     local GBS=$(( NGPUS_LOCAL * 12 ))
 
+    # NOTE: use agpt_2b_chunkedce (not agpt_2b) for the bitwise smoke.
+    # `--debug.deterministic` forces deterministic XPU kernels which
+    # allocate noticeably more workspace; combined with vocab=256k
+    # logits (~16 GB at LBS=2) the standard agpt_2b config OOMs at
+    # the first backward (job 12468306 — every rank crashed mid-step
+    # with "torch.OutOfMemoryError ... 4.00 GiB" on the first
+    # allocation past optimizer state init). ChunkedCELoss(num_chunks=8)
+    # caps the peak logit slice at ~2 GB and is mathematically
+    # equivalent — sum of per-chunk CE losses == full CE loss — so
+    # the bitwise comparison is still well-defined.
     ezpz launch python3 -m torchtitan.experiments.ezpz.train \
         --module=ezpz.agpt \
-        --config="agpt_${MODEL}" \
+        --config="agpt_${MODEL}_chunkedce" \
         --compile.no-enable \
         --checkpoint.no-enable \
         --dataloader.dataset=blendcorpus \
