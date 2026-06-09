@@ -53,7 +53,8 @@ live runs go through the DP branch.
 ### Verification
 
 Bitwise sync check `12468341` (`agpt_2b_chunkedce`, 2N, 20 steps,
-HEAD vs pre-merge `453a386e8`) — TBD; will update when verdict lands.
+HEAD vs pre-merge `453a386e8`) — **IDENTICAL**. Loss + grad_norm
+match bit-for-bit across all 20 steps. 5:40 wall.
 
 ---
 
