@@ -53,7 +53,7 @@ V2_CKPT_NAME="${CKPT_NAME:-agpt-20b-sophiag-olmo-mix-1124-n512-gbs12288}"
 LABEL="${LABEL:-512n}"
 
 STEPS="${STEPS:-100 200 300}"
-TASKS="${TASKS:-hellaswag,arc_easy,arc_challenge,winogrande}"
+TASKS="${TASKS:-hellaswag,arc_easy,arc_challenge,winogrande,piqa,openbookqa,boolq}"
 
 for step in $STEPS; do
     DCP_DIR="${V2_REPO}/outputs/checkpoints/${V2_CKPT_NAME}/step-${step}"

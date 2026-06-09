@@ -21,7 +21,7 @@ export HF_HUB_ENABLE_HF_TRANSFER=0
 
 cd "${PBS_O_WORKDIR:-/lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz}"
 
-TASKS="hellaswag,arc_easy,arc_challenge,winogrande"
+TASKS="hellaswag,arc_easy,arc_challenge,winogrande,piqa,openbookqa,boolq"
 
 run_eval() {
     local MODEL=$1 STEP=$2

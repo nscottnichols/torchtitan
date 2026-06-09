@@ -22,7 +22,7 @@ cd "${PBS_O_WORKDIR:-/lus/flare/projects/AuroraGPT/foremans/projects/saforem2/to
 export PYTHONPATH="$(pwd)"
 
 MODEL="2b"
-TASKS="hellaswag,arc_easy,arc_challenge,winogrande"
+TASKS="hellaswag,arc_easy,arc_challenge,winogrande,piqa,openbookqa,boolq"
 CSV_FILE="outputs/evals/eval_results_2b.csv"
 echo "model,step,task,metric,value,stderr" > "$CSV_FILE"
 

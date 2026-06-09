@@ -14,7 +14,7 @@ cd /lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz
 
 source <(curl -fsSL https://bit.ly/ezpz-utils) && ezpz_setup_env
 
-TASKS="hellaswag,arc_easy,arc_challenge,winogrande"
+TASKS="hellaswag,arc_easy,arc_challenge,winogrande,piqa,openbookqa,boolq"
 
 run_eval() {
     local MODEL=$1 STEP=$2

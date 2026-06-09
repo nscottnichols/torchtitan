@@ -19,7 +19,7 @@ source .venv/bin/activate
 # Override these via qsub -v "MODEL=2b,STEP=5000,TASKS=hellaswag"
 MODEL="${MODEL:-2b}"
 STEP="${STEP:-5000}"
-TASKS="${TASKS:-hellaswag,arc_easy,arc_challenge,winogrande}"
+TASKS="${TASKS:-hellaswag,arc_easy,arc_challenge,winogrande,piqa,openbookqa,boolq}"
 
 echo "============================================"
 echo "AGPT Evaluation Job"

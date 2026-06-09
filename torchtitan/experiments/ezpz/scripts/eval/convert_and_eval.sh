@@ -12,7 +12,7 @@ set -euo pipefail
 # ---- Defaults ----
 MODEL=""
 STEP=""
-TASKS="${TASKS:-hellaswag,arc_easy,arc_challenge,winogrande}"
+TASKS="${TASKS:-hellaswag,arc_easy,arc_challenge,winogrande,piqa,openbookqa,boolq}"
 CONVERT_ONLY=false
 EVAL_ONLY=false
 EXPORT_DTYPE="${EXPORT_DTYPE:-bfloat16}"
