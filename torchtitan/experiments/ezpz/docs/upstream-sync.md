@@ -20,6 +20,65 @@ was required in ezpz.
 
 ---
 
+## 2026-06-09 — 49th sync (15 commits, `21c77d165..465cd676e`)
+
+Merged with **one conflict** in `torchtitan/experiments/__init__.py`
+(`ft.llama3` → `torchft.llama3` rename vs our list of ezpz experiments
+in the same `_supported_experiments` frozenset). Resolved by taking the
+upstream rename and keeping our ezpz entries.
+
+### Notable upstream commits
+
+| Commit | Title | ezpz impact |
+|---|---|---|
+| `465cd676e` | `[spmd_types] SpmdLayout for NamedPlacement (#3501)` | None for now (touches `models/{llama3,qwen3,deepseek_v3}/sharding.py`; ezpz/agpt + ezpz/moe have their own sharding files that don't mirror this layout). **TODO**: revisit if we hit a SpmdLayout-related error |
+| `d92336fee` | `[BE] deprecate llama4, move apply_fsdp to common file (#3573)` | **Replay candidate**: ezpz/agpt + ezpz/moe each have a local `apply_fsdp` that's a subset of the new `apply_fsdp_to_decoder` in `distributed/fsdp.py`. Holding for a focused refactor session rather than replaying mid-sync |
+| `43e52fd01` | `Refactor gypo.py into trainer.py and train.py (#3451)` | None (RL experiment — we have our own `experiments/ezpz/rl/train_grpo.py` + `train_sft.py`) |
+| `da230bbb2` | `[rl][bug] Fix gradient accumulation zero grad (#3575)` | None (same — separate RL trainer; our train_grpo doesn't override the zero_grad path) |
+| `2b22fc197` | `[BE] rename experiments/ft to experiments/torchft (#3574)` | **Replay required** (see below) |
+| `577533a44` | `[fix]Allow initial_load_in_hf without initial_load_path (#3578)` | None (checkpoint.py change; we don't override that path) |
+| `bc878a7c6` | `Llama3 stat dict adapter infers the head size...` | None (we don't use the Llama3 state-dict adapter directly; ezpz/agpt has its own checkpoint conversion under `eval/convert_to_hf.py`) |
+
+### Replay: `experiments.ft` → `experiments.torchft` (commit `a96cffec7`)
+
+Upstream renamed `torchtitan.experiments.ft` to `torchtitan.experiments.torchft`
+and prefixed exported classes with `TorchFT`. Five ezpz files imported from
+the old paths and needed updating:
+
+- `agpt/__init__.py` — `FaultTolerantModelSpec` import + `fragment_llm` import
+- `agpt/config_registry.py` — `FaultTolerance` import
+- `moe/config_registry.py` — `FaultTolerance` import
+- `trainer.py` — `FaultTolerance`, `FTManager` → `TorchFTManager`,
+  `FTOptimizersContainer` → `TorchFTOptimizersContainer`,
+  `FTCheckpointManager` → `TorchFTCheckpointManager`. Aliased on import
+  so the rest of trainer.py is unchanged.
+
+Verified `import torchtitan.experiments.ezpz.{agpt, moe, train, trainer,
+rl.train_grpo, rl.train_sft}` all succeed post-rename.
+
+### Held: `apply_fsdp` consolidation
+
+Upstream PR #3573 consolidated llama3's + llama4's `apply_fsdp` functions
+into a single `apply_fsdp_to_decoder` in `distributed/fsdp.py`. Per the
+replay protocol we *should* also consolidate ezpz/agpt's local `apply_fsdp`
+to call the new helper.
+
+Holding for a focused session because:
+
+1. ezpz/agpt's local `apply_fsdp` is a **subset** of `apply_fsdp_to_decoder`
+   — missing `weight_tying`, `dp_mesh_dims`, `enable_symm_mem`,
+   `ep_degree`, `edp_mesh` parameters. None of those are required for
+   our current configs, but they're not no-ops either.
+2. The consolidation is a real refactor touching ezpz/agpt/parallelize.py
+   and ezpz/moe/parallelize.py — not a 1-line sed.
+3. The current ezpz `apply_fsdp` is battle-tested across all v2 production
+   runs (2B/20B/80B). Worth being careful before swapping it.
+
+**TODO** track: replay PR #3573 onto ezpz/agpt + ezpz/moe in a separate
+commit when there's bandwidth.
+
+---
+
 ## 2026-06-06 (48th sync — 1-commit follow-up to spmd_types/AC story; no ezpz replay)
 
 Pulled 1 commit (`641b5f6b8..21c77d165`) immediately after the 47th sync:
