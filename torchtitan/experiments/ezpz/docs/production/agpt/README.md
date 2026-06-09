@@ -7,6 +7,18 @@
 > `dtype=float32` master weights. Historical bf16-tainted runs:
 > [`historical/v1-bf16/`](historical/v1-bf16/README.md).
 
+## All chains overlaid (every dense agpt trajectory)
+
+![all dense agpt chains](../figures/all_production_training.svg)
+
+Cross-model overview: 2B (MDS reference + TT v2 256N + TT v2 512N) and
+20B (TT v2 256N + TT v2 512N) plotted against tokens consumed
+(log-scale), three panels: training loss / TPS-per-GPU / MFU. Refreshed
+via `scripts/update_all_charts.sh`. Per-model overlays:
+[2b/](2b/README.md#all-2b-chains-overlaid), [20b/](20b/README.md#all-20b-chains-overlaid). 80B not yet
+included (no overlay until production ckpts land — see
+[80b/](80b/README.md#all-80b-chains-overlaid)).
+
 ## Headline (2026-06-09)
 
 - **2B 256N async chain** at step **69,900** (loss ~2.67, ~3.52T tokens, **75.4%** of target) — **+14,900 steps since 2026-05-30 across 5 dispatches**. Last clean run was [8519833](2b/n256/README.md) walltime-finished 2026-06-06 18:07 at step-69,900. **Step-69900 eval**: HSn 0.5552, ARC-E 0.5939, ARC-C 0.3294, **Wino 0.5627 (best yet)**. Cont6 (8521626) Q for 256N slot, cont7 (8521630) H'd behind it.
