@@ -19,6 +19,14 @@
 # --debug.seed=42 --debug.deterministic so loss + grad_norm should be
 # bit-identical for any pure-refactor / import-rename merge.
 #
+# Implementation note: each phase runs from an ephemeral `git worktree
+# add` checkout under .claude/worktrees/. This avoids `git stash` /
+# `git checkout` on the main working tree (which job 12468296 spent its
+# full 1h walltime on — the stash -u walk of thousands of untracked
+# .venv.tar.gz-* backups + core.* dumps + outputs/ tree never finished).
+# Worktrees are sub-second to create and don't touch the main tree at
+# all.
+#
 # Usage (from a login node, with this script as the qsub argument):
 #
 #   qsub -A datascience -q workq -l select=2 -l walltime=01:00:00 \
@@ -40,11 +48,6 @@
 #   pre.metrics      same from pre.log
 #   diff.txt         diff between the two .metrics files
 #   verdict          "IDENTICAL" if diff is empty, "DRIFT" otherwise
-#
-# IMPORTANT: uses git stash + checkout to switch between HEAD and
-# PRE_MERGE_COMMIT. Any uncommitted working-tree changes are stashed
-# BEFORE the run and popped on exit. Don't run with half-finished
-# edits you can't afford to have stashed.
 
 set -o pipefail
 
@@ -75,42 +78,67 @@ STEPS="${STEPS:-20}"
 MODEL="${MODEL:-2b}"
 SEED="${SEED:-42}"
 NNODES="$(wc -l < "${PBS_NODEFILE}")"
-LOG_DIR="logs/bitwise-sync-check-${PBS_JOBID%%.*}"
+JOBID_SHORT="${PBS_JOBID%%.*}"
+LOG_DIR="${SUBMIT_DIR}/logs/bitwise-sync-check-${JOBID_SHORT}"
 mkdir -p "${LOG_DIR}"
 
-ORIG_BRANCH="$(git symbolic-ref --short HEAD 2>/dev/null || echo "$HEAD_COMMIT")"
-STASH_MARKER="bitwise-sync-check-${PBS_JOBID%%.*}"
-if [[ -n "$(git status --porcelain -uno)" ]]; then
-    git stash push -u -m "$STASH_MARKER" 2>&1 | tee -a "${LOG_DIR}/run.log"
-    STASHED=1
-else
-    STASHED=0
-fi
+# Ephemeral worktrees — one per commit. Detached HEAD so we don't
+# need to mint or clean up branch refs. Worktrees live under
+# .claude/worktrees/ which is already gitignored by convention here.
+WT_BASE="${SUBMIT_DIR}/.claude/worktrees/bitwise-sync-${JOBID_SHORT}"
+WT_HEAD="${WT_BASE}/head"
+WT_PRE="${WT_BASE}/pre"
+mkdir -p "${WT_BASE}"
+
+echo "==================================================" | tee -a "${LOG_DIR}/run.log"
+echo "creating worktrees:" | tee -a "${LOG_DIR}/run.log"
+echo "  ${WT_HEAD} -> ${HEAD_SHORT}" | tee -a "${LOG_DIR}/run.log"
+echo "  ${WT_PRE}  -> ${PRE_SHORT}" | tee -a "${LOG_DIR}/run.log"
+echo "==================================================" | tee -a "${LOG_DIR}/run.log"
+git worktree add --detach "${WT_HEAD}" "${HEAD_COMMIT}" 2>&1 | tee -a "${LOG_DIR}/run.log"
+git worktree add --detach "${WT_PRE}" "${PRE_MERGE_SHA}" 2>&1 | tee -a "${LOG_DIR}/run.log"
+
+# Share the .venv from the main repo so we don't re-tar / re-yeet
+# (8.6 GB venv). Symlink instead of copy.
+ln -sf "${SUBMIT_DIR}/.venv" "${WT_HEAD}/.venv"
+ln -sf "${SUBMIT_DIR}/.venv" "${WT_PRE}/.venv"
 
 cleanup() {
-    git checkout "$ORIG_BRANCH" 2>&1 | tee -a "${LOG_DIR}/run.log"
-    if [[ "$STASHED" == "1" ]]; then
-        git stash list | grep -q "$STASH_MARKER" && \
-            git stash pop 2>&1 | tee -a "${LOG_DIR}/run.log"
-    fi
+    local rc=$?
+    cd "${SUBMIT_DIR}" 2>/dev/null || true
+    echo "==================================================" | tee -a "${LOG_DIR}/run.log"
+    echo "cleanup: removing worktrees" | tee -a "${LOG_DIR}/run.log"
+    echo "==================================================" | tee -a "${LOG_DIR}/run.log"
+    # Drop the .venv symlinks first so worktree remove doesn't try to
+    # crawl into the venv (which would be slow and pointless).
+    rm -f "${WT_HEAD}/.venv" "${WT_PRE}/.venv"
+    git worktree remove --force "${WT_HEAD}" 2>&1 | tee -a "${LOG_DIR}/run.log" || true
+    git worktree remove --force "${WT_PRE}" 2>&1 | tee -a "${LOG_DIR}/run.log" || true
+    rmdir "${WT_BASE}" 2>/dev/null || true
+    exit "${rc}"
 }
 trap cleanup EXIT
 
-source .venv/bin/activate
+source "${SUBMIT_DIR}/.venv/bin/activate"
 python3 -c "import torch; print('torch', torch.__version__)" \
     | tee -a "${LOG_DIR}/run.log"
 
+# Data cache shared between both phases — index built once on phase 1,
+# phase 2 hits the warm cache. Keeps both phases hermetic w.r.t. each
+# other (same data ordering, same shuffle indices).
+SHARED_CACHE="${SUBMIT_DIR}/checkpoints/bitwise-sync-check-${JOBID_SHORT}/.cache/books/index-cache"
+
 run_one() {
     local label="$1"
-    local commit="$2"
+    local wt="$2"
+    local commit="$3"
     local outlog="${LOG_DIR}/${label}.log"
-    local ckptdir="checkpoints/bitwise-sync-check-${PBS_JOBID%%.*}-${label}"
 
     echo "==================================================" | tee -a "${LOG_DIR}/run.log"
-    echo "phase: ${label}  commit: ${commit:0:9}" | tee -a "${LOG_DIR}/run.log"
+    echo "phase: ${label}  commit: ${commit:0:9}  cwd: ${wt}" | tee -a "${LOG_DIR}/run.log"
     echo "==================================================" | tee -a "${LOG_DIR}/run.log"
 
-    git checkout "$commit" 2>&1 | tee -a "${LOG_DIR}/run.log"
+    cd "${wt}"
 
     local NGPUS_LOCAL="${NHOSTS:-$NNODES}"
     local GBS=$(( NGPUS_LOCAL * 12 ))
@@ -122,7 +150,7 @@ run_one() {
         --checkpoint.no-enable \
         --dataloader.dataset=blendcorpus \
         --dataloader.dataset-path="torchtitan/experiments/ezpz/data-lists/$(ezpz_get_machine_name)/books.txt" \
-        --dataloader.data-cache-path="${ckptdir}/.cache/books/index-cache" \
+        --dataloader.data-cache-path="${SHARED_CACHE}" \
         --debug.seed="${SEED}" \
         --debug.deterministic \
         --training.local-batch-size=1 \
@@ -134,8 +162,10 @@ run_one() {
         2>&1 | tee "${outlog}"
 }
 
-run_one "head" "$HEAD_COMMIT"
-run_one "pre" "$PRE_MERGE_COMMIT"
+run_one "head" "${WT_HEAD}" "${HEAD_COMMIT}"
+run_one "pre" "${WT_PRE}" "${PRE_MERGE_SHA}"
+
+cd "${SUBMIT_DIR}"
 
 extract_metrics() {
     local in="$1" out="$2"
