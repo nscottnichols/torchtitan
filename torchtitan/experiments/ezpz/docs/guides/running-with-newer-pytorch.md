@@ -7,6 +7,15 @@
 > alias uvi='uv pip install --no-cache --link-mode=copy'
 > ```
 
+> [!IMPORTANT]
+> To access the internet, you need to set the following environment variables:
+>
+> ```bash
+> export http_proxy="http://proxy.alcf.anl.gov:3128"
+> export https_proxy="http://proxy.alcf.anl.gov:3128"
+> export no_proxy="localhost,127.0.0.1,*.alcf.anl.gov,*.anl.gov"
+> ```
+
 1. Clone torchtitan:
 
    ```bash
@@ -17,9 +26,6 @@
 1. Load modules and export environment variables[^ezpz-setup]:
 
    ```bash
-   export http_proxy="http://proxy.alcf.anl.gov:3128"
-   export https_proxy="http://proxy.alcf.anl.gov:3128"
-   export no_proxy="localhost,127.0.0.1,*.alcf.anl.gov,*.anl.gov"
    source <(curl -fsSL https://bit.ly/ezpz-utils) && ezpz_setup_job && ezpz_load_modules
    ```
 
