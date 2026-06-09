@@ -559,12 +559,24 @@ _CHAT_TEMPLATE_GEMMA = (
     # Gemma format: single-token <start_of_turn>/<end_of_turn> (ids
     # 106/107 in Gemma 2/3 tokenizer family — AuroraGPT-2B uses this).
     # 'user' and 'model' are the canonical role names.
+    #
+    # The `.lstrip('\n')` calls on each message's content keep the
+    # template "prefix-preserving" under sentencepiece tokenization
+    # — otherwise an assistant message starting with `\n` produces
+    # a `\n\n` (id 109) token boundary when the user prompt's
+    # trailing `\n` (id 108) merges with the assistant's leading `\n`,
+    # while prompt-alone rendering keeps the `\n` (id 108) terminal.
+    # That mismatch trips TRL's SFTTrainer warning at sft_trainer:1480
+    # ("Mismatch between tokenized prompt and the start of tokenized
+    # prompt+completion") and breaks the assistant-only-loss mask.
+    # Stripping leading newlines is a no-op on the rendered content
+    # for clean data and only affects the merge-boundary case.
     "{% for message in messages %}"
     "{% if message['role'] == 'system' or message['role'] == 'user' %}"
-    "<start_of_turn>user\n{{ message['content'] }}<end_of_turn>\n"
+    "<start_of_turn>user\n{{ message['content'].lstrip('\n') }}<end_of_turn>\n"
     "{% elif message['role'] == 'assistant' %}"
     "<start_of_turn>model\n"
-    "{% generation %}{{ message['content'] }}<end_of_turn>\n{% endgeneration %}"
+    "{% generation %}{{ message['content'].lstrip('\n') }}<end_of_turn>\n{% endgeneration %}"
     "{% endif %}"
     "{% endfor %}"
     "{% if add_generation_prompt %}<start_of_turn>model\n{% endif %}"
