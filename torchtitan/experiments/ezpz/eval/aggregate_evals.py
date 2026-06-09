@@ -46,6 +46,9 @@ TASK_COLORS = {
     "arc_easy": "#2ecc71",
     "arc_challenge": "#3498db",
     "winogrande": "#f39c12",
+    "piqa": "#9b59b6",
+    "openbookqa": "#1abc9c",
+    "boolq": "#34495e",
 }
 
 RANDOM_BASELINES = {
@@ -53,6 +56,9 @@ RANDOM_BASELINES = {
     "arc_easy": 0.25,
     "arc_challenge": 0.25,
     "winogrande": 0.5,
+    "piqa": 0.5,        # binary choice
+    "openbookqa": 0.25, # 4-way MCQ
+    "boolq": 0.5,       # yes/no
 }
 
 

@@ -103,6 +103,9 @@ PANELS: list[tuple[str, str, str]] = [
     ("arc_easy", "acc,none", "ARC-Easy (acc)"),
     ("arc_challenge", "acc_norm,none", "ARC-Challenge (acc_norm)"),
     ("winogrande", "acc,none", "Winogrande (acc)"),
+    ("piqa", "acc_norm,none", "PIQA (acc_norm)"),
+    ("openbookqa", "acc_norm,none", "OpenBookQA (acc_norm)"),
+    ("boolq", "acc,none", "BoolQ (acc)"),
 ]
 
 RANDOM_BASELINE = {
@@ -110,6 +113,9 @@ RANDOM_BASELINE = {
     "arc_easy": 0.25,
     "arc_challenge": 0.25,
     "winogrande": 0.5,
+    "piqa": 0.5,         # binary choice
+    "openbookqa": 0.25,  # 4-way MCQ
+    "boolq": 0.5,        # yes/no
 }
 
 
@@ -154,7 +160,11 @@ def load_mds(subdir: str, task: str, metric: str) -> list[tuple[int, float]]:
 
 
 def main() -> None:
-    fig, axes = plt.subplots(2, 2, figsize=(16, 11))
+    # Grid: 2 columns, enough rows to fit every panel. With 7 panels
+    # that's a 4x2 (one empty cell, hidden below).
+    ncols = 2
+    nrows = (len(PANELS) + ncols - 1) // ncols
+    fig, axes = plt.subplots(nrows, ncols, figsize=(16, 5.5 * nrows))
     axes = axes.flatten()
 
     for ax, (task, metric, title) in zip(axes, PANELS):
@@ -195,6 +205,10 @@ def main() -> None:
         ax.set_ylabel("Accuracy")
         ax.set_title(title)
         ax.grid(True, alpha=0.3)
+
+    # Hide any unused cells when len(PANELS) doesn't fill the grid evenly.
+    for ax in axes[len(PANELS):]:
+        ax.set_visible(False)
 
     handles, labels = axes[0].get_legend_handles_labels()
     fig.legend(

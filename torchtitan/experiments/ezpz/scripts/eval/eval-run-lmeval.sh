@@ -23,7 +23,7 @@ echo "Python: $(which python3)"
 python3 -c "import transformers; print(f'transformers: {transformers.__version__}')"
 python3 -c "import lm_eval; print(f'lm_eval: {lm_eval.__version__}')"
 
-TASKS="hellaswag,arc_easy,arc_challenge,winogrande"
+TASKS="hellaswag,arc_easy,arc_challenge,winogrande,piqa,openbookqa,boolq"
 
 # Run evals using Python API with monkey-patched CUDA warmup
 python3 << 'PYEOF'
@@ -33,7 +33,7 @@ mu.caching_allocator_warmup = lambda *args, **kwargs: None
 from lm_eval import evaluator
 import json, os
 
-tasks = "hellaswag,arc_easy,arc_challenge,winogrande".split(",")
+tasks = "hellaswag,arc_easy,arc_challenge,winogrande,piqa,openbookqa,boolq".split(",")
 base = "outputs/evals"
 
 def run_eval(model, step):

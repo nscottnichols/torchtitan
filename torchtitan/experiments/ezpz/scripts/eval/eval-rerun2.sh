@@ -18,7 +18,7 @@ echo "Python: $(which python3)"
 python3 -c "import transformers; print(f'transformers: {transformers.__version__}')"
 python3 -c "import lm_eval; print(f'lm_eval: {lm_eval.__version__}')"
 
-TASKS="hellaswag,arc_easy,arc_challenge,winogrande"
+TASKS="hellaswag,arc_easy,arc_challenge,winogrande,piqa,openbookqa,boolq"
 
 run_eval() {
     local MODEL=$1 STEP=$2
