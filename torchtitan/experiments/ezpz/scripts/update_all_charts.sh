@@ -1,0 +1,72 @@
+#!/bin/bash --login
+# Run all production + eval chart-generating scripts in parallel.
+#
+# Re-renders:
+#   - Per-trajectory production figures (loss / MFU / grad_norm / tokens-vs-time)
+#     under docs/production/agpt/{2b,20b}/n{N}/figures/
+#   - The all_production_training.{svg,png} cross-chain overview
+#   - W&B-pulled per-chain figures (loss/MFU/tokens) for the SophiaG + LR-fork chains
+#   - The all_production_evals.svg cross-eval overview
+#   - 2B + 20B v1-vs-v2 eval comparison figures
+#
+# Usage (from repo root):
+#   bash torchtitan/experiments/ezpz/scripts/update_all_charts.sh
+#
+# All scripts run in parallel and write to their own paths; failures in one
+# don't block the others. Exit status is 0 iff all six succeeded.
+
+set -o pipefail
+
+cd "$(dirname "$0")/../../../.."   # repo root
+
+PY="${PY:-.venv/bin/python3}"
+if [[ ! -x "$PY" ]]; then
+    echo "ERROR: python interpreter not found at $PY" >&2
+    echo "       set PY env to override (e.g. PY=python3 bash $0)" >&2
+    exit 1
+fi
+
+# PYTHONPATH=. is required because plot_production_combined.py imports
+# from torchtitan.experiments.ezpz.utils.plot_production_wandb — a
+# top-level torchtitan import that needs the repo root on sys.path.
+export PYTHONPATH=.
+
+declare -A SCRIPTS=(
+    [production]="torchtitan/experiments/ezpz/utils/plot_production.py"
+    [production_combined]="torchtitan/experiments/ezpz/utils/plot_production_combined.py"
+    [production_wandb]="torchtitan/experiments/ezpz/utils/plot_production_wandb.py"
+    [evals_combined]="torchtitan/experiments/ezpz/eval/plot_evals_combined.py"
+    [evals_2b_v1_vs_v2]="torchtitan/experiments/ezpz/docs/evals/agpt/2b/plot_v1_vs_v2.py"
+    [evals_20b_v1_vs_v2]="torchtitan/experiments/ezpz/docs/evals/agpt/20b/plot_v1_vs_v2.py"
+)
+
+declare -A PIDS LOGS
+LOGDIR="$(mktemp -d -t update_all_charts.XXXXXX)"
+echo "Per-script logs: $LOGDIR"
+
+t0=$SECONDS
+for name in "${!SCRIPTS[@]}"; do
+    log="$LOGDIR/$name.log"
+    LOGS[$name]="$log"
+    echo "  [$name] launching: $PY ${SCRIPTS[$name]}"
+    "$PY" "${SCRIPTS[$name]}" > "$log" 2>&1 &
+    PIDS[$name]=$!
+done
+
+fail=0
+for name in "${!PIDS[@]}"; do
+    if wait "${PIDS[$name]}"; then
+        echo "  [$name] OK ($(wc -l < "${LOGS[$name]}") lines)"
+    else
+        echo "  [$name] FAILED (rc=$?, see ${LOGS[$name]})"
+        fail=$((fail + 1))
+    fi
+done
+
+elapsed=$((SECONDS - t0))
+n_files=$(find torchtitan/experiments/ezpz/docs -type f \
+    \( -name "*.svg" -o -name "*.png" \) \
+    -newer "$LOGDIR" 2>/dev/null | wc -l)
+echo ""
+echo "=== done in ${elapsed}s — $n_files figure files updated; $fail/${#SCRIPTS[@]} scripts failed ==="
+exit $fail
