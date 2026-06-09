@@ -23,8 +23,9 @@ this guide assumes you've done that and have a working `.venv/` +
 >   ~48B params, 2N, ~30s to crash). Workaround until upstream fix:
 >   keep compile off.
 > - **TP=2**. Smaller TP exhausts memory at 80B.
-> - **Sync ckpt mode**. `CHECKPOINT_ASYNC_MODE=disabled` —
->   async-mode cascades to wrapper-unrecoverable failures at scale.
+> - **Sync ckpt mode**. Already the default (`checkpoint.async-mode=disabled`).
+>   Don't enable async — it cascades to wrapper-unrecoverable failures
+>   at scale.
 
 ## Working config (proven)
 
@@ -41,7 +42,7 @@ this guide assumes you've done that and have a working `.venv/` +
 | Local batch size  | 1 |
 | Grad accumulation | 1 |
 | Global batch size | `12 * NGPUS * LBS * GAS / TP` |
-| Checkpoint mode   | sync (`CHECKPOINT_ASYNC_MODE=disabled`) |
+| Checkpoint mode   | sync (default) |
 | Checkpoint interval | 100 |
 | Dataset           | blendcorpus / olmo-mix-1124 |
 | Tokenizer         | google/gemma-7b |
@@ -113,12 +114,11 @@ ezpz yeet-env --src .venv.tar.gz
 deactivate
 source /tmp/.venv/bin/activate
 
-# Run 10 steps with sync ckpt, full validation path
+# Run 10 steps
 CKPT_DIR=outputs/checkpoints/agpt-80b-adamw-olmo-mix-1124-n4-gbs24
 DATA_CACHE_PATH="${CKPT_DIR}/.cache/olmo-mix-1124/index-cache"
 DFL=torchtitan/experiments/ezpz/data-lists/aurora/olmo-mix-1124.txt
 
-CHECKPOINT_ASYNC_MODE=disabled \
 ezpz launch python3 -m torchtitan.experiments.ezpz.train \
     --module=ezpz.agpt \
     --config=agpt_80b \
@@ -127,7 +127,6 @@ ezpz launch python3 -m torchtitan.experiments.ezpz.train \
     --checkpoint.interval=10 \
     --checkpoint.keep-latest-k=0 \
     --checkpoint.no-last-save-model-only \
-    --checkpoint.async-mode=disabled \
     --dataloader.dataset=blendcorpus \
     --dataloader.dataset-path="${DFL}" \
     --dataloader.data-cache-path="${DATA_CACHE_PATH}" \
