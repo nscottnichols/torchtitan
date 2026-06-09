@@ -675,7 +675,20 @@ def main() -> None:
     # report_to to wandb only on rank 0 (avoids 48 ranks all writing).
     # If the user passed --report_to explicitly we respect it on rank 0
     # but force "none" on every other rank.
-    if rank != 0:
+    # Rank 0 defaults to wandb so the run is always observable; worker
+    # ranks always get silenced so we don't double-log. Pass
+    # --report_to none explicitly to opt out. TRL's own default is
+    # "none", which silently means runs without --report_to wandb
+    # don't show up in the wandb project at all.
+    if rank == 0:
+        not_explicitly_set = (
+            config.report_to == "none"
+            or config.report_to == ["none"]
+            or not config.report_to
+        )
+        if not_explicitly_set:
+            config.report_to = ["wandb"]
+    else:
         config.report_to = []
 
     # save_steps must be > max_steps so the in-train save never fires.

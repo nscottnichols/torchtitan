@@ -250,7 +250,28 @@ def main() -> None:
     if config.output_dir is None:
         config.output_dir = f"outputs/sft/{ezpz_args.sft_dataset}"
 
-    if rank != 0:
+    # Rank 0 defaults to wandb so the run is always observable; worker
+    # ranks always get silenced so we don't double-log. To opt out,
+    # pass --report_to none explicitly.
+    #
+    # Why we override the TRL default: TRL ships `report_to="none"` by
+    # default, which silently means runs without an explicit
+    # --report_to wandb don't show up in our wandb project at all.
+    # Defaulting to wandb here is "boringly-correct" given that every
+    # production ezpz run wants wandb anyway.
+    if rank == 0:
+        # Detect "user didn't pass --report_to" by checking the HF/TRL
+        # default. The HF Trainer sentinel is the string "none" or the
+        # list ["none"] depending on parser version; either means "not
+        # explicitly set". An empty list means the same thing.
+        not_explicitly_set = (
+            config.report_to == "none"
+            or config.report_to == ["none"]
+            or not config.report_to
+        )
+        if not_explicitly_set:
+            config.report_to = ["wandb"]
+    else:
         config.report_to = []
 
     sft_ds = get_sft_dataset(ezpz_args.sft_dataset)
