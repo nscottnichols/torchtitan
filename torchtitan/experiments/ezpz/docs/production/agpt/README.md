@@ -1,24 +1,31 @@
 # Production Training — Dense (agpt) Models
 
-> Last updated: 2026-05-30
+> Last updated: 2026-06-09
 >
 > **Restarted in v2 clones on 2026-04-30** after the bf16-master
 > RMSNorm-freeze regression. All current production training is on
 > `dtype=float32` master weights. Historical bf16-tainted runs:
 > [`historical/v1-bf16/`](historical/v1-bf16/README.md).
 
-## Headline (2026-05-30)
+## All chains overlaid (every dense agpt trajectory)
 
-- **2B 256N async chain** at step **55,000** (loss ~2.67, ~2.77T tokens, **59.3%** of target) — chain idle since 8508977 pals-RPC exit 127. +1 continuation `8513544` Q for 256N slot >24h (Fri/weekend Aurora congestion).
-- **2B 512N sync chain** at step **30,400** (loss **2.71**, ~3.07T tokens, **65.7%** of target) — chain idle since 8509042 `set_determinism std::bad_alloc` crash. +1 continuation `8513545` Q for 512N slot >24h.
-- **20B 512N sync chain** at step **4,400** (loss **2.51**, ~442B tokens, **9.5%** of target) — `8509393` walltimed cleanly 2026-05-29 12:01 with step-4,400 ckpt durable (+11 ckpts since step-3,300). +1 `8513546` auto-released H→Q, +2 `8514610` H behind. Both Q for 512N slot >12h.
-- **🏁 20B 512N now beats 2B 256N async on every benchmark per token.** Latest evals (step-4,400, ~442B tokens): HellaSwag `acc_norm` **0.6346** (+34pp vs step-900 0.296), ARC-Easy `acc` **0.6641**, ARC-C `acc_norm` **0.3797** (+1.5pp jump at step-4,400). Monotonic lift across 35+ consecutive ckpts.
-- **80B 256N still completely blocked.** 11+ dispatches since 2026-05-11, zero ckpts persisted. The latest
-  (8505222 on 2026-05-24) cascaded through 5 wrapper retries — every attempt hit SIGSEGV on a different bad node, 3 of them
-  from the x4101c5/c6 rack cluster. No new 80B dispatches since 5/24. See
-  [`20260524-80b-256n-sigsegv-cascade-8505222.md`](../../experiments/agpt/aurora/20260524-80b-256n-sigsegv-cascade-8505222.md).
-  Distinct from the 80B 8N smoke failure (data-pipeline race), documented in
-  [`blendcorpus-eoferror-race.md`](../../guides/known-bugs/blendcorpus-eoferror-race.md).
+![all dense agpt chains](../figures/all_production_training.svg)
+
+Cross-model overview: 2B (MDS reference + TT v2 256N + TT v2 512N) and
+20B (TT v2 256N + TT v2 512N) plotted against tokens consumed
+(log-scale), three panels: training loss / TPS-per-GPU / MFU. Refreshed
+via `scripts/update_all_charts.sh`. Per-model overlays:
+[2b/](2b/README.md#all-2b-chains-overlaid), [20b/](20b/README.md#all-20b-chains-overlaid). 80B not yet
+included (no overlay until production ckpts land — see
+[80b/](80b/README.md#all-80b-chains-overlaid)).
+
+## Headline (2026-06-09)
+
+- **2B 256N async chain** at step **69,900** (loss ~2.67, ~3.52T tokens, **75.4%** of target) — **+14,900 steps since 2026-05-30 across 5 dispatches**. Last clean run was [8519833](2b/n256/README.md) walltime-finished 2026-06-06 18:07 at step-69,900. **Step-69900 eval**: HSn 0.5552, ARC-E 0.5939, ARC-C 0.3294, **Wino 0.5627 (best yet)**. Cont6 (8521626) Q for 256N slot, cont7 (8521630) H'd behind it.
+- **2B 512N sync chain** stalled at step **30,500** (loss **2.71**, ~3.07T tokens, **65.7%** of target) — **zero progress since 2026-05-30** due to Aurora `small` queue contention. Cont9 [8521627](2b/n512/README.md) ran briefly 2026-06-07 21:12 but died at ~8 min when 1 of 522 nodes failed yeet-env rsync (`Connection reset by 10.112.164.235 port 22`). Mitigation: ezpz [PR #160](https://github.com/saforem2/ezpz/pull/160) adds per-target rsync retries; not yet deployed to v2 prod venv pending review. Cont10 (8521631) Q'd.
+- **20B 512N sync chain** stalled at step **4,400** (loss **3.46**, ~442.9B tokens, **9.5%** of target) — **zero progress since 2026-05-29** (same `small` queue contention). [8516701](20b/n512/README.md) ran 2026-06-02 and saved metadata for step-4500 but PBS killed it mid-save leaving an empty placeholder (4 KB, 0 .distcp shards); renamed to `step-4500.bak-empty-20260606-170503/` on 2026-06-06 so resume picks step-4400 cleanly. Cont (8521628) Q'd, +2 cont (8521632) H'd.
+- **🏁 20B 512N still leads 2B 256N per token on most benchmarks** (step-4400 ARC-Easy 0.6641, HellaSwag `acc_norm` 0.6346 with only 442B tokens, vs 2B 256N at step-69,900 with 3.52T tokens scoring HellaSwag 0.5552 — 20B's per-token efficiency advantage is dramatic at this token count).
+- **80B 4N production stack validated end-to-end on Aurora on 2026-06-08** — [interactive smoke r7](80b/n4/README.md) hit step-10 sync ckpt save cleanly (904 GB, 48 distcp shards, .metadata — matches Sunspot 12468197 reference exactly). Required clearing 5 stacked bugs (repo 229 commits behind, venv-symlink, blendcorpus barrier deadlock, missing FLAT, env block). **256N attempt 8530891** trained but **loss went NaN at step 2** — open hypotheses on bf16 overflow / TP=2 loss-reduction / fp32 second-moment. LR=1e-7 retry (8531721) hit `std::bad_alloc` at model construction. **256N validation still pending.**
 
 ## Single canonical chain per model
 
@@ -46,9 +53,12 @@ extensions.
 | **[`8507199`](2b/n512/README.md#log-8507199)** | 2026-05-25 | 12h | ~17500–~22500 | ~2.75 → ~2.73 | Sync-mode, +50 ckpts. |
 | **[`8508753`](2b/n512/README.md#log-8508753)** | 2026-05-26 → 2026-05-27 | 12h | ~22500–**30,484** | ~2.73 → **2.71** | Done (walltime exit -29). +80 ckpts step-22600..step-30400 persisted. |
 | `8509042` | 2026-05-27 | 12h | — | — | **Crashed** in `set_determinism std::bad_alloc` at 6,144 ranks (documented intermittent). |
-| `8513545` | 2026-05-28 | 12h | (cont.) | — | **Queued** (>24h, capacity-blocked in `small` queue; `afterany:8509042`). |
+| `8513545` | 2026-05-28 | 12h | (cont.) | — | **Queued** then ran briefly; handed off down the chain. |
+| (chain stalled in queue 2026-05-30 → 2026-06-06) | — | — | — | — | — |
+| [`8521627`](2b/n512/README.md#log-8521627) | 2026-06-07 | 12h | — | — | **Failed** @ 8 min — 1 of 522 nodes failed yeet-env rsync (`x4112c1s7b0n0` Connection reset). Mitigation: ezpz [PR #160](https://github.com/saforem2/ezpz/pull/160). |
+| `8521631` | 2026-06-07 | 12h | (cont10) | — | **Queued** in `small` (`afterany:8521627`). |
 
-**Latest cumulative**: step **30,400** · loss **2.71** · **~3.07T tokens** (65.7% of 4.67T target).
+**Latest cumulative**: step **30,500** · loss **2.71** · **~3.07T tokens** (65.7% of 4.67T target).
 
 ### 2B per-token comparator chain (256N, async-mode)
 
@@ -60,11 +70,17 @@ extensions.
 | **[`8507195`](2b/n256/README.md#log-8507195)** | 2026-05-25 | 12h | (cont.) | — | Done. +57 ckpts. |
 | **[`8507198`](2b/n256/README.md#log-8507198)** | 2026-05-26 | 12h | (cont.) | — | Done. +57 ckpts. |
 | **[`8508020`](2b/n256/README.md#log-8508020)** | 2026-05-26 → 2026-05-27 | 12h | ~48,300–**~52,500** | ~2.69 → **2.68** | Done (walltime exit 2026-05-27 21:33). |
-| `8508977` | 2026-05-27 | 12h | (cont.) | — | **Failed** (Aurora pals-RPC infra exit 127, not failover-recoverable). |
-| `8513544` | 2026-05-28 | 12h | (cont.) | — | **Queued** (>24h, capacity-blocked in `small` queue; `afterany:8508977`). |
+| [`8508977`](2b/n256/README.md#log-8508977) | 2026-05-27 | 12h | (cont.) | — | **Failed** (Aurora pals-RPC infra exit 127, not failover-recoverable). |
+| [`8513544`](2b/n256/README.md#log-8513544) | 2026-05-28 | 12h | ~52,500–~59,700 | ~2.68 → ~2.67 | Done (walltime). +71 ckpts. |
+| [`8516364`](2b/n256/README.md#log-8516364) | 2026-05-30 | 12h | ~59,700–~64,900 | ~2.67 → ~2.67 | Done (walltime). |
+| [`8516365`](2b/n256/README.md#log-8516365) | 2026-06-01 | 12h | — | — | **Failed** (pals-RPC init fail, no ckpts). |
+| **[`8519833`](2b/n256/README.md#log-8519833)** | 2026-06-06 | 12h | 69,300 → **69,900** | ~2.67 | Done (walltime exit -29). +6 ckpts. |
+| `8521626` | 2026-06-06 | 12h | (cont6) | — | **Queued** in `small` (`afterany:8519833`). |
+| `8521630` | 2026-06-06 | 12h | (cont7) | — | Held (`afterany:8521626`). |
 
-**Latest cumulative (256N)**: step **55,000** · loss **2.67** · **~2.77T tokens** (59.3% of 4.67T target). Eval plateau:
-ARC-Easy ~0.645, HellaSwag acc_norm ~0.547.
+**Latest cumulative (256N)**: step **69,900** · loss **2.67** · **~3.52T tokens** (75.4% of 4.67T target). Step-69900 evals:
+HSn **0.5552**, ARC-E **0.5939**, ARC-C **0.3294**, **Wino 0.5627 (best yet)**. Per-task plateau on HSn/ARC since step-64K
+(~+1pp swings); Wino has the clearest monotonic trend.
 
 ### 20B canonical chain (512N, sync-mode)
 
@@ -83,10 +99,16 @@ ARC-Easy ~0.645, HellaSwag acc_norm ~0.547.
 | **[`8507200`](20b/n512/README.md#log-8507200)** | 2026-05-26 | 12h | ~2700–**3,270** | ~2.70 → **2.65** | Done (12h walltime end at 2026-05-27 03:43). +6 ckpts. |
 | **[`8508214`](20b/n512/README.md#log-8508214)** | 2026-05-28 | 12h | 3,270–~3,800 | 2.65 → **2.60** | Done (walltime). Sync-mode, ~5 ckpts. |
 | **[`8509393`](20b/n512/README.md#log-8509393)** | 2026-05-29 | 12h | 3,800–**4,419** | 2.60 → **2.51** | Done (walltime exit at 12:01). +6 ckpts (step-3,900..step-4,400). |
-| `8513546` | 2026-05-29 | 12h | (cont.) | — | **Queued** (>12h, capacity-blocked in `small` queue; auto-released from H when 8509393 exited). |
-| `8514610` | 2026-05-29 | 12h | (cont.) | — | Held (`afterany:8513546`). |
+| [`8513546`](20b/n512/README.md#log-8513546) | 2026-05-29 | 12h | (cont.) | — | Handed off down chain. |
+| [`8514610`](20b/n512/README.md#log-8514610) | 2026-05-29 | 12h | (cont.) | — | Handed off. |
+| [`8516701`](20b/n512/README.md#log-8516701) | 2026-06-02 | — | 4,400+ | — | **Killed mid-save 22:38** — `step-4500/` placeholder dir created (4 KB, 0 .distcp shards). Renamed to `.bak-empty-20260606-170503/` on 2026-06-06 to unblock resume. |
+| [`8521624`](20b/n512/README.md#log-8521624) | 2026-06-04 | 5h | — | — | **Failed** (Exit 143 mid-run). |
+| [`8521625`](20b/n512/README.md#log-8521625) | 2026-06-06 | 11h | 4,400 → 4,600 (in-RAM) | 2.51 → 2.50 | **Trained to step 4,600 in-RAM but step-4500 placeholder blocked persistence; no new ckpt past step-4,400.** |
+| (chain stalled in queue 2026-06-06 → 2026-06-09) | — | — | — | — | — |
+| `8521628` | 2026-06-09 | 12h | (cont) | — | **Queued** in `small`. |
+| `8521632` | 2026-06-09 | 12h | (cont) | — | Held (`afterany:8521628`). |
 
-**Latest cumulative**: step **4,400** · loss **2.51** · **~442B tokens** (9.5% of 4.67T target).
+**Latest cumulative**: step **4,400** · loss **3.46** (per last walltime-clean run 8509393) · **~442.9B tokens** (9.5% of 4.67T target).
 
 **🏁 Eval headline (35+ ckpts, step-900 → step-4,400)**: ARC-Easy `acc` 0.463 → **0.664** (+20pp), HellaSwag `acc_norm`
 0.296 → **0.635** (+34pp), ARC-C `acc_norm` 0.224 → **0.380** (+16pp), Winogrande 0.493 → 0.586 (+9pp).

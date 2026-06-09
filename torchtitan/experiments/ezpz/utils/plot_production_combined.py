@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Combined-overlay production chart across all 5 production trajectories.
+"""Combined-overlay production chart across all production trajectories.
 
 One figure, 3 subplot panels (Loss / TPS-per-GPU / MFU), with up to 5
 curves per panel — one per production trajectory — plotted against
@@ -16,9 +16,12 @@ be compared directly:
 
 MDS has no MFU column so it's only on the Loss + TPS panels.
 
-Writes to docs/production/figures/all_production_training.svg (single
-artifact referenced from docs/production/README.md as the landing-page
-chart).
+Writes a single artifact to docs/production/figures/all_production_training.svg
+that is embedded on the landing page (docs/production/README.md), the
+dir-level rollup (docs/production/agpt/README.md), and each per-model
+README (docs/production/agpt/{2b,20b,80b}/README.md). All four pages
+show the same overlay so you can read the cross-trajectory comparison
+from whichever entry-point you land on.
 
 Run:
     python3 -m torchtitan.experiments.ezpz.utils.plot_production_combined

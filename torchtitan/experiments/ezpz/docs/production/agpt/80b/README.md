@@ -1,56 +1,94 @@
 # Production Training — agpt 80B
 
-> Last updated: 2026-06-06
+> Last updated: 2026-06-09
 
-## v2 status — STILL BLOCKED (11+ failed dispatches since 2026-05-11)
+## All chains overlaid (every dense agpt trajectory)
 
-**Zero ckpts persisted** for 80B production since the v2 effort began on 2026-05-11. The original 8480361/8480362
-dispatch (and 9 follow-up retries) all failed before saving a single checkpoint. Two distinct failure modes:
+![all dense agpt chains](../../figures/all_production_training.svg)
 
-| Mode | Where | Status |
-|------|-------|--------|
-| **SIGSEGV cascade** | 80B 256N production (every dispatch) | Documented in [`20260524-80b-256n-sigsegv-cascade-8505222.md`](../../../experiments/agpt/aurora/20260524-80b-256n-sigsegv-cascade-8505222.md) |
-| **`blendcorpus` EOFError race** | 80B 8N smoke 8505326 | Documented in [`blendcorpus-eoferror-race.md`](../../../guides/known-bugs/blendcorpus-eoferror-race.md) |
+Cross-model overview: every 2B + 20B production trajectory overlaid on
+shared axes vs tokens consumed (log-scale). Three panels: training
+loss / TPS-per-GPU / MFU. **80B is not on this chart yet** — production
+has not begun (4N smokes are ≤20 steps each, and the only 256N attempt
+8530891 NaN'd at step 2). 80B will be added once either (a) production
+starts persisting ckpts or (b) a longer-running smoke seeds the
+loss/MFU panels. The per-trajectory stub [`n4/README.md`](n4/README.md)
+holds the 4N validation details until then.
 
-**Latest dispatch `8505222` (2026-05-24)** failed after **5 wrapper retries** — every attempt hit SIGSEGV on a
-different bad node, 3 of them from the **x4101c5/c6 rack cluster**. The failover wrapper rotates spares correctly,
-but the bad-node hit-rate at 256N is high enough that 10 spares is not enough headroom.
+## v2 status — 4N validated 2026-06-08; 256N still blocked
 
-The 4N smoke 12466025 from 2026-05-05 (Aurora) was the **first successful 80B v2 training**
-(20 steps, loss 12.98 → 10.46). Replicated three times since with bit-equivalent
-numerics under increasingly-changed software:
+**Headline**: the 80B production stack was validated end-to-end on
+Aurora on **2026-06-08** via an interactive 4N smoke that completed
+through step-10 sync-checkpoint save cleanly
+([n4/README.md](n4/README.md): 904 GB / 48 .distcp shards / .metadata —
+matches the Sunspot 12468197 reference exactly). Required clearing 5
+stacked bugs: repo 229 commits behind, broken venv symlink, blendcorpus
+init-barrier deadlock at 4N+, missing `ZE_FLAT_DEVICE_HIERARCHY=FLAT`,
+and an interactive-launch env block. The same software stack was then
+tried at 256N.
 
-- Job 12467825 (Sunspot 4N, 2026-06-02): xccl_split_group workaround in place
-  (commit `8031d1d3a`). 20 steps, loss 12.94 → 10.39, ~17.8% MFU, 88.94% memory.
-  See [`20260602-smoke-n4-80b-tp2-xccl-workaround.md`](../../../experiments/agpt/sunspot/20260602-smoke-n4-80b-tp2-xccl-workaround.md).
-- Job 12468157 (Sunspot 4N, 2026-06-06): 47th upstream sync — RoPE refactor
-  (PR #3458) + mixed-optimizer refactor (PR #3269) + 4 post-smoke fixes
-  replayed onto ezpz. 20 steps, loss 12.97 → 10.41, ~17.8% MFU, 88.94% memory
-  — all 20 steps within ±0.08 nat of the May 5 baseline, MFU + memory bit-identical.
+**256N attempts (2026-06-08 / 06-09)**:
 
-The working 80B config is stable under both the xccl workaround and the
-post-47th-sync ezpz stack.
+| Job ID | Date | LR | Result | Notes |
+|--------|------|-----|--------|-------|
+| 8530891 | 2026-06-08 | 1e-6 | **Loss NaN at step 2** | Step 1 clean (loss 12.94), step 2 grad_norm NaN, step 3+ loss NaN. Even at scheduler-clamped LR ≈ 1.8e-8, NaN persists. Open hypotheses: bf16 overflow at GBS=1536, TP=2 loss-reduction bug, fp32 second-moment overflow. |
+| 8531345 | 2026-06-08 | 1e-7 | OOM / failover-exhausted | Retry with smaller LR; bad-node hit storm, never reached step 1. |
+| 8531721 | 2026-06-09 | 1e-7 | `std::bad_alloc` at model construction | Ranks 401-528 (contiguous block on 11-12 nodes) — failover ran out of spares. Never reached step 1. |
 
-### Next steps (from SIGSEGV writeup)
+**Status:** 80B 256N production is **still blocked**. The NaN-at-step-2
+diagnosis is the first thing to chase once we get queue time;
+diagnostic ideas in `Next steps` below.
 
-1. **Try `select=296`** (40 spares vs current 10) to absorb more bad nodes per cascade.
-2. **File ALCF ticket** for the x4101c5/c6 rack — 3 of the 5 retry failures landed there.
-3. **Try 64N / 128N** to characterize whether the SIGSEGV rate scales with node count or is rack-specific.
+## Working 4N stack (Aurora + Sunspot)
 
-### Working config (smoke-only)
+The working 80B config has been replicated four times across the
+two clusters with bit-equivalent numerics:
 
-| Trajectory | Status | Cumulative steps | Loss | Tokens |
-|------------|--------|-----------------:|-----:|-------:|
-| 4N smoke 12466025 (Aurora, 2026-05-05) | Done (20 steps) | 20 | 12.98 → 10.46 | — |
-| 4N smoke 12467825 (Sunspot, 2026-06-02, xccl workaround in place) | Done (20 steps) | 20 | 12.94 → 10.39 | — |
-| 4N smoke 12468157 (Sunspot, 2026-06-06, post-47th-sync) | Done (20 steps) | 20 | 12.97 → 10.41 | — |
-| [**v2 256N**](n512/README.md) (canonical chain attempt) | 11+ failed dispatches | 0 | — | — |
-| v2 512N | Not yet attempted | — | — | — |
+| Job ID | Cluster | Date | Stack | Loss (step 1 → 20) | MFU |
+|--------|---------|------|-------|---------------------|-----|
+| 12466025 | Aurora | 2026-05-05 | torch 2.13, pre-xccl-workaround | 12.98 → 10.46 | ~17.8% |
+| 12467825 | Sunspot | 2026-06-02 | + xccl_split_group workaround (commit 8031d1d3a) | 12.94 → 10.39 | ~17.8% |
+| 12468157 | Sunspot | 2026-06-06 | + 47th upstream sync (RoPE refactor PR #3458, mixed-optimizer PR #3269) | 12.97 → 10.41 | ~17.8% |
+| 8530800 (r4 smoke) | Aurora | 2026-06-08 | + blendcorpus barrier fix + venv-symlink fix + `ZE_FLAT_DEVICE_HIERARCHY=FLAT` | step-10 ckpt saved (904 GB, 48 shards) | — |
 
-Working config (proven in 4N smoke): AdamW LR=1e-6, TP=2, AC=full, compile=OFF, fp32-master. Loss descended
-cleanly 12.98 → 10.46 over 20 steps. Submit script:
+All 4 land within ±0.08 nat of one another at step 20 and have
+identical MFU + memory (88.94% peak). See [n4/README.md](n4/README.md)
+for the latest Aurora interactive smoke.
+
+**Working config**: AdamW LR=1e-6, TP=2, AC=full, compile=OFF,
+fp32-master, sync checkpoint mode (`CHECKPOINT_ASYNC_MODE=disabled`).
+Submit script:
 [`scripts/submit_agpt_80b_aurora_venv_failover.sh`](../../../../scripts/submit_agpt_80b_aurora_venv_failover.sh).
-
 Production clone: `/flare/AuroraGPT/foremans/runs/agpt-80b-v2/torchtitan-ezpz/`.
 
-Historical v1 (NaN'd) runs: see [`../historical/v1-bf16/`](../historical/v1-bf16/README.md).
+## Per-trajectory detail
+
+- [n4/](n4/README.md) — 4N validation smokes (Aurora + Sunspot,
+  proven-stable end-to-end including sync ckpt save 2026-06-08)
+- [n512/](n512/README.md) — 80B 512N (not yet attempted — 256N still
+  blocked)
+
+## Next steps
+
+1. **Diagnose the 256N NaN.** Possible angles:
+   - Try TP=4 to halve effective per-replica GBS (current TP=2, GBS=1536)
+   - Try with `--validator.enable` off to rule out validator-loss-path issues
+   - Dump per-tensor stats at step 1 to localize which weight first goes NaN
+   - Bisect on bf16-vs-fp32 master at 256N (4N is fp32-master, working)
+2. **256N spare headroom**: every 256N retry has been killed by bad
+   nodes long before reaching meaningful training. The wrapper rotates
+   spares correctly but the hit-rate at 256N is high; try `select=296`
+   (40 spares vs current 10).
+3. **Replay 80B once 2B 512N stalls clear** so we're not competing for
+   the same 256N+ slots in `small` while debugging.
+
+## Historical
+
+- Pre-2026-06-08 80B 256N production: 11+ failed dispatches starting
+  2026-05-11. Failure-mode writeup:
+  [20260524-80b-256n-sigsegv-cascade-8505222.md](../../../experiments/agpt/aurora/20260524-80b-256n-sigsegv-cascade-8505222.md).
+  Distinct from the 80B 8N smoke failure (`blendcorpus` EOFError race —
+  fixed by the init-barrier removal that landed in 2026-06-08's r4 smoke):
+  [blendcorpus-eoferror-race.md](../../../guides/known-bugs/blendcorpus-eoferror-race.md).
+- Historical v1 (NaN'd, bf16-master) runs:
+  [../historical/v1-bf16/](../historical/v1-bf16/README.md).
