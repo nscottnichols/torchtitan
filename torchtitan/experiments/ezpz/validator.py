@@ -134,7 +134,10 @@ class EzpzValidator(Validator):
                     local_valid_tokens, batch_mesh, None
                 )
             else:
-                global_valid_tokens = local_valid_tokens.float()
+                # Upstream PR #3586 (2026-06-09) retyped global_valid_tokens
+                # as `float | None`; mirror that in the no-DP branch. See
+                # the matching note in ezpz/trainer.py.
+                global_valid_tokens = float(local_valid_tokens.item())
 
             if parallel_dims.pp_enabled:
                 assert self.pp_schedule is not None

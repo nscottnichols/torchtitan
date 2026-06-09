@@ -538,7 +538,13 @@ class FaultTolerantTrainer(Trainer):
             batch_mesh = parallel_dims.get_mesh("batch")
             global_valid_tokens = dist_utils.dist_sum(local_valid_tokens, batch_mesh)
         else:
-            global_valid_tokens = local_valid_tokens.float()
+            # Upstream PR #3586 (2026-06-09) retyped global_valid_tokens
+            # as `float | None` and switched the no-DP branch to
+            # `float(local_valid_tokens.item())`. Mirror that here so the
+            # annotation contract holds. DP branch keeps returning a
+            # tensor from dist_sum — upstream itself does the same; the
+            # consumer (BaseLoss.__call__) accepts either at runtime.
+            global_valid_tokens = float(local_valid_tokens.item())
 
         # Process each microbatch: move to GPU, forward/backward, then free
         accumulated_losses = []
