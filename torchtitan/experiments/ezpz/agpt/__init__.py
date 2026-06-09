@@ -168,7 +168,7 @@ from torchtitan.experiments.ezpz.agpt.model import AgptModel
 from torchtitan.models.common.param_init import depth_scaled_std
 from torchtitan.models.llama3.model import Llama3TransformerBlock
 from torchtitan.models.llama3.state_dict_adapter import Llama3StateDictAdapter
-from torchtitan.experiments.ft.config.job_config import FaultTolerantModelSpec
+from torchtitan.experiments.torchft.config.job_config import FaultTolerantModelSpec
 
 __all__ = [
     "EzpzScaledDotProductAttention",
@@ -622,7 +622,7 @@ def model_registry(
     attn_backend: str = "sdpa",
 ) -> FaultTolerantModelSpec:
     from torchtitan.distributed.pipeline_parallel import pipeline_llm
-    from torchtitan.experiments.ft.diloco import fragment_llm
+    from torchtitan.experiments.torchft.diloco import fragment_llm
 
     config = agpt_configs[flavor]
 

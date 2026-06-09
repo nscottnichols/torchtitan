@@ -22,9 +22,14 @@ from torchtitan.components.loss import ChunkedCELoss, IGNORE_INDEX
 from torchtitan.config import TORCH_DTYPE_MAP
 from torchtitan.distributed import ParallelDims, utils as dist_utils
 from torchtitan.experiments.ezpz.lr_finder import LRFinderConfig
-from torchtitan.experiments.ft.config.job_config import FaultTolerance
-from torchtitan.experiments.ft.manager import FTManager, maybe_semi_sync_training
-from torchtitan.experiments.ft.optimizer import FTOptimizersContainer
+from torchtitan.experiments.torchft.config.job_config import FaultTolerance
+from torchtitan.experiments.torchft.manager import (
+    TorchFTManager as FTManager,
+    maybe_semi_sync_training,
+)
+from torchtitan.experiments.torchft.optimizer import (
+    TorchFTOptimizersContainer as FTOptimizersContainer,
+)
 from torchtitan.protocols import BaseModel
 from torchtitan.tools import utils
 from torchtitan.tools.logging import logger
@@ -412,7 +417,9 @@ class FaultTolerantTrainer(Trainer):
             base_folder=config.dump_folder,
         )
         # FTCheckpointManager accepts ft_manager; base CheckpointManager does not
-        from torchtitan.experiments.ft.checkpoint import FTCheckpointManager
+        from torchtitan.experiments.torchft.checkpoint import (
+            TorchFTCheckpointManager as FTCheckpointManager,
+        )
 
         if isinstance(config.checkpoint, FTCheckpointManager.Config):
             ckpt_kwargs["ft_manager"] = self.ft_manager

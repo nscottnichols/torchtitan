@@ -34,7 +34,7 @@ from torchtitan.experiments.ezpz.blendcorpus.blendcorpus_builder import (
 )
 from torchtitan.experiments.ezpz.blendcorpus.build_tokenizer import EZPZTokenizer
 from torchtitan.experiments.ezpz.trainer import FaultTolerantTrainer
-from torchtitan.experiments.ft.config.job_config import FaultTolerance
+from torchtitan.experiments.torchft.config.job_config import FaultTolerance
 
 from . import model_registry
 
