@@ -2,11 +2,7 @@
 
 End-to-end guide for training the 80B AuroraGPT dense model on Aurora.
 Validated end-to-end on 2026-06-08 (4N smoke, step-10 sync DCP save
-landed cleanly — 904 GB, 48 `.distcp` shards). The path is currently
-the **only** way to train `agpt_80b` on the v2 (fp32-master) stack;
-`compile=ON` is broken on torch 2.13 for the entire 80B family, and the
-older torch-2.10 conda stack is bf16-master (frozen RMSNorm — see
-[`training-dtype-bf16-norm-freeze.md`](../training-dtype-bf16-norm-freeze.md)).
+landed cleanly — 904 GB, 48 `.distcp` shards).
 
 For the underlying venv setup (torch 2.13 + uv + `ezpz yeet`) see
 [`running-with-newer-pytorch.md`](../running-with-newer-pytorch.md) —
@@ -26,13 +22,9 @@ this guide assumes you've done that and have a working `.venv/` +
 >   every 80B-family config (smallest reproducer: `agpt_50b_wide`,
 >   ~48B params, 2N, ~30s to crash). Workaround until upstream fix:
 >   keep compile off.
-> - **TP=2**. Smaller TP exhausts memory at 80B; larger TP costs
->   compile time (4+ hours at TP=4) and we don't need it under
->   compile=OFF.
+> - **TP=2**. Smaller TP exhausts memory at 80B.
 > - **Sync ckpt mode**. `CHECKPOINT_ASYNC_MODE=disabled` —
->   async-mode cascades to wrapper-unrecoverable failures at 6,144
->   ranks. Sync mode was the breakthrough that unblocked the 2B/20B
->   512N chains.
+>   async-mode cascades to wrapper-unrecoverable failures at scale.
 
 ## Working config (proven)
 
