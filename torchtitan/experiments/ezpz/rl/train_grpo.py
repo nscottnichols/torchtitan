@@ -356,24 +356,33 @@ def _prefetch_and_broadcast_model(model_name: str, rank: int) -> str:
         # First: resolve fallback (tokenizer HEAD; populates cache too)
         resolved = _resolve_model(model_name) if model_name else _resolve_model(DEFAULT_MODEL)
         log.info(f"[prefetch] rank 0 resolved model={resolved!r}; warming HF cache...")
-        # Force the config + tokenizer + weights HEAD/GET to populate
-        # the on-disk cache. Weights pulled here so worker ranks just
-        # mmap them later instead of each issuing their own HEAD.
-        try:
-            AutoConfig.from_pretrained(resolved)
-            AutoTokenizer.from_pretrained(resolved)
-            # snapshot_download pulls weight shards into the cache
-            from huggingface_hub import snapshot_download
-            snapshot_download(repo_id=resolved, allow_patterns=[
-                "*.json", "*.txt", "*.model", "tokenizer*",
-                "*.safetensors", "*.bin",
-            ])
-            log.info(f"[prefetch] rank 0 cache warm for {resolved!r}")
-        except Exception as e:
-            # Non-fatal: per-rank loads will still hit network. Log
-            # and move on — the user might be using a local path
-            # (no snapshot_download needed) or be intentionally offline.
-            log.warning(f"[prefetch] rank 0 cache warm failed: {e}; continuing")
+        # Skip the Hub snapshot_download when `resolved` is a local
+        # path — worker ranks read straight from disk and we'd just
+        # log a confusing 404 ("Repository Not Found for url:
+        # https://huggingface.co/api/models/<local-name>") that makes
+        # it look like the local checkpoint wasn't found.
+        is_local = os.path.isdir(resolved) or os.path.isfile(
+            os.path.join(resolved, "config.json")
+        )
+        if is_local:
+            log.info(f"[prefetch] {resolved!r} is a local path; skipping Hub snapshot_download")
+        else:
+            # Force the config + tokenizer + weights HEAD/GET to populate
+            # the on-disk cache. Weights pulled here so worker ranks just
+            # mmap them later instead of each issuing their own HEAD.
+            try:
+                AutoConfig.from_pretrained(resolved)
+                AutoTokenizer.from_pretrained(resolved)
+                # snapshot_download pulls weight shards into the cache
+                from huggingface_hub import snapshot_download
+                snapshot_download(repo_id=resolved, allow_patterns=[
+                    "*.json", "*.txt", "*.model", "tokenizer*",
+                    "*.safetensors", "*.bin",
+                ])
+                log.info(f"[prefetch] rank 0 cache warm for {resolved!r}")
+            except Exception as e:
+                # Non-fatal: per-rank loads will still hit network.
+                log.warning(f"[prefetch] rank 0 cache warm failed: {e}; continuing")
     else:
         resolved = ""
 
