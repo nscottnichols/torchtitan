@@ -14,10 +14,13 @@ qk_norm.
 
 from typing import TYPE_CHECKING
 
+import spmd_types as spmd
 from torch.distributed.tensor import Replicate
 
 from torchtitan.models.common.decoder_sharding import (
+    dense_activation_placement,
     dense_param_placement,
+    dense_sequence_parallel_placement,
     norm_config,
     set_decoder_sharding_config,
     set_dense_ffn_sharding,
@@ -78,11 +81,17 @@ def _set_agpt_layer_sharding(
         )
 
     assert layer_cfg.feed_forward is not None
-    from torch.distributed.tensor import Placement, Shard
-
-    attn_x_placement: Placement = Shard(1) if enable_sp else Replicate()
+    # Upstream PR #3501 (SpmdLayout for NamedPlacement) renamed
+    # set_dense_ffn_sharding's `attn_x_placement: Placement` arg to
+    # `attn_x_layout: SpmdLayout`. Build via the dense_*_placement
+    # helpers (same pattern as llama3/sharding.py).
+    attn_x_layout = (
+        dense_sequence_parallel_placement()
+        if enable_sp
+        else dense_activation_placement(tp=spmd.R)
+    )
     set_dense_ffn_sharding(
         layer_cfg.feed_forward,
-        attn_x_placement=attn_x_placement,
+        attn_x_layout=attn_x_layout,
         enable_sp=enable_sp,
     )
