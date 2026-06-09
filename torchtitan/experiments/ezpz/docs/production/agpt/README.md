@@ -43,7 +43,7 @@ extensions.
 | `8509042` | 2026-05-27 | 12h | — | — | **Crashed** in `set_determinism std::bad_alloc` at 6,144 ranks (documented intermittent). |
 | `8513545` | 2026-05-28 | 12h | (cont.) | — | **Queued** then ran briefly; handed off down the chain. |
 | (chain stalled in queue 2026-05-30 → 2026-06-06) | — | — | — | — | — |
-| [`8521627`](2b/n512/README.md) | 2026-06-07 | 12h | — | — | **Failed** @ 8 min — 1 of 522 nodes failed yeet-env rsync (`x4112c1s7b0n0` Connection reset). Mitigation: ezpz [PR #160](https://github.com/saforem2/ezpz/pull/160). |
+| [`8521627`](2b/n512/README.md#log-8521627) | 2026-06-07 | 12h | — | — | **Failed** @ 8 min — 1 of 522 nodes failed yeet-env rsync (`x4112c1s7b0n0` Connection reset). Mitigation: ezpz [PR #160](https://github.com/saforem2/ezpz/pull/160). |
 | `8521631` | 2026-06-07 | 12h | (cont10) | — | **Queued** in `small` (`afterany:8521627`). |
 
 **Latest cumulative**: step **30,500** · loss **2.71** · **~3.07T tokens** (65.7% of 4.67T target).
@@ -58,11 +58,11 @@ extensions.
 | **[`8507195`](2b/n256/README.md#log-8507195)** | 2026-05-25 | 12h | (cont.) | — | Done. +57 ckpts. |
 | **[`8507198`](2b/n256/README.md#log-8507198)** | 2026-05-26 | 12h | (cont.) | — | Done. +57 ckpts. |
 | **[`8508020`](2b/n256/README.md#log-8508020)** | 2026-05-26 → 2026-05-27 | 12h | ~48,300–**~52,500** | ~2.69 → **2.68** | Done (walltime exit 2026-05-27 21:33). |
-| `8508977` | 2026-05-27 | 12h | (cont.) | — | **Failed** (Aurora pals-RPC infra exit 127, not failover-recoverable). |
-| `8513544` | 2026-05-28 | 12h | ~52,500–~59,700 | ~2.68 → ~2.67 | Done (walltime). +71 ckpts. |
-| `8516364` | 2026-05-30 | 12h | ~59,700–~64,900 | ~2.67 → ~2.67 | Done (walltime). |
-| `8516365` | 2026-06-01 | 12h | — | — | **Failed** (pals-RPC init fail, no ckpts). |
-| **[`8519833`](2b/n256/README.md)** | 2026-06-06 | 12h | 69,300 → **69,900** | ~2.67 | Done (walltime exit -29). +6 ckpts. |
+| [`8508977`](2b/n256/README.md#log-8508977) | 2026-05-27 | 12h | (cont.) | — | **Failed** (Aurora pals-RPC infra exit 127, not failover-recoverable). |
+| [`8513544`](2b/n256/README.md#log-8513544) | 2026-05-28 | 12h | ~52,500–~59,700 | ~2.68 → ~2.67 | Done (walltime). +71 ckpts. |
+| [`8516364`](2b/n256/README.md#log-8516364) | 2026-05-30 | 12h | ~59,700–~64,900 | ~2.67 → ~2.67 | Done (walltime). |
+| [`8516365`](2b/n256/README.md#log-8516365) | 2026-06-01 | 12h | — | — | **Failed** (pals-RPC init fail, no ckpts). |
+| **[`8519833`](2b/n256/README.md#log-8519833)** | 2026-06-06 | 12h | 69,300 → **69,900** | ~2.67 | Done (walltime exit -29). +6 ckpts. |
 | `8521626` | 2026-06-06 | 12h | (cont6) | — | **Queued** in `small` (`afterany:8519833`). |
 | `8521630` | 2026-06-06 | 12h | (cont7) | — | Held (`afterany:8521626`). |
 
@@ -87,11 +87,12 @@ HSn **0.5552**, ARC-E **0.5939**, ARC-C **0.3294**, **Wino 0.5627 (best yet)**. 
 | **[`8507200`](20b/n512/README.md#log-8507200)** | 2026-05-26 | 12h | ~2700–**3,270** | ~2.70 → **2.65** | Done (12h walltime end at 2026-05-27 03:43). +6 ckpts. |
 | **[`8508214`](20b/n512/README.md#log-8508214)** | 2026-05-28 | 12h | 3,270–~3,800 | 2.65 → **2.60** | Done (walltime). Sync-mode, ~5 ckpts. |
 | **[`8509393`](20b/n512/README.md#log-8509393)** | 2026-05-29 | 12h | 3,800–**4,419** | 2.60 → **2.51** | Done (walltime exit at 12:01). +6 ckpts (step-3,900..step-4,400). |
-| `8513546` | 2026-05-29 | 12h | (cont.) | — | Handed off down chain. |
-| `8514610` | 2026-05-29 | 12h | (cont.) | — | Handed off. |
-| [`8516701`](20b/n512/README.md) | 2026-06-02 | — | 4,400+ | — | **Killed mid-save 22:38** — `step-4500/` placeholder dir created (4 KB, 0 .distcp shards). Renamed to `.bak-empty-20260606-170503/` on 2026-06-06 to unblock resume. |
-| [`8521624`](20b/n512/README.md) | 2026-06-04 | 5h | — | — | **Failed** (Exit 143 mid-run). |
-| (chain stalled in queue 2026-06-04 → 2026-06-09) | — | — | — | — | — |
+| [`8513546`](20b/n512/README.md#log-8513546) | 2026-05-29 | 12h | (cont.) | — | Handed off down chain. |
+| [`8514610`](20b/n512/README.md#log-8514610) | 2026-05-29 | 12h | (cont.) | — | Handed off. |
+| [`8516701`](20b/n512/README.md#log-8516701) | 2026-06-02 | — | 4,400+ | — | **Killed mid-save 22:38** — `step-4500/` placeholder dir created (4 KB, 0 .distcp shards). Renamed to `.bak-empty-20260606-170503/` on 2026-06-06 to unblock resume. |
+| [`8521624`](20b/n512/README.md#log-8521624) | 2026-06-04 | 5h | — | — | **Failed** (Exit 143 mid-run). |
+| [`8521625`](20b/n512/README.md#log-8521625) | 2026-06-06 | 11h | 4,400 → 4,600 (in-RAM) | 2.51 → 2.50 | **Trained to step 4,600 in-RAM but step-4500 placeholder blocked persistence; no new ckpt past step-4,400.** |
+| (chain stalled in queue 2026-06-06 → 2026-06-09) | — | — | — | — | — |
 | `8521628` | 2026-06-09 | 12h | (cont) | — | **Queued** in `small`. |
 | `8521632` | 2026-06-09 | 12h | (cont) | — | Held (`afterany:8521628`). |
 
