@@ -88,19 +88,7 @@ MFU baseline (4N validation): ~17.8%, identical to Sunspot reference.
    splitting`, the workaround is not installed — see
    [`docs/upstream-issues/xccl_split_group_unsupported.md`](../../upstream-issues/xccl_split_group_unsupported.md).
 
-4. **Patched blendcorpus**. The shipped blendcorpus has a
-   `_build_index_mappings` barrier that deadlocks at 4N+ because per-rank
-   `BlendableDataset.__getitem__` calls it lazily and different ranks hit
-   the barrier on different corpora. The fix is in
-   `https://github.com/zhenghh04/blendcorpus` (which `running-with-newer-pytorch.md`
-   already pins via `uvi "git+..."`). If you're working off an older
-   venv that pre-dates the fix, patch
-   `<venv>/lib/python*/site-packages/blendcorpus/data/gpt_dataset.py`
-   directly (remove the `torch.distributed.barrier()` at the end of
-   `_build_index_mappings` — the existing `_load_with_retry` already
-   handles the EOFError race).
-
-5. **`ZE_FLAT_DEVICE_HIERARCHY=FLAT`** in the runtime env. Without it,
+4. **`ZE_FLAT_DEVICE_HIERARCHY=FLAT`** in the runtime env. Without it,
    each tile-pair shows as 1 device — `_infer_topology` sees 24 GPUs at
    4N (instead of 48) and rejects `np=48`. The submit scripts set it;
    if you're launching interactively, set it yourself.
