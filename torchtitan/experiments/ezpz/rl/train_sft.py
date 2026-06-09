@@ -108,6 +108,19 @@ class EzpzSFTArgs:
             )
         },
     )
+    max_train_samples: int = field(
+        default=0,
+        metadata={
+            "help": (
+                "Truncate the training dataset to this many examples after "
+                "the dataset is built. 0 (default) keeps the full dataset. "
+                "Useful for smoke tests on large mixes — at 2.6M examples "
+                "the tulu_math_uc_mix takes ~67 min just to tokenize before "
+                "the first training step lands. Set to e.g. 50000 for a "
+                "fast smoke that still exercises the real shapes."
+            )
+        },
+    )
 
     def __post_init__(self) -> None:
         # Validate sft_dataset early so a typo doesn't cost a model
@@ -354,6 +367,18 @@ def main() -> None:
     if rank != 0:
         dataset = sft_ds.build()
     log.info(f"[rank {rank}] Built SFT dataset: {len(dataset)} samples")
+
+    if ezpz_args.max_train_samples > 0 and ezpz_args.max_train_samples < len(dataset):
+        # Truncate to a fixed sample budget — useful for smoke tests
+        # where the tokenize+pack pipeline cost on 2M+ examples
+        # dominates wall time and you just want to see the model train.
+        # Apply identically on all ranks so each worker sees the same
+        # slice of the interleaved mix.
+        dataset = dataset.select(range(ezpz_args.max_train_samples))
+        log.info(
+            f"[rank {rank}] Truncated to first {ezpz_args.max_train_samples} "
+            f"samples (--max_train_samples)"
+        )
 
     trainer = SFTTrainer(
         model=model_name,
