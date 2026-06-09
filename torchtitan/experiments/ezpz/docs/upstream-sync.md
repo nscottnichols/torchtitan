@@ -20,6 +20,43 @@ was required in ezpz.
 
 ---
 
+## 2026-06-09 — 50th sync (2 commits, `465cd676e..842d354f9`)
+
+Two-commit follow-up to the 49th sync, both small. Merged clean (no
+conflicts).
+
+### Upstream commits
+
+| Commit | Title | ezpz impact |
+|---|---|---|
+| `7f5d11932` | `[graph_trainer] memory_policy: always save sym_size/shape ops (#3546)` | None — graph_trainer is a separate experiment we don't depend on. |
+| `842d354f9` | `[spmd_types] global_valid_tokens: float | None (#3586)` | **Replay required** — see below. |
+
+### Replay: `global_valid_tokens` retype (commit `bb31cab9e`)
+
+Upstream retyped `global_valid_tokens` from `torch.Tensor` to
+`float | None` in `Trainer.forward_backward_step` and
+`BaseLoss.__call__`/`ChunkedCELoss.__call__`. In the no-DP branch of
+`Trainer._inner_training_loop`, it also switched
+`local_valid_tokens.float()` (Tensor) →
+`float(local_valid_tokens.item())` (Python float) so the runtime value
+matches the annotation.
+
+Mirrored in `ezpz/trainer.py:541` and `ezpz/validator.py:137`. The DP
+branch is left as-is (still returns a Tensor from `dist_sum`) —
+upstream itself does the same; the annotation is loose and consumers
+accept either at runtime.
+
+Functional impact for current production / smoke runs: **none**. All
+live runs go through the DP branch.
+
+### Verification
+
+Bitwise sync check `12468341` (`agpt_2b_chunkedce`, 2N, 20 steps,
+HEAD vs pre-merge `453a386e8`) — TBD; will update when verdict lands.
+
+---
+
 ## 2026-06-09 — 49th sync (15 commits, `21c77d165..465cd676e`)
 
 Merged with **one conflict** in `torchtitan/experiments/__init__.py`
