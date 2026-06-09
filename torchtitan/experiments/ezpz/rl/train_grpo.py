@@ -724,13 +724,13 @@ def main() -> None:
     # constructs its internal Accelerator gives HF Trainer's WandbCallback
     # a live wandb run to attach to, so every self.log() inside training
     # (GRPO metrics, rewards, completions, sampling stats) makes it to wandb.
-    # Configure wandb via env vars so HF Trainer's built-in WandbCallback
-    # owns the wandb.run lifecycle. Doing wandb.init() ourselves AND
-    # letting WandbCallback do its own define_metric() against our run
-    # silently orphans the per-step history (sent but un-queryable);
-    # only summary values survive. See train_sft.py for the analysis.
     if rank == 0:
-        os.environ.setdefault("WANDB_PROJECT", "torchtitan.ezpz.rl")
+        ezpz.distributed.setup_wandb(
+            project_name="torchtitan.ezpz.rl",
+            config=_build_wandb_config(
+                ezpz_args, config, model_name, device_type, rank,
+            ),
+        )
 
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     if tokenizer.pad_token is None:
@@ -759,36 +759,6 @@ def main() -> None:
         train_dataset=dataset,
         processing_class=tokenizer,
     )
-
-    # Push our ezpz/runtime hyperparams into wandb.config after HF
-    # Trainer's WandbCallback has init'd the run. See train_sft.py
-    # for the same pattern + the bug it works around.
-    if rank == 0:
-        from transformers import TrainerCallback
-
-        class _EzpzWandbConfigUpdater(TrainerCallback):
-            def __init__(self, extra_config):
-                self.extra_config = extra_config
-                self._done = False
-
-            def on_train_begin(self, args, state, control, **kwargs):
-                if self._done:
-                    return
-                try:
-                    import wandb
-                    if wandb.run is not None:
-                        wandb.config.update(self.extra_config, allow_val_change=True)
-                        self._done = True
-                except Exception as e:
-                    log.warning(f"[wandb] failed to push ezpz config: {e}")
-
-        trainer.add_callback(
-            _EzpzWandbConfigUpdater(
-                _build_wandb_config(
-                    ezpz_args, config, model_name, device_type, rank,
-                )
-            )
-        )
 
     log.info(f"[rank {rank}] Starting GRPO training...")
     trainer.train()

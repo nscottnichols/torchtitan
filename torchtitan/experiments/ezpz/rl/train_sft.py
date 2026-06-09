@@ -298,21 +298,13 @@ def main() -> None:
         f"fsdp={config.fsdp or 'off'} device={device_type}"
     )
 
-    # Configure wandb via env vars so HF Trainer's built-in WandbCallback
-    # owns the wandb.run lifecycle. Doing wandb.init() ourselves AND
-    # letting WandbCallback do its own define_metric() against our run
-    # silently orphans the per-step history (sent but un-queryable):
-    # the `wandb-summary.json` final values land, but `run.history()`
-    # and the web UI Charts panel both show 0 rows. Hit this in run
-    # `nfs3089k`. Fix: don't call wandb.init() ourselves; instead
-    # WANDB_PROJECT tells WandbCallback where to put the run, and we
-    # stash our hyperparameter dump under `wandb.config` via the
-    # standard HF callback path (TRL's Trainer auto-merges the
-    # TrainingArguments fields into wandb.config; the additional
-    # ezpz-side / runtime keys go via WANDB_CONFIG_PATHS or
-    # `wandb.config.update()` post-init).
     if rank == 0:
-        os.environ.setdefault("WANDB_PROJECT", "torchtitan.ezpz.sft")
+        ezpz.distributed.setup_wandb(
+            project_name="torchtitan.ezpz.sft",
+            config=_build_wandb_config(
+                ezpz_args, config, model_name, device_type, rank,
+            ),
+        )
 
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     if tokenizer.pad_token is None:
@@ -394,41 +386,6 @@ def main() -> None:
         train_dataset=dataset,
         processing_class=tokenizer,
     )
-
-    # Inject our hyperparameter dump into wandb.config after HF Trainer's
-    # WandbCallback has init'd the run. (HF Trainer auto-merges
-    # TrainingArguments fields; we add ezpz/runtime keys on top.) The
-    # WandbCallback initializes wandb on the first `on_train_begin`,
-    # so we use a one-shot callback that runs right after it.
-    if rank == 0:
-        from transformers import TrainerCallback
-
-        class _EzpzWandbConfigUpdater(TrainerCallback):
-            """Push ezpz/runtime hyperparams into wandb.config after
-            HF's WandbCallback has init'd the wandb run."""
-
-            def __init__(self, extra_config):
-                self.extra_config = extra_config
-                self._done = False
-
-            def on_train_begin(self, args, state, control, **kwargs):
-                if self._done:
-                    return
-                try:
-                    import wandb
-                    if wandb.run is not None:
-                        wandb.config.update(self.extra_config, allow_val_change=True)
-                        self._done = True
-                except Exception as e:
-                    log.warning(f"[wandb] failed to push ezpz config: {e}")
-
-        trainer.add_callback(
-            _EzpzWandbConfigUpdater(
-                _build_wandb_config(
-                    ezpz_args, config, model_name, device_type, rank,
-                )
-            )
-        )
 
     log.info(f"[rank {rank}] Starting SFT training...")
     # Pass resume_from_checkpoint EXPLICITLY. HF Trainer's documented
