@@ -21,4 +21,5 @@ bash torchtitan/experiments/ezpz/scripts/eval/convert_and_eval.sh \
     --tasks "hellaswag,arc_easy,arc_challenge,winogrande,piqa,openbookqa,boolq" \
     --eval-only \
     --ckpt-name agpt-20b-sophiag-olmo-mix-1124-n512-gbs12288 \
-    --label 512n
+    --label v2-512n \
+    --repo-root /flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz
