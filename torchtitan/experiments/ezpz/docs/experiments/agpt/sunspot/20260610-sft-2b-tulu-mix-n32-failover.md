@@ -2,24 +2,25 @@
 
 **Date:** 2026-06-10
 **Machine:** Sunspot
-**Jobs:** `12468404` → `12468408` → `12468409` → `12468437` (running)
+**Jobs:** `12468404` → `12468408` → `12468409` → **`12468437`** (completed)
 **Config:** Production GBS=6144 (matches AuroraGPT-2B pre-training),
 3 epochs of `tulu-3-sft-mixture:0.65 + metamathqa:0.15 +
 ultrachat-200k:0.20`.
 **W&B chain:** [`365n9o09`](https://wandb.ai/aurora_gpt/torchtitan.ezpz.sft/runs/365n9o09)
 → [`8eshn1p3`](https://wandb.ai/aurora_gpt/torchtitan.ezpz.sft/runs/8eshn1p3)
 → [`cgmkf4qm`](https://wandb.ai/aurora_gpt/torchtitan.ezpz.sft/runs/cgmkf4qm)
-→ [`9qsl842a`](https://wandb.ai/aurora_gpt/torchtitan.ezpz.sft/runs/9qsl842a).
+→ [`9qsl842a → br7gopsj`](https://wandb.ai/aurora_gpt/torchtitan.ezpz.sft/runs/br7gopsj)
+(completion run: `stoic-water-40`).
 
 ## TL;DR
 
-The pre-training-scale SFT run survived **three independent oneCCL
-hardware crashes** across four PBS jobs, with the auto-retry loop
-correctly rotating in spare nodes and resuming from the latest
-FSDP1 checkpoint each time. Loss progressed monotonically across
-the chain: **1.16 → 0.79** through epoch ~2.0, ~2.5B tokens of SFT
-training consumed. Two upstream blockers had to be cleared inline
-during the run:
+The pre-training-scale SFT run **completed all 3 epochs** after
+surviving **three independent oneCCL hardware crashes** across
+four PBS jobs, with auto-retry correctly rotating in spare nodes
+and resuming from the latest FSDP1 checkpoint each time. Loss
+progressed monotonically across the chain: **1.16 → 0.77** at
+step 729 / epoch 3.0. ~4.5B tokens of SFT training consumed. Two
+upstream blockers had to be cleared inline during the run:
 
 1. [pytorch/pytorch#186938](https://github.com/pytorch/pytorch/issues/186938)
    ([fix PR](https://github.com/pytorch/pytorch/pull/186940)) —
@@ -35,9 +36,11 @@ during the run:
    HF-Trainer runs after the second SIGABRT. Broadened the regex
    to recognize both formats.
 
-The live job (`12468437`) at the time of writing has cleared one
-SIGABRT + autoretry cycle on the patched stack and is training
-attempt-2 from `checkpoint-400` (loss ~0.79, epoch ~1.98).
+Final job `12468437` exited cleanly with `Exit_status = 0` after
+**1h39m wall time** spread across 4 mpiexec attempts and 3
+spare-node failovers. The autoretry verdict was
+`FAILOVER STOP: success (attempt 4)`. Final checkpoint:
+`outputs/sft/aurora2b-sophiag-tulu-mix-32n-gbs6144/checkpoint-729/`.
 
 ## Dataset mix
 
@@ -74,20 +77,35 @@ SHA-256-content-hashed cache at `~/.cache/ezpz_sft_mixes/<hash>/`
 | `12468404` | 09:03 | bad-node SIGABRT mid-attempt-1, autoretry restarted at step 0 (no `--resume_from_checkpoint`) | 0 → 140, then 0 → 100 | 0.86 | 0.59 | `ccl::v1::exception` on rank 286, then attempt-2 also crashed |
 | `12468408` | 10:16 | XPU FSDP resume crash — all 384 ranks `AssertionError: Torch not compiled with CUDA enabled` in `_load_from_checkpoint` | 0 (never resumed) | n/a | n/a | upstream torch ShardedTensor.device CUDA hardcode |
 | `12468409` | 10:33 | resume worked (v1 patch) → 2 successful failover cycles, then autoretry bailed STUCK_PRE_TRAINING (false positive on TRL marker) | 100 → 200 → 300 | 0.81 | 1.44 | regex didn't match `'loss':` format |
-| `12468437` | 11:45 | resume worked (v2 patch) → 1 failover so far → still running | 300 → 400 → 500+ | 0.79 (live) | 1.98 (live) | live |
+| `12468437` | 11:45 | resume worked (v2 patch) → 3 SIGABRTs survived (3 spare-node rotations) → **`Training complete.` at step 729 / epoch 3.0** | 300 → 400 → 500 → 600 → 700 → 729 | **0.77** | **3.00** | `FAILOVER STOP: success (attempt 4)`, exit 0 |
 
 Loss across the full chain (every per-attempt resume preserves
 the trainer's LR schedule, so the LR column tracks step-not-epoch):
 
 ```
-job 12468404 attempt 1  step  10 → 140  loss 1.16 → 0.86   LR 2e-5 → 1.726e-5   (140 steps)
-job 12468404 attempt 2  step  10 → 100  loss 0.96 → 0.86   LR 1.97e-5 → 1.75e-5   (restart from 0!)
-job 12468408               <CRASH during FSDP load_from_checkpoint>
-job 12468409 attempt 1  step 110 → 200  loss 0.86 → 0.86   LR 1.62e-5 → 1.50e-5   (resumed from ckpt-100)
-job 12468409 attempt 2  step 210 → 300  loss 0.86 → 0.81   LR 1.48e-5 → 1.34e-5   (resumed from ckpt-200)
-job 12468437 attempt 1  step 310 → 400  loss 0.81 → 0.79   LR 1.32e-5 → 1.04e-5   (resumed from ckpt-300)
-job 12468437 attempt 2  step 410 → ...  loss 0.80 → 0.79   LR 9.05e-6 → 6.86e-6   (resumed from ckpt-400)
+job 12468404 attempt 1  step  10 → 140  loss 1.16 → 0.86   LR 2e-5    → 1.73e-5    (140 steps)
+job 12468404 attempt 2  step  10 → 100  loss 0.96 → 0.86   LR 1.97e-5 → 1.75e-5    (restart from 0!)
+job 12468408               <CRASH during FSDP load_from_checkpoint — XPU/CUDA bug>
+job 12468409 attempt 1  step 110 → 200  loss 0.86 → 0.86   LR 1.62e-5 → 1.50e-5    (resumed from ckpt-100)
+job 12468409 attempt 2  step 210 → 300  loss 0.86 → 0.81   LR 1.48e-5 → 1.34e-5    (resumed from ckpt-200)
+job 12468437 attempt 1  step 310 → 400  loss 0.81 → 0.79   LR 1.32e-5 → 1.04e-5    (resumed from ckpt-300)
+job 12468437 attempt 2  step 410 → 500  loss 0.80 → 0.78   LR 9.05e-6 → 5.21e-6    (resumed from ckpt-400)
+job 12468437 attempt 3  step 510 → 600  loss 0.77 → 0.78   LR 5.21e-6 → 2.74e-6    (resumed from ckpt-500)
+job 12468437 attempt 4  step 610 → 729  loss 0.78 → 0.77   LR 2.74e-6 → 0          (resumed from ckpt-600, completed 3 epochs)
 ```
+
+End-of-training summary (from the `Training complete.` block):
+
+| Field | Value |
+|-------|------:|
+| `train_runtime` (attempt-4 only) | 1119 s |
+| `train_samples_per_second` | 3996 |
+| `train_steps_per_second` | 0.652 |
+| `train_loss` (last-step) | 0.137 |
+| `mean_token_accuracy` (rolling) | 0.7957 |
+| `epoch` | 3.000 |
+| Wall time (full 4-job chain) | ~2h on-node (12468437 alone: 1h39m) |
+| Tokens consumed by the trainer | ~4.5B (729 steps × GBS 6144 × 1024) |
 
 ## How auto-retry's bad-node failover works (with this run as worked example)
 
@@ -147,12 +165,32 @@ resume.
 - 12:12–12:14 — same FSDP load path, this time loading
   `checkpoint-400/`. Training resumes at step 410 with loss
   matching the pre-crash trajectory (~0.79).
+- 12:37:26 — attempt-2 SIGABRTs (`x1921c5s4b0n0`, the spare we
+  just rotated in goes bad). Autoretry: `blind rotation:
+  x1921c5s4b0n0 → x1921c5s5b0n0`, `attempt 3 (sleeping 10s)`,
+  spare pool: 2.
+- 13:01:49 — attempt-3 SIGABRTs after saving `checkpoint-600/`
+  (loss 0.78, epoch 2.59). `blind rotation: x1921c5s5b0n0 →
+  x1921c5s6b0n0`, `attempt 4 (sleeping 20s)`, spare pool: 1.
+- 13:02:09 — attempt-4 launches. Resumes from `checkpoint-600/`,
+  trains the remaining 129 steps to step 729 (epoch 3.0).
+- 13:24:39 — `Training complete. Model saved to ... .` LR has
+  decayed to 0 per the schedule, `mean_token_accuracy` 0.7957.
+- 13:24:53 — autoretry: `FAILOVER STOP: success (attempt 4)`,
+  exit 0. Job ends in `state=F Exit_status=0`.
 
-The failover takes **~20 seconds** end-to-end. Most of that is
-the 5-second sleep autoretry uses to let stdout drain. The
-trainer-side init (model load + FSDP shard + checkpoint load +
-data loader setup) takes another ~3 minutes before the next
-training step lands.
+The failover takes **~20–30 seconds** end-to-end. The 5-second
+initial sleep grows to 10s/20s on subsequent attempts
+(exponential backoff). The trainer-side init (model load + FSDP
+shard + checkpoint load + data loader setup) takes another
+~3 minutes before the next training step lands. Per-attempt
+overhead: ~3.5 min wasted on the relaunch, in exchange for not
+losing the run.
+
+Across the whole 4-attempt chain in `12468437`, autoretry used 3
+of the 4 available spares. The fourth spare went untouched —
+attempt-4 didn't need to swap because it completed before hitting
+its own SIGABRT.
 
 ### Why this matters
 
@@ -287,20 +325,31 @@ the queue. Filed as a TODO in
 ## Outputs
 
 - **Checkpoint dir:** `outputs/sft/aurora2b-sophiag-tulu-mix-32n-gbs6144/`
-  - `checkpoint-100/` through `checkpoint-N/` (FSDP1 sharded, ~28 GB each)
-  - `checkpoint-100-hf/` consolidated HF format (7.5 GB safetensors
-    + config + tokenizer) for downstream `from_pretrained()` use
-- **Tokens consumed:** ~2.5B (500 steps × GBS 6144 × max_length 1024)
-  through epoch ~2.0 of 3.0
-- **Wall time used across the chain:** ~2.5 h spread across 4 PBS
-  jobs (most of which spent <30 min in a productive training
-  state due to the recurring SIGABRT)
+  - `checkpoint-{100,200,300,400,500,600,700,729}/` — FSDP1 sharded
+    snapshots (~28 GB each: `pytorch_model_fsdp_0/` distcp shards +
+    `optimizer_0/` + per-rank rng + `trainer_state.json`)
+  - `checkpoint-100-hf/` — early-milestone consolidated HF format
+    (7.5 GB safetensors + config + tokenizer), written during the
+    `12468408` debug window
+  - `checkpoint-729-hf/` — **final consolidated HF format** ready
+    for `from_pretrained()`. Written post-completion via
+    [`scripts/consolidate_sft_ckpt.sh`](../../../../rl/scripts/consolidate_sft_ckpt.sh):
+    `accelerate merge-weights` flattens the FSDP1 distcp shards
+    in `pytorch_model_fsdp_0/` into a single `model.safetensors`,
+    drops optimizer/rng state, and copies `config.json` +
+    tokenizer files from the original
+    `AuroraGPT-2B-sophiag-gs138650/` dir.
+- **Tokens consumed:** ~4.5B (729 steps × GBS 6144 × `max_length`
+  1024) — exactly 3 epochs on the materialized mix.
+- **Wall time used across the chain:** ~2 h on-node total.
+  `12468437` alone (the run that finished) was 1h39m, of which
+  ~12 min was init/overhead across the 4 attempts.
 
-The `checkpoint-100-hf/` artifact is the milestone deliverable
-for downstream GRPO work — even if every subsequent ckpt is lost
-to hardware failure, we have a 600M-token-SFT'd AuroraGPT-2B in
-HF format ready for `train_grpo.py --model_name_or_path` to pick
-up.
+The `checkpoint-729-hf/` artifact is the deliverable: a
+4.5B-token-SFT'd AuroraGPT-2B in HF format, drop-in compatible
+with `train_grpo.py --model_name_or_path`. Loss descent
+`1.16 → 0.77` and `mean_token_accuracy → 0.7957` indicate the
+instruction-following adaptation has converged on this mix.
 
 ## Files touched
 

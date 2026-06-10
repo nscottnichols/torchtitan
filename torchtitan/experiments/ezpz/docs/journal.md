@@ -76,6 +76,50 @@ Validation plan: tail `run.log` for `Continuing training from
 checkpoint, will skip to global_step 100`, then verify loss picks
 up from ~0.86 (not from cold-start 1.16).
 
+### Postscript — completion of the 32N SFT chain (2026-06-10 PM)
+
+**12468409** validated the XPU FSDP resume patch end-to-end
+(2 successful failover cycles, loss 0.86 → 0.81 across
+checkpoints 200 → 300) before tripping a different blocker:
+ezpz `launch_autoretry`'s `STUCK_PRE_TRAINING` guard was matching
+only torchtitan's `step=N` progress marker, falsely flagging
+TRL's `{'loss': '...'}` log format as "no training happened" and
+bailing on attempt-3. Patched the regex (ezpz commit
+[`6b4a00b`](https://github.com/saforem2/ezpz/commit/6b4a00b)) to
+also match the HF/TRL format, reinstalled via `uv pip install
+-e ../ezpz`, resubmitted as **12468437**.
+
+**12468437 ran to completion**: 1h39m wall time, 4 mpiexec
+attempts, 3 oneCCL `pidfd_getfd` SIGABRTs survived, 3 spare-node
+rotations (`x1921c1s0b0n0 → x1921c5s4b0n0 → x1921c5s5b0n0 →
+x1921c5s6b0n0`), and finished `Training complete.` at step 729 /
+epoch 3.0. autoretry verdict `FAILOVER STOP: success (attempt 4)`,
+exit 0. Loss `1.16 → 0.77`, `mean_token_accuracy 0.7957`, ~4.5B
+tokens consumed. Final consolidated HF artifact at
+`outputs/sft/aurora2b-sophiag-tulu-mix-32n-gbs6144/checkpoint-729-hf/`.
+
+PR review on
+[pytorch/pytorch#186940](https://github.com/pytorch/pytorch/pull/186940)
+caught a regression risk in v1 of the fix (mirroring
+`planner_helpers._get_pg_default_device` pattern breaks composite
+PGs like `cpu:gloo,cuda:nccl` because that function prefers CPU
+when both are registered). Pushed
+[`570da16048`](https://github.com/saforem2/pytorch/commit/570da16048e049eb6e9b11239e718e621d4de720)
+which switches to `torch.accelerator.current_accelerator()` —
+doesn't consult the PG backend list, no composite-PG trap. Both
+inline review threads addressed + resolved.
+
+End-of-day deliverables: SFT'd AuroraGPT-2B HF ckpt for GRPO,
+PR #186940 (v2) up for upstream review, autoretry recognizes
+both torchtitan and HF/TRL trainer markers, complete writeup at
+[`docs/experiments/agpt/sunspot/20260610-sft-2b-tulu-mix-n32-failover.md`](experiments/agpt/sunspot/20260610-sft-2b-tulu-mix-n32-failover.md).
+
+**Operational TODO:** file ALCF ticket for `x1921c1s0b0n0` —
+this host showed up as the SIGABRT-er in multiple jobs across
+the day, suggests a degraded NIC / Level Zero stack. Until it's
+pulled from the queue, autoretry's 4-spare allocation handled
+it, but every job pays a ~3min/failover overhead.
+
 ---
 
 ## 2026-06-08 (aurora pm) — 80B 4N validated end-to-end on Aurora + 256N NaN + chart wrapper
