@@ -48,7 +48,7 @@ OUT_PATH = (
 # SEQ_LEN=8192 across the board).
 # Canonical per-trajectory palette — shared across all production
 # charts (eval + training). Keep these consistent with
-# plot_production_combined.py and the per-model {2b,20b}/plot_v1_vs_v2.py
+# plot_production_combined.py and the per-model {2b,20b}/plot_eval_overview.py
 # scripts so a given trajectory always renders the same color.
 COLOR_2B_MDS      = "C0"       # matplotlib C0 (ambivalent palette first color — reads well on both light + dark bg)
 COLOR_2B_TT_256N  = "#ef5350"  # salmon-red

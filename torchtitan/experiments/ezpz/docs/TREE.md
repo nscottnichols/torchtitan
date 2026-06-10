@@ -70,7 +70,7 @@ docs/
 │       ├── 2b/README.md           ← 2B v1 vs v2 + 256N-vs-512N per-batch comparison
 │       ├── 2b/figures/            ← v1-vs-v2 plot, scaling plots
 │       ├── 20b/README.md          ← 20B v1 vs v2, steps 100-800 (ARC-Easy 0.27 → 0.44)
-│       ├── 20b/figures/           ← v1_vs_v2.png + per-task scaling plots
+│       ├── 20b/figures/           ← eval_overview.png + per-task scaling plots
 │       ├── 2b-mds/README.md       ← MDS 2B SophiaG reference scores
 │       └── 2b-mds/figures/
 │

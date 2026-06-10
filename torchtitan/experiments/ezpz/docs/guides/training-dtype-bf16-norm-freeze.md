@@ -132,13 +132,13 @@ representations that downstream tasks need. v2 descends visibly once
 it has enough tokens.
 
 - 2B v1-vs-v2 figure:
-  [`docs/evals/agpt/2b/figures/v1_vs_v2.png`](../evals/agpt/2b/figures/v1_vs_v2.png)
+  [`docs/evals/agpt/2b/figures/eval_overview.png`](../evals/agpt/2b/figures/eval_overview.png)
   ([full writeup](../evals/agpt/2b/README.md))
 - 20B v1-vs-v2 figure:
-  [`docs/evals/agpt/20b/figures/v1_vs_v2.png`](../evals/agpt/20b/figures/v1_vs_v2.png)
+  [`docs/evals/agpt/20b/figures/eval_overview.png`](../evals/agpt/20b/figures/eval_overview.png)
   ([full writeup](../evals/agpt/20b/README.md))
 
-Plot scripts: `docs/evals/agpt/{2b,20b}/plot_v1_vs_v2.py`.
+Plot scripts: `docs/evals/agpt/{2b,20b}/plot_eval_overview.py`.
 
 ### Headline result — 2B at 503B tokens
 
