@@ -245,12 +245,82 @@ def _ezpz_sft_config_cls():
     return EzpzSFTConfig
 
 
+def _patch_sharded_tensor_device_for_xpu() -> None:
+    """Patch ``ShardedTensor.device`` to be accelerator-agnostic.
+
+    Upstream torch.distributed._shard.sharded_tensor._ops.tensor_ops.tensor_device
+    hardcodes ``torch.device(torch.cuda.current_device())`` as the fallback when a
+    ShardedTensor has no local shards. On XPU systems that's a hard fail
+    (``AssertionError: Torch not compiled with CUDA enabled``).
+
+    Bug bites HF Trainer + accelerate's ``load_fsdp_model`` path: the
+    sharded state_dict built by ``_get_model_state_dict(model)`` contains
+    ShardedTensors that are queried for ``.device`` inside
+    ``_init_state_dict``, which dispatches into ``tensor_device``. Every
+    rank crashes with the same CUDA assertion before training can resume
+    from a checkpoint.
+
+    The fix swaps that fallback to use the active accelerator via
+    ``torch.accelerator.current_device_index()`` if available; otherwise
+    falls through to whichever accelerator namespace is present
+    (``torch.xpu``, ``torch.cuda``, etc.). Safe no-op on CUDA hosts.
+    """
+    try:
+        from torch.distributed._shard.sharded_tensor._ops import tensor_ops
+        from torch.distributed._shard.sharded_tensor.api import ShardedTensor
+        from torch.distributed._shard.sharded_tensor._ops.tensor_ops import (
+            _sharded_op_impl,
+        )
+    except ImportError:
+        return
+
+    import torch
+
+    def _accel_device() -> "torch.device":
+        # torch >= 2.5 exposes a device-agnostic accelerator namespace.
+        if hasattr(torch, "accelerator"):
+            try:
+                idx = torch.accelerator.current_device_index()
+                acc_type = torch.accelerator.current_accelerator().type
+                return torch.device(f"{acc_type}:{idx}")
+            except Exception:
+                pass
+        for ns in ("xpu", "cuda", "hpu", "mps"):
+            mod = getattr(torch, ns, None)
+            if mod is not None and getattr(mod, "is_available", lambda: False)():
+                return torch.device(f"{ns}:{mod.current_device()}")
+        return torch.device("cpu")
+
+    @_sharded_op_impl(torch.Tensor.device.__get__)
+    def _ezpz_tensor_device(types, args=(), kwargs=None, pg=None):
+        self_st = args[0]
+        if not isinstance(self_st, ShardedTensor):
+            raise TypeError("input needs to be a ShardedTensor")
+        if self_st._local_shards:
+            return self_st._local_shards[0].tensor.device
+        if pg and pg._get_backend_name() == "gloo":
+            return torch.device("cpu")
+        return _accel_device()
+
+    # _sharded_op_impl registers the new impl into _SHARDED_OPS, replacing
+    # the hardcoded-CUDA one. Sanity-log so we have a paper trail.
+    log.info(
+        "[ezpz] patched ShardedTensor.device dispatch to use "
+        f"{_accel_device()} fallback (was hardcoded CUDA)"
+    )
+
+
 def main() -> None:
     from trl import SFTTrainer
     from transformers import AutoTokenizer, HfArgumentParser
 
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("huggingface_hub").setLevel(logging.WARNING)
+
+    # Workaround for upstream torch.distributed bug where ShardedTensor.device
+    # hardcodes CUDA in the no-local-shards fallback. Required for HF Trainer
+    # FSDP checkpoint resume to succeed on XPU. See helper docstring.
+    _patch_sharded_tensor_device_for_xpu()
 
     EzpzSFTConfig = _ezpz_sft_config_cls()
     parser = HfArgumentParser((EzpzSFTArgs, EzpzSFTConfig))
