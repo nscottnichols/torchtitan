@@ -8,7 +8,7 @@ Running log of what's happening, session by session. Most recent first.
 
 > **Canonical writeup** (with the full failover-cycle worked
 > example and run table):
-> [`docs/experiments/agpt/sunspot/20260610-sft-2b-tulu-mix-n32-failover.md`](experiments/agpt/sunspot/20260610-sft-2b-tulu-mix-n32-failover.md).
+> [`docs/production/sft/aurora2b/tulu_math_uc_mix/`](production/sft/aurora2b/tulu_math_uc_mix/README.md).
 > This journal entry is the rolling debug log; the report is the
 > end-of-day cleanup.
 
@@ -112,7 +112,7 @@ inline review threads addressed + resolved.
 End-of-day deliverables: SFT'd AuroraGPT-2B HF ckpt for GRPO,
 PR #186940 (v2) up for upstream review, autoretry recognizes
 both torchtitan and HF/TRL trainer markers, complete writeup at
-[`docs/experiments/agpt/sunspot/20260610-sft-2b-tulu-mix-n32-failover.md`](experiments/agpt/sunspot/20260610-sft-2b-tulu-mix-n32-failover.md).
+[`docs/production/sft/aurora2b/tulu_math_uc_mix/`](production/sft/aurora2b/tulu_math_uc_mix/README.md).
 
 **Operational TODO:** file ALCF ticket for `x1921c1s0b0n0` —
 this host showed up as the SIGABRT-er in multiple jobs across
