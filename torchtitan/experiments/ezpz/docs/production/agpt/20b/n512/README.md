@@ -74,12 +74,13 @@
 | [`8516701`](#log-8516701) | 2026-06-02 | 12h | 4,400 → **4,501** (in-RAM) | 2.51 → 2.51 | ~330 | ~16.5% | **SYNC mode.** `afterany` continuation. Trainer advanced to step 4,501 by 22:39, then PBS killed mid-checkpoint-save at 22:38:49 → left **empty 4-KB `step-4500/` dir** (no `.distcp` shards). Failover wrapper retried (exit 127) without recovery. **No new ckpt persisted past step-4,400.** See [Recovery](#recovery). |
 | [`8521624`](#log-8521624) | 2026-06-04 | 12h | 4,400 → **4,520** (in-RAM) | 2.51 → 2.51 | ~225 | ~11.2% | **SYNC mode.** `afterany` continuation. Ran 11:04 → 15:58 (4h54m), Exit_status 143 (SIGTERM). Trainer advanced to step 4,520 in-RAM but the only ckpt-dir candidate (step-4,500) was the empty placeholder from 8516701 — no shards landed in this run either. **No new ckpt persisted past step-4,400.** |
 | [`8521625`](#log-8521625) | 2026-06-06 | 12h | 4,400 → **4,600** (in-RAM) | 2.51 → 2.50 | ~341 | ~17.0% | **SYNC mode.** `afterany` continuation, ran 02:39 → 13:14 (10h34m), Exit_status 143. Trainer reached step 4,600 in-RAM. No new persisted ckpt — empty `step-4500/` placeholder still in the way. **No new ckpt persisted past step-4,400.** |
+| **[`8521628`](#log-8521628)** | 2026-06-10 | 4h | 4,400 → **4,500** | 2.51 → ~2.51 | — | — | **🏁 SYNC mode.** `afterany` continuation, ran 01:27 → 05:32 (4h04m), Exit_status 143. **step-4,500 persisted cleanly** (the renamed `step-4500.bak-empty-20260606-170503/` placeholder no longer blocked the save). **First new persisted ckpt in 12 days** (since 2026-05-29's step-4,400). After the step-4,500 save, failover attempt 4 hit the same intermittent `MemoryError: std::bad_alloc` at `set_determinism` rank 3,195 — wrapper exhausted 3 retries (exit 143). +1 ckpt persisted. 8521632 (cont12) Q'd to resume from step-4,500. |
 
-**Latest checkpoint:** step-4,400 (8509393, 2026-05-29 11:43, sync mode, 244 GB, 6,144 valid `.distcp` shards)
+**Latest checkpoint:** step-4,500 (8521628, 2026-06-10, sync mode, persisted cleanly after the step-4500 placeholder was renamed on 2026-06-06)
 
-**Cumulative steps:** 4,400
+**Cumulative steps:** 4,500
 
-**Tokens consumed:** 4,400 × 12,288 × 8,192 = **442.9B tokens** (9.5% of 4.67T target)
+**Tokens consumed:** 4,500 × 12,288 × 8,192 = **453.0B tokens** (9.7% of 4.67T target)
 
 ### Recovery
 

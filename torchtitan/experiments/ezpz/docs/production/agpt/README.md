@@ -19,13 +19,14 @@ via `scripts/update_all_charts.sh`. Per-model overlays:
 included (no overlay until production ckpts land — see
 [80b/](80b/README.md#all-80b-chains-overlaid)).
 
-## Headline (2026-06-09)
+## Headline (2026-06-10)
 
-- **2B 256N async chain** at step **69,900** (loss ~2.67, ~3.52T tokens, **75.4%** of target) — **+14,900 steps since 2026-05-30 across 5 dispatches**. Last clean run was [8519833](2b/n256/README.md) walltime-finished 2026-06-06 18:07 at step-69,900. **Step-69900 eval**: HSn 0.5552, ARC-E 0.5939, ARC-C 0.3294, **Wino 0.5627 (best yet)**. Cont6 (8521626) Q for 256N slot, cont7 (8521630) H'd behind it.
-- **2B 512N sync chain** stalled at step **30,500** (loss **2.71**, ~3.07T tokens, **65.7%** of target) — **zero progress since 2026-05-30** due to Aurora `small` queue contention. Cont9 [8521627](2b/n512/README.md) ran briefly 2026-06-07 21:12 but died at ~8 min when 1 of 522 nodes failed yeet-env rsync (`Connection reset by 10.112.164.235 port 22`). Mitigation: ezpz [PR #160](https://github.com/saforem2/ezpz/pull/160) adds per-target rsync retries; not yet deployed to v2 prod venv pending review. Cont10 (8521631) Q'd.
-- **20B 512N sync chain** stalled at step **4,400** (loss **3.46**, ~442.9B tokens, **9.5%** of target) — **zero progress since 2026-05-29** (same `small` queue contention). [8516701](20b/n512/README.md) ran 2026-06-02 and saved metadata for step-4500 but PBS killed it mid-save leaving an empty placeholder (4 KB, 0 .distcp shards); renamed to `step-4500.bak-empty-20260606-170503/` on 2026-06-06 so resume picks step-4400 cleanly. Cont (8521628) Q'd, +2 cont (8521632) H'd.
-- **🏁 20B 512N still leads 2B 256N per token on most benchmarks** (step-4400 ARC-Easy 0.6641, HellaSwag `acc_norm` 0.6346 with only 442B tokens, vs 2B 256N at step-69,900 with 3.52T tokens scoring HellaSwag 0.5552 — 20B's per-token efficiency advantage is dramatic at this token count).
-- **80B 4N production stack validated end-to-end on Aurora on 2026-06-08** — [interactive smoke r7](80b/n4/README.md) hit step-10 sync ckpt save cleanly (904 GB, 48 distcp shards, .metadata — matches Sunspot 12468197 reference exactly). Required clearing 5 stacked bugs (repo 229 commits behind, venv-symlink, blendcorpus barrier deadlock, missing FLAT, env block). **256N attempt 8530891** trained but **loss went NaN at step 2** — open hypotheses on bf16 overflow / TP=2 loss-reduction / fp32 second-moment. LR=1e-7 retry (8531721) hit `std::bad_alloc` at model construction. **256N validation still pending.**
+- **🏁 2B 256N async chain ADVANCING NOW** at step **70,400+** (loss ~2.67, ~3.544T tokens, **75.9%** of target). [8521626](2b/n256/README.md#log-8521626) cont9 is **R since 2026-06-10 06:35** after 4 days of queue contention; +5 ckpts persisted so far (step-70,000 → step-70,400). On pace for ~+700 more steps over the remaining ~10h walltime. **+200 step advance since 2026-06-06.**
+- **2B 512N sync chain** still stalled at step **30,500** (loss **2.71**, ~3.07T tokens, **65.7%** of target) — no advance since 2026-05-30. Cont10 [8521631](2b/n512/README.md) still Q in `small`; cont11 [8534294](2b/n512/README.md) H'd behind it.
+- **🏁 20B 512N sync chain ADVANCED to step 4,500** (loss ~2.51, ~453.0B tokens, **9.7%** of target). [8521628](20b/n512/README.md#log-8521628) ran 2026-06-10 01:27 → 05:32 (4h04m, exit 143) and **persisted the first new ckpt in 12 days** (since 2026-05-29 step-4,400). The renamed `step-4500.bak-empty-20260606-170503/` placeholder no longer blocked the save. After step-4,500 the failover wrapper hit the documented intermittent `MemoryError: std::bad_alloc` at `set_determinism` rank 3,195 (same mode as 8466848, 8514610) and exhausted 3 retries. Cont12 (8521632) Q'd to resume from step-4,500; cont13 (8534295) H'd behind it.
+- **🏁 20B 512N still leads 2B 256N per token** (step-4,500 ARC-Easy 0.6641, HellaSwag `acc_norm` 0.6346 with only ~453B tokens, vs 2B 256N at step-69,900 with 3.52T tokens scoring HellaSwag 0.5552 — 20B's per-token efficiency advantage is dramatic at this token count).
+- **80B 4N production stack validated end-to-end on Aurora on 2026-06-08** — [interactive smoke r7](80b/n4/README.md) hit step-10 sync ckpt save cleanly (904 GB, 48 distcp shards, .metadata — matches Sunspot 12468197 reference exactly). **256N attempt 8530891** trained but **loss went NaN at step 2** — open hypotheses on bf16 overflow / TP=2 loss-reduction / fp32 second-moment. LR=1e-7 retry (8531721) hit `std::bad_alloc` at model construction. **256N validation still pending.**
+- **Eval task list expanded** — added piqa, openbookqa, boolq to the default 7-task set; **117 ckpt backfill in flight** (2B 512N done 27/27, 2B 256N 32/55, 20B 512N 16/36) re-evaluating all v2 ckpts on `capacity`. New panels render automatically once results land.
 
 ## Single canonical chain per model
 
@@ -75,10 +76,11 @@ extensions.
 | [`8516364`](2b/n256/README.md#log-8516364) | 2026-05-30 | 12h | ~59,700–~64,900 | ~2.67 → ~2.67 | Done (walltime). |
 | [`8516365`](2b/n256/README.md#log-8516365) | 2026-06-01 | 12h | — | — | **Failed** (pals-RPC init fail, no ckpts). |
 | **[`8519833`](2b/n256/README.md#log-8519833)** | 2026-06-06 | 12h | 69,300 → **69,900** | ~2.67 | Done (walltime exit -29). +6 ckpts. |
-| `8521626` | 2026-06-06 | 12h | (cont6) | — | **Queued** in `small` (`afterany:8519833`). |
-| `8521630` | 2026-06-06 | 12h | (cont7) | — | Held (`afterany:8521626`). |
+| **[`8521626`](2b/n256/README.md#log-8521626)** | 2026-06-10 | R 12h | 69,900 → **70,400+** | ~2.67 | **🏁 R since 06:35.** +5 ckpts persisted (step-70,000 → step-70,400). On pace for ETA step-71,100. |
+| `8521630` | 2026-06-06 | 12h | (cont10) | — | Held (`afterany:8521626`). |
+| `8534293` | 2026-06-10 | 12h | (cont11) | — | Held (`afterany:8521630`). |
 
-**Latest cumulative (256N)**: step **69,900** · loss **2.67** · **~3.52T tokens** (75.4% of 4.67T target). Step-69900 evals:
+**Latest cumulative (256N)**: step **70,400+** · loss **2.67** · **~3.544T tokens** (75.9% of 4.67T target). Step-69900 evals:
 HSn **0.5552**, ARC-E **0.5939**, ARC-C **0.3294**, **Wino 0.5627 (best yet)**. Per-task plateau on HSn/ARC since step-64K
 (~+1pp swings); Wino has the clearest monotonic trend.
 
@@ -104,11 +106,12 @@ HSn **0.5552**, ARC-E **0.5939**, ARC-C **0.3294**, **Wino 0.5627 (best yet)**. 
 | [`8516701`](20b/n512/README.md#log-8516701) | 2026-06-02 | — | 4,400+ | — | **Killed mid-save 22:38** — `step-4500/` placeholder dir created (4 KB, 0 .distcp shards). Renamed to `.bak-empty-20260606-170503/` on 2026-06-06 to unblock resume. |
 | [`8521624`](20b/n512/README.md#log-8521624) | 2026-06-04 | 5h | — | — | **Failed** (Exit 143 mid-run). |
 | [`8521625`](20b/n512/README.md#log-8521625) | 2026-06-06 | 11h | 4,400 → 4,600 (in-RAM) | 2.51 → 2.50 | **Trained to step 4,600 in-RAM but step-4500 placeholder blocked persistence; no new ckpt past step-4,400.** |
-| (chain stalled in queue 2026-06-06 → 2026-06-09) | — | — | — | — | — |
-| `8521628` | 2026-06-09 | 12h | (cont) | — | **Queued** in `small`. |
-| `8521632` | 2026-06-09 | 12h | (cont) | — | Held (`afterany:8521628`). |
+| (chain stalled in queue 2026-06-06 → 2026-06-10) | — | — | — | — | — |
+| **[`8521628`](20b/n512/README.md#log-8521628)** | 2026-06-10 | 4h | 4,400 → **4,500** | ~2.51 | **🏁 +1 ckpt persisted (first new in 12 days).** Ran 01:27 → 05:32, exit 143. After step-4,500 save, failover wrapper hit intermittent `set_determinism std::bad_alloc` and exhausted 3 retries. |
+| `8521632` | 2026-06-10 | 12h | (cont12) | — | **Queued** (`afterany:8521628`). |
+| `8534295` | 2026-06-10 | 12h | (cont13) | — | Held (`afterany:8521632`). |
 
-**Latest cumulative**: step **4,400** · loss **3.46** (per last walltime-clean run 8509393) · **~442.9B tokens** (9.5% of 4.67T target).
+**Latest cumulative**: step **4,500** · loss **~2.51** · **~453.0B tokens** (9.7% of 4.67T target).
 
 **🏁 Eval headline (35+ ckpts, step-900 → step-4,400)**: ARC-Easy `acc` 0.463 → **0.664** (+20pp), HellaSwag `acc_norm`
 0.296 → **0.635** (+34pp), ARC-C `acc_norm` 0.224 → **0.380** (+16pp), Winogrande 0.493 → 0.586 (+9pp).

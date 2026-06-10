@@ -5,12 +5,16 @@
 
 ## v2 — 2B @ 256N — SophiaG LR=2.28e-5 (fp32 master)
 
-> Last updated: 2026-06-09
+> Last updated: 2026-06-10
 >
-> Status: chain at step **69,900** as of 2026-06-06 18:07 (last R was
-> `8519833` walltime-exit clean). Chain advanced **+21,600 steps**
-> since the last README refresh (48,300 → 69,900), persisting **216
-> ckpts** at 100-step intervals. Five dispatches landed across the
+> Status: chain at step **70,400** (and counting — 8521626 cont9 is
+> R since 2026-06-10 06:35, walltime 12h, +5 ckpts persisted so far
+> at 256N production speed of ~9 min between 100-step ckpts). Last
+> walltime-clean run was `8519833` 2026-06-06 18:07 at step-69,900;
+> the chain then sat 4 days in Aurora `small` queue contention
+> before 8521626 picked up early morning 2026-06-10. Chain has now
+> advanced **+22,100 steps** since the last README refresh
+> (48,300 → 70,400+), persisting **221+ ckpts** at 100-step intervals. Five dispatches landed across the
 > 5/28 → 6/6 window: `8508977` (cont4, 5/28 pals-RPC infra failure,
 > persisted ~5 ckpts step-53800..54200 before bailing), `8513544`
 > (cont5, 5/30 walltime to step-59700), `8516364` (cont6, 6/1
@@ -77,14 +81,15 @@
 | [`8516364`](#log-8516364) | 2026-06-01 | 12h | 59,701 → **64,922** (last log) | ~1,000 | ~3.8% | Done (walltime, exit -29: `walltime 43213 exceeded limit 43200`). Async mode. `afterany` continuation of 8513544 (05:37 → 17:20). Persisted **~52 ckpts** step-59800..step-64900, ended at loss **2.666**. |
 | [`8516365`](#log-8516365) | 2026-06-04 | <1h | n/a (failed at init) | — | — | **pals-RPC infra failure** at init (same `Couldn't forward RPC launch` + rank death signals 15). No steps run, no ckpts persisted. `afterany` continuation of 8516364 (mtime 6/4 11:02). |
 | [`8519833`](#log-8519833) | 2026-06-06 | 11h | 64,901 → **69,914** (last log) | ~1,000 | ~3.8% | Done (walltime, exit -29: `walltime 43209 exceeded limit 43200`). Async mode. `afterany` continuation of 8516365 (07:05 → 18:08; last ckpt step-69900 at 18:07:17). Persisted **~50 ckpts** step-65000..step-69900, ended at loss **2.659**. **Clean walltime exit**, no infra issues. |
+| **[`8521626`](#log-8521626)** | 2026-06-10 | R 12h | 69,900 → **70,400+** | — | — | **R since 06:35.** Async mode. `afterany` continuation of 8519833 — finally landed after 4 days of queue contention. step-70000 ckpt persisted at 06:55 (first new persisted ckpt in 4 days); ckpts every 100 steps since (70,100 → 70,200 → 70,300 → 70,400 as of 07:46). On pace for ~+700 more steps over remaining walltime → ETA step-71,100. |
 
-**Latest checkpoint:** step-69900 (8519833 last persisted, 2026-06-06 18:07:17)
+**Latest checkpoint:** step-70,400 (8521626 R, 2026-06-10 07:46; +5 ckpts since this run started)
 
-**Cumulative steps:** 69,900 (as of 2026-06-06 18:07; chain idle pending next 256N slot for `8521626`)
+**Cumulative steps:** 70,400+ (8521626 R, advancing ~100 steps every ~9 min)
 
-**Tokens consumed:** 69,900 × 6,144 × 8,192 = **3.52T tokens** (75.4% of 4.67T target)
+**Tokens consumed:** 70,400 × 6,144 × 8,192 = **3.544T tokens** (**75.9%** of 4.67T target)
 
-**Loss:** ~2.66 (step-69900 log range 2.659-2.667)
+**Loss:** ~2.66 (no new eval yet on step-70000+ ckpts)
 
 > **Note:** 2026-05-24 → 2026-06-06 chain has now advanced step 25,500
 > → **69,900** (+44,400 steps) across 10 dispatches; **~395 ckpts
