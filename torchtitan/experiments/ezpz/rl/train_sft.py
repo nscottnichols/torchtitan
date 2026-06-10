@@ -192,6 +192,20 @@ def _ezpz_sft_config_cls():
         # with assistant_only_loss.
         packing: bool = True
 
+        # TRL tokenizes the dataset via dataset.map(..., num_proc=...) inside
+        # PartialState().main_process_first() — so rank 0 tokenizes while
+        # all other ranks wait at a dist.barrier. With num_proc=None
+        # (TRL/HF default) that's single-threaded on rank 0, ~500
+        # examples/sec on Sapphire Rapids. At GBS=6144 and a 2.6M-example
+        # mix this takes ~90 min, blowing past the XPU oneCCL barrier
+        # ceiling (~15 min) and crashing every worker rank with
+        # `atl_comm->wait fails with status: 1` (job 12468400 died here
+        # at 17% tokenize / 23 min wall). 32 procs caps rank-0 tokenize
+        # at ~3-4 min on a 104-core SPR node, well under the barrier
+        # ceiling. Sapphire Rapids has the cores; rank 0 is alone in its
+        # process so num_proc=32 has bandwidth.
+        dataset_num_proc: Optional[int] = 32
+
         def __post_init__(self):
             # Same FSDP + gradient_checkpointing migration as
             # EzpzGRPOConfig: when --fsdp is set, migrate
