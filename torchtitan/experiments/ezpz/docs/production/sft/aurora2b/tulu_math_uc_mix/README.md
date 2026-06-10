@@ -91,11 +91,14 @@ alignment-tax pattern — SFT on chat data shouldn't add base-LM
 knowledge, and the slight regressions are within the per-task noise
 floor for a 2B model.
 
-The actual SFT win lives in different evals:
+The actual SFT win lives in different evals — both validated:
 
-- **`evals/ifeval.md`** — instruction-following metric (lm-eval
-  `--tasks ifeval`). A base LM scores near-zero; an SFT'd LM should
-  jump substantially. Pending.
+- **[`evals/ifeval.md`](evals/ifeval.md) — done; +8pp on
+  instruction-following.** Headline `prompt_level_strict_acc`
+  moved from 0.16 (baseline) → **0.24** (SFT-step729), a +48%
+  relative gain at ~4-5 sigma above noise. Confirms the
+  `tulu-3-sft-mixture` (65% of the mix) actually taught the
+  model to follow structural directives.
 - **[`evals/grpo-smoke.md`](evals/grpo-smoke.md) — done; 8×
   speedup over baseline.** The SFT'd model is at 28% `sum_digits`
   accuracy at GRPO step 1 (cold) vs the baseline's 0%, converges to
