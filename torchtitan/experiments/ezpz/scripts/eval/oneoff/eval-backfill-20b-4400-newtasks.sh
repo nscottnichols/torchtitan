@@ -3,23 +3,19 @@
 #PBS -l walltime=04:00:00
 #PBS -l filesystems=home:flare
 #PBS -q capacity
+#PBS -l select=1
 #PBS -j oe
 
 # One-off backfill: re-run 20B step-4400 eval with the new 7-task set
 # (existing results.json was moved aside to .results.4task.json).
+#
+# Delegates to the canonical eval-20b-v2.sh which already handles the
+# frameworks/2025.3.1 + tt-lm-eval venv + XPU monkey-patch + HF backend.
 
-module load oneapi/release/2025.3.1 hdf5 pti-gpu
-export ZE_FLAT_DEVICE_HIERARCHY=FLAT
-export TORCH_CPP_LOG_LEVEL=ERROR
+cd "${PBS_O_WORKDIR:-/lus/flare/projects/AuroraGPT/foremans/projects/saforem2/torchtitan-ezpz}"
 
-cd "${PBS_O_WORKDIR:-$(pwd)}"
-source .venv/bin/activate
-
-bash torchtitan/experiments/ezpz/scripts/eval/convert_and_eval.sh \
-    --model 20b \
-    --step 4400 \
-    --tasks "hellaswag,arc_easy,arc_challenge,winogrande,piqa,openbookqa,boolq" \
-    --eval-only \
-    --ckpt-name agpt-20b-sophiag-olmo-mix-1124-n512-gbs12288 \
-    --label v2-512n \
-    --repo-root /flare/AuroraGPT/foremans/runs/agpt-20b-v2/torchtitan-ezpz
+STEPS=4400 \
+CKPT_NAME=agpt-20b-sophiag-olmo-mix-1124-n512-gbs12288 \
+LABEL=512n \
+TASKS="hellaswag,arc_easy,arc_challenge,winogrande,piqa,openbookqa,boolq" \
+bash torchtitan/experiments/ezpz/scripts/eval/eval-20b-v2.sh
