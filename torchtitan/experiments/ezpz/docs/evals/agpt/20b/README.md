@@ -29,7 +29,7 @@
 | Eval backend | lm-eval 0.4.10, HF backend, XPU, dtype=bfloat16 |
 | Checkpoints | DCP → HF safetensors via `eval/convert_to_hf.py` |
 
-## v1 vs v2 — benchmark accuracy
+## Benchmark accuracy overview
 
 Four trajectories per panel:
 
@@ -47,10 +47,10 @@ band on every benchmark.
 Re-render with new v2 ckpts as they become available:
 
 ```bash
-python3 torchtitan/experiments/ezpz/docs/evals/agpt/20b/plot_v1_vs_v2.py
+python3 torchtitan/experiments/ezpz/docs/evals/agpt/20b/plot_eval_overview.py
 ```
 
-![v1 vs v2 vs MDS — 20B benchmark accuracy](figures/v1_vs_v2.svg)
+![20B benchmark accuracy overview](figures/eval_overview.svg)
 
 ## 🏁 Headline finding (2026-06-10)
 
@@ -88,7 +88,7 @@ of optimizer instability) is the strongest live signal yet that the
 fp32-master + sync-mode stack is the right operational combination for
 20B at scale.
 
-## v1 vs v2 — full sweep (canonical table)
+## Full sweep (canonical table)
 
 Single canonical table covering **all** evaluated 20B checkpoints
 from disk. Tokens computed as `step × GBS × seq_len`:
