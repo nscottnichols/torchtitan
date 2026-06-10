@@ -4,6 +4,69 @@ Running log of what's happening, session by session. Most recent first.
 
 ---
 
+## 2026-06-10 (sunspot) — 32N SFT auto-resume blocker: torch ShardedTensor.device hardcodes CUDA
+
+Continuing the 32N SFT push. Job 12468404 (the first 32N run with
+auto-retry's bad-node failover) trained cleanly for 140 steps with
+loss 1.16 → 0.86 and token_acc 0.73 → 0.78 before a worker rank
+SIGABRT'd from `ccl::v1::exception`; auto-retry swapped in a spare
+and relaunched. But the relaunch went back to step 0 instead of
+resuming from `checkpoint-100/` — the second run wasn't passing
+`--resume_from_checkpoint`.
+
+Patched the submit script to pass `--resume_from_checkpoint
+"${CKPT_DIR}"` (HF Trainer auto-detects the latest `checkpoint-N/`
+subdir in the dir) and added a small coercion shim in
+`train_sft.py:main()` to handle the case where the dir is a freshly-
+created empty dir (HF errors out without it). Resubmitted as
+12468408.
+
+12468408 crashed differently: all 384 ranks tracebacked with
+**`AssertionError: Torch not compiled with CUDA enabled`** during HF
+Trainer's FSDP checkpoint load. Tracked it to
+`torch/distributed/_shard/sharded_tensor/_ops/tensor_ops.py:54`:
+
+```python
+@_sharded_op_impl(torch.Tensor.device.__get__)
+def tensor_device(types, args=(), kwargs=None, pg=None):
+    ...
+    else:
+        dev = torch.device(torch.cuda.current_device())   # <-- BUG on XPU
+```
+
+Upstream hardcodes CUDA as the no-local-shards fallback. The sibling
+`tensor_func`/`dtensor_func` in `planner_helpers.py` already do the
+device-agnostic thing via `_get_pg_default_device().type` +
+`_get_device_module(...)`; only the ShardedTensor dispatch is broken.
+
+Local workaround: added `_patch_sharded_tensor_device_for_xpu()` to
+`train_sft.py` that re-registers the dispatch via `_sharded_op_impl`
+with an XPU-aware fallback (tries `torch.accelerator.current_device_index()`
+first, then falls back to whichever accelerator namespace is
+available). Called once at top of `main()`. Verified the patch
+correctly replaces the `_SHARDED_OPS` entry via a smoke import on
+the login node.
+
+Filed full writeup at
+[`docs/upstream-issues/sharded_tensor_device_cuda_hardcode.md`](upstream-issues/sharded_tensor_device_cuda_hardcode.md)
+with the rank-0 traceback and a proposed upstream fix. Not filed
+upstream yet — should do that after we confirm the local workaround
+actually fixes resume in production.
+
+While the patch was being written, also consolidated `checkpoint-100`
+into a flat HF format at `checkpoint-100-hf/` (7.94 GB safetensors).
+This gives us a usable artifact independent of the FSDP-resume
+question — we now have a 600M-token SFT'd AuroraGPT-2B-tulu-mix
+checkpoint we can hand off to GRPO regardless of whether resume
+ever works.
+
+Resubmitted as **12468409** with the patch. Currently queued.
+Validation plan: tail `run.log` for `Continuing training from
+checkpoint, will skip to global_step 100`, then verify loss picks
+up from ~0.86 (not from cold-start 1.16).
+
+---
+
 ## 2026-06-08 (aurora pm) — 80B 4N validated end-to-end on Aurora + 256N NaN + chart wrapper
 
 Big session covering several threads:
