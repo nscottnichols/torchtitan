@@ -44,11 +44,21 @@ git log -1 --oneline -- torchtitan/experiments/ezpz/rl/datasets_sft.py \
     torchtitan/experiments/ezpz/rl/train_sft.py 2>&1 | tee -a "${LOG_DIR}/run.log"
 echo "" | tee -a "${LOG_DIR}/run.log"
 
+# Use the mix-spec syntax (not tulu_math_uc_mix) to swap
+# OpenMathInstruct-2 → metamathqa: 14M rows → 395k rows, eliminates
+# the rank-0 interleave-setup bottleneck. Same math distribution
+# (both are GSM8K+MATH-derived).
+#
+# --max_train_samples 50000 truncates after the build so tokenize+pack
+# fits in <2 min instead of ~67 min on the full mix. Smoke covers all
+# the real shapes (multi-turn tulu, single-turn math, multi-turn
+# ultrachat) without the wall-clock cost.
 ezpz launch python3 -m torchtitan.experiments.ezpz.rl.train_sft \
-    --sft_dataset tulu_math_uc_mix \
+    --sft_dataset 'tulu-3-sft-mixture:0.65,metamathqa:0.15,ultrachat-200k:0.20' \
     --model_name_or_path AuroraGPT-2B-sophiag-gs138650 \
     --output_dir "${CKPT_DIR}" \
     --max_steps 10 \
+    --max_train_samples 50000 \
     --learning_rate 2e-5 \
     --per_device_train_batch_size 1 \
     --gradient_accumulation_steps 1 \
