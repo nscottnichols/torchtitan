@@ -403,13 +403,42 @@ def main() -> None:
     )
 
     log.info(f"[rank {rank}] Starting SFT training...")
-    # Pass resume_from_checkpoint EXPLICITLY. HF Trainer's documented
-    # behavior is to pick it up from args automatically when train() is
-    # called with no arg, but with FSDP-sharded checkpoints the auto-
-    # detect can silently fall through to fresh-from-scratch training
-    # without raising. Explicit pass-through forces the FSDP-sharded
-    # checkpoint load path (12468222 lost its resume to this exact bug).
-    trainer.train(resume_from_checkpoint=config.resume_from_checkpoint or None)
+    # Resolve resume_from_checkpoint into the shape HF Trainer wants:
+    #   None     → fresh training
+    #   True     → auto-find latest checkpoint-N in args.output_dir
+    #   <path>   → specific checkpoint dir
+    # CLI users typically pass `--resume_from_checkpoint <output_dir>`
+    # expecting auto-detect behavior, but HF treats that as "this is
+    # the EXACT checkpoint dir" and tries to load <output_dir>/trainer_state.json
+    # — which only exists inside <output_dir>/checkpoint-N/ subdirs.
+    # 12468407 died exactly here with FileNotFoundError on
+    # `outputs/.../trainer_state.json`. Detect the
+    # output-dir-with-checkpoint-N-subdirs case and coerce to `True`
+    # so HF's auto-detect kicks in. Also tolerate the dir being empty
+    # (fresh run): coerce to None.
+    rfc = config.resume_from_checkpoint
+    if rfc and os.path.isdir(rfc):
+        has_state = os.path.isfile(os.path.join(rfc, "trainer_state.json"))
+        has_ckpt_subdirs = any(
+            d.startswith("checkpoint-") and os.path.isdir(os.path.join(rfc, d))
+            for d in os.listdir(rfc)
+        )
+        if has_state:
+            # User pointed directly at a checkpoint-N dir — pass through.
+            pass
+        elif has_ckpt_subdirs:
+            log.info(
+                f"[rank {rank}] resume_from_checkpoint={rfc!r} contains "
+                f"checkpoint-N subdirs; coercing to True for HF auto-detect"
+            )
+            rfc = True
+        else:
+            log.info(
+                f"[rank {rank}] resume_from_checkpoint={rfc!r} is an empty "
+                f"output dir; coercing to None (fresh training)"
+            )
+            rfc = None
+    trainer.train(resume_from_checkpoint=rfc or None)
     log.info(f"[rank {rank}] Training complete.")
 
     if rank == 0 and not ezpz_args.no_save:
