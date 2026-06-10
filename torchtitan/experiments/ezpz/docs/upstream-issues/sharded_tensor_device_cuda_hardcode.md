@@ -96,10 +96,10 @@ to `xpu` on XPU systems via the registered backend. Only the
 
 ## Proposed upstream fix
 
-Replace the hardcoded fallback with a device-agnostic resolution that
-mirrors what `planner_helpers.py:_init_state_dict` already does
-(`_get_pg_default_device(pg).type` → `_get_device_module(...)`).
-`_get_device_module` lives in `torch._utils`:
+Use `torch.accelerator.current_accelerator()` (torch ≥ 2.5) as the
+source of truth for "which device should new tensors land on for
+this process," with a fallback for older torch builds that walks
+`pg._device_types` directly and prefers any non-CPU type:
 
 ```python
 @_sharded_op_impl(torch.Tensor.device.__get__)
@@ -111,15 +111,39 @@ def tensor_device(types, args=(), kwargs=None, pg=None):
         return self_st._local_shards[0].tensor.device
     if pg and pg._get_backend_name() == "gloo":
         return torch.device("cpu")
-    # Device-agnostic fallback (works on cuda / xpu / hpu / mps).
-    from torch._utils import _get_device_module
-    from torch.distributed.distributed_c10d import _get_pg_default_device
-    device_type = _get_pg_default_device(pg).type
-    return torch.device(_get_device_module(device_type).current_device())
+    try:
+        acc = torch.accelerator.current_accelerator()
+        if acc is not None:
+            return torch.device(
+                f"{acc.type}:{torch.accelerator.current_device_index()}"
+            )
+        return torch.device("cpu")
+    except (AttributeError, RuntimeError):
+        non_cpu = [
+            d for d in (pg._device_types if pg is not None else ())
+            if d.type != "cpu"
+        ]
+        if non_cpu:
+            from torch._utils import _get_device_module
+            return torch.device(
+                f"{non_cpu[0].type}:"
+                f"{_get_device_module(non_cpu[0].type).current_device()}"
+            )
+        return torch.device("cpu")
 ```
 
-On torch >= 2.5 the `torch.accelerator` namespace gives an equivalent
-device-agnostic resolution without reaching into private `_utils`.
+**Important** — the obvious first cut (mirror what
+`planner_helpers._init_state_dict` does for plain tensors and DTensors,
+via `_get_pg_default_device(pg).type` → `_get_device_module(...)`) is
+wrong: for **composite PGs** like `cpu:gloo,cuda:nccl` (the canonical
+setup the dist-checkpoint docs use), `_get_pg_default_device` returns
+`cpu` whenever CPU is one of the registered backends. So a CUDA
+ShardedTensor with empty local shards would silently report
+`st.device == cpu` after that "fix," breaking pre-existing CUDA
+behavior. The `torch.accelerator` path avoids this trap because it
+doesn't consult the PG's backend list at all. Codex review on
+[pytorch/pytorch#186940](https://github.com/pytorch/pytorch/pull/186940)
+caught this — see comment thread for the v1→v2 evolution.
 
 ## Local workaround (ezpz)
 
