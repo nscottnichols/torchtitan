@@ -6,6 +6,13 @@ Running log of what's happening, session by session. Most recent first.
 
 ## 2026-06-10 (sunspot) — 32N SFT auto-resume blocker: torch ShardedTensor.device hardcodes CUDA
 
+> **Canonical writeup** (with the full failover-cycle worked
+> example and run table):
+> [`docs/experiments/agpt/sunspot/20260610-sft-2b-tulu-mix-n32-failover.md`](experiments/agpt/sunspot/20260610-sft-2b-tulu-mix-n32-failover.md).
+> This journal entry is the rolling debug log; the report is the
+> end-of-day cleanup.
+
+
 Continuing the 32N SFT push. Job 12468404 (the first 32N run with
 auto-retry's bad-node failover) trained cleanly for 140 steps with
 loss 1.16 → 0.86 and token_acc 0.73 → 0.78 before a worker rank
