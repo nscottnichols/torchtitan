@@ -51,7 +51,11 @@ Filed full writeup at
 [`docs/upstream-issues/sharded_tensor_device_cuda_hardcode.md`](upstream-issues/sharded_tensor_device_cuda_hardcode.md)
 with the rank-0 traceback and a proposed upstream fix, then filed
 upstream as
-[pytorch/pytorch#186938](https://github.com/pytorch/pytorch/issues/186938).
+[pytorch/pytorch#186938](https://github.com/pytorch/pytorch/issues/186938)
+and opened
+[pytorch/pytorch#186940](https://github.com/pytorch/pytorch/pull/186940)
+with the one-spot fix (mirror what `planner_helpers._init_state_dict`
+already does for plain tensors / DTensors).
 
 While the patch was being written, also consolidated `checkpoint-100`
 into a flat HF format at `checkpoint-100-hf/` (7.94 GB safetensors).

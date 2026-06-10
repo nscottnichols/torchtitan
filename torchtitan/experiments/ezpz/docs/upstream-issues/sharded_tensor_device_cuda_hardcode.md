@@ -2,8 +2,9 @@
 
 **Status:** Filed upstream as
 [pytorch/pytorch#186938](https://github.com/pytorch/pytorch/issues/186938)
-(2026-06-10). Local workaround in
-`torchtitan/experiments/ezpz/rl/train_sft.py`
+(2026-06-10), fix proposed as
+[pytorch/pytorch#186940](https://github.com/pytorch/pytorch/pull/186940).
+Local workaround in `torchtitan/experiments/ezpz/rl/train_sft.py`
 (`_patch_sharded_tensor_device_for_xpu`).
 
 **Affects:** torch 2.13 (likely older too — the bad code is unchanged
