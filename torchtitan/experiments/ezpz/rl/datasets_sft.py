@@ -13,10 +13,129 @@
 
 from __future__ import annotations
 
+import hashlib
+import logging
+import os
+import time
 from dataclasses import dataclass
 from typing import Callable
 
 from datasets import Dataset
+
+log = logging.getLogger(__name__)
+
+# Directory where pre-materialized interleaved-mix arrow files live.
+# Picked /home (NFS-shared with compute nodes) so a build done on the
+# login node is visible to every compute rank. Subpath structure:
+#   ~/.cache/ezpz_sft_mixes/<sha256-of-recipe>/
+# Each cache entry is a complete Dataset.save_to_disk() tree, loadable
+# in <5s via Dataset.load_from_disk regardless of how slow the original
+# interleave_datasets() call was. This is the same content-hashed cache
+# pattern blendcorpus uses for its (data_prefix, num_samples, seq_len,
+# seed) index files — see blendcorpus/data/gpt_dataset.py
+# _build_index_mappings (desc_hash + _doc_idx.npy / _sample_idx.npy /
+# _shuffle_idx.npy).
+EZPZ_SFT_MIX_CACHE_DIR = os.environ.get(
+    "EZPZ_SFT_MIX_CACHE_DIR",
+    os.path.expanduser("~/.cache/ezpz_sft_mixes"),
+)
+
+
+def _materialized_mix_load_or_build(
+    component_names: list[str],
+    weights: list[float],
+    seed: int,
+    stopping_strategy: str = "all_exhausted",
+) -> Dataset:
+    """Load a pre-materialized interleaved mix from disk if available,
+    otherwise build via ``interleave_datasets(...)`` and save to disk.
+
+    Why: at production scale (384 ranks), the live ``interleave_datasets``
+    setup over a multi-million-row mix runs >20 min on rank 0 even with
+    every component's HF .map() cache warm (job 12468398 died here). The
+    interleave's runtime per-row index resolution doesn't cache well in
+    HF datasets today. By collapsing it into a single
+    ``Dataset.save_to_disk(...)`` tree keyed by a content hash of the
+    recipe, subsequent runs (this rank, any rank, any future job)
+    ``load_from_disk()`` in <5 sec.
+
+    Recipe hash: SHA-256 of the sorted component names + weights + seed
+    + stopping_strategy. Pre-renormalize weights so mathematically-
+    equivalent specs ('a:1,b:1' and 'a:0.5,b:0.5') hash identically.
+
+    Safe to call from multiple ranks concurrently: we save to a tmp
+    dir first, then atomically rename. If two ranks race, the second
+    rename overwrites with the same content (atomic on POSIX) and both
+    end up with a valid cache. ``load_from_disk`` is mmap-based so
+    concurrent readers are fine.
+    """
+    from datasets import interleave_datasets
+
+    # Pre-renormalize weights (in case caller passes unnormalized) so
+    # the hash is canonical regardless of input scale.
+    wsum = sum(weights)
+    norm_weights = [w / wsum for w in weights] if wsum > 0 else weights
+
+    recipe = {
+        "components": list(component_names),
+        "weights": [round(w, 8) for w in norm_weights],
+        "seed": int(seed),
+        "stopping": str(stopping_strategy),
+        # Bump if the on-disk arrow format changes incompatibly
+        "v": 1,
+    }
+    recipe_str = repr(sorted(recipe.items()))
+    recipe_hash = hashlib.sha256(recipe_str.encode("utf-8")).hexdigest()[:16]
+
+    cache_dir = os.path.join(EZPZ_SFT_MIX_CACHE_DIR, recipe_hash)
+    marker_file = os.path.join(cache_dir, "dataset_info.json")
+
+    if os.path.isfile(marker_file):
+        log.info(
+            f"[mix-cache] hit {recipe_hash}: loading pre-materialized mix from {cache_dir}"
+        )
+        t0 = time.monotonic()
+        ds = Dataset.load_from_disk(cache_dir)
+        log.info(f"[mix-cache] loaded {len(ds):,} rows in {time.monotonic()-t0:.1f}s")
+        return ds
+
+    log.info(
+        f"[mix-cache] miss {recipe_hash}: building + saving interleaved mix to {cache_dir}"
+    )
+    t0 = time.monotonic()
+    components_built = [
+        SFT_REGISTRY[n].build() for n in component_names
+    ]
+    ds = interleave_datasets(
+        components_built,
+        probabilities=norm_weights,
+        seed=seed,
+        stopping_strategy=stopping_strategy,
+    )
+    log.info(
+        f"[mix-cache] interleave built ({len(ds):,} rows in "
+        f"{time.monotonic()-t0:.1f}s); writing to disk"
+    )
+
+    # Save to tmp + atomic rename so a partial write from one rank
+    # doesn't leave a corrupt cache that another rank picks up.
+    os.makedirs(EZPZ_SFT_MIX_CACHE_DIR, exist_ok=True)
+    tmp_dir = os.path.join(EZPZ_SFT_MIX_CACHE_DIR, f"{recipe_hash}.tmp.{os.getpid()}")
+    t1 = time.monotonic()
+    ds.save_to_disk(tmp_dir)
+    # os.rename is atomic on POSIX (same filesystem)
+    try:
+        os.rename(tmp_dir, cache_dir)
+    except OSError:
+        # Another rank beat us to it — fine, clean up our tmp and use
+        # theirs.
+        import shutil
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+    log.info(
+        f"[mix-cache] saved + renamed in {time.monotonic()-t1:.1f}s "
+        f"(total miss path: {time.monotonic()-t0:.1f}s)"
+    )
+    return Dataset.load_from_disk(cache_dir)
 
 
 @dataclass
@@ -216,11 +335,10 @@ def _build_math_alpaca_mix(
     if abs(sum(weights) - 1.0) > 1e-6:
         raise ValueError(f"weights must sum to 1.0; got {sum(weights)}")
 
-    return interleave_datasets(
-        [_build_metamathqa(), _build_gsm8k(), _build_alpaca()],
-        probabilities=list(weights),
+    return _materialized_mix_load_or_build(
+        component_names=["metamathqa", "gsm8k", "alpaca"],
+        weights=list(weights),
         seed=seed,
-        stopping_strategy="all_exhausted",
     )
 
 
@@ -408,15 +526,12 @@ def _build_tulu_math_uc_mix(
     if abs(sum(weights) - 1.0) > 1e-6:
         raise ValueError(f"weights must sum to 1.0; got {sum(weights)}")
 
-    return interleave_datasets(
-        [
-            _build_tulu3_sft_mixture(),
-            _build_openmath_instruct2(),
-            _build_ultrachat_200k(),
+    return _materialized_mix_load_or_build(
+        component_names=[
+            "tulu-3-sft-mixture", "OpenMathInstruct-2", "ultrachat-200k",
         ],
-        probabilities=list(weights),
+        weights=list(weights),
         seed=seed,
-        stopping_strategy="all_exhausted",
     )
 
 
@@ -505,10 +620,8 @@ def _build_ad_hoc_mix(spec: str, seed: int = 42) -> Dataset:
                 f"Mix-spec references unknown dataset {n!r}. "
                 f"Available: {available}"
             )
-    components = [SFT_REGISTRY[n].build() for n in names]
-    return interleave_datasets(
-        components,
-        probabilities=weights,
+    return _materialized_mix_load_or_build(
+        component_names=names,
+        weights=weights,
         seed=seed,
-        stopping_strategy="all_exhausted",
     )

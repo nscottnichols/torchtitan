@@ -20,6 +20,71 @@ was required in ezpz.
 
 ---
 
+## 2026-06-10 — 51st sync (9 commits, `842d354f9..a97767611`)
+
+Merged clean (no conflicts). One replay required: PR #3571 dropped
+the `mask_type` field from `GQAttention.Config` + the tuple return
+from `get_attention_config()`, and our `_ezpz_get_attention_config`
++ `_build_agpt_layers` were calling that surface.
+
+### Upstream commits
+
+| Commit | Title | ezpz impact |
+|---|---|---|
+| `e6adf26b1` | Fix experiemental CI trigger condition + RL CI editable install (#3541) | None — experimental/rl CI, not ezpz |
+| `0f929e734` | `[rl] PR2/N — AlphabetSort task; remove SumDigits (#3582)` | None — experimental/rl task registry, separate from ezpz/rl |
+| `873868905` | `[rl] PR 1/N - rollout logger (#3581)` | None — experimental/rl |
+| **`169545712`** | **`[BE] deprecate SDPA and causal mask_type for language models (#3571)`** | **Replay required** — see below |
+| `a9c5edc74` | `ci: skip fsdp_symm_mem integration test on ROCm (#3597)` | None — CI only |
+| `51f107fbe` | `[spmd_types] state sharding and redistribution infra (#3587)` | None — adds new infra, doesn't change existing APIs |
+| `9d3c7d205` | `[graph_trainer] hoist collective-PG reassignment into its own default pass (#3592)` | None — graph_trainer experiment |
+| `a97767611` | `[graph_trainer] Fix precompile pickle failure with FlexAttention BlockMask (#3428)` | None — graph_trainer experiment |
+| `98efb19e1` | `[Full DTensor] Enable full_dtensor for all MoE models (#3447)` | **No replay needed** (opt-in path) — see below |
+
+### Replay: drop `mask_type` from GQAttention plumbing (commit `d27f9dbb9`)
+
+Upstream removed the `mask_type` field from `GQAttention.Config` and
+changed `get_attention_config()` to return just the inner-attention
+config (no longer a `(config, mask_type)` tuple). It also removed the
+SDPA branch from the language-model `get_attention_config()` entirely
+(the text/chat dataloaders always emit per-document positions which
+SDPA can't consume).
+
+ezpz mirrored that surface in two places:
+
+- `ezpz/agpt/__init__.py`
+  - `_ezpz_get_attention_config()` now returns just the config (was a
+    `(config, mask_type)` tuple). Keeps the XPU SDPA branch alive —
+    upstream removed SDPA entirely from language models but XPU lacks
+    a working FlexAttention backend, so we still need it.
+  - `_build_agpt_layers()` drops the local `mask_type` variable and
+    the `mask_type=...` kwarg passed to `make_gqa_config()`.
+
+- `ezpz/moe/__init__.py`
+  - Same `_ezpz_get_attention_config()` API change rippled through.
+  - ezpz/moe's `Attention.Config` (MLA, defined in `moe/model.py`)
+    is OUR own class and still has its own `mask_type` field —
+    upstream's removal only affected `GQAttention.Config`. So we
+    synthesize `_mask = "causal"` locally to keep moe behavior.
+
+### Held: PR #3447 Full DTensor for MoE
+
+Adds `--training.spmd_backend=full_dtensor` support to qwen3 /
+llama4 / gpt_oss / deepseek_v3 parallelize.py via new helpers in
+`distributed/full_dtensor.py` and `distributed/fsdp.py`. ezpz/moe's
+parallelize.py has its own (non-full_dtensor) path that doesn't
+go through the deepseek_v3 codepath touched by this PR, so no
+replay needed unless/until we want to opt ezpz/moe into the
+full_dtensor path.
+
+### Verification
+
+Bitwise sync check `12468399` (`agpt_2b_chunkedce`, 2N, 20 steps,
+HEAD vs pre-merge `a09216324`) — **IDENTICAL**. Loss + grad_norm
+match bit-for-bit across all 20 steps. 5:45 wall.
+
+---
+
 ## 2026-06-09 — 50th sync (2 commits, `465cd676e..842d354f9`)
 
 Two-commit follow-up to the 49th sync, both small. Merged clean (no

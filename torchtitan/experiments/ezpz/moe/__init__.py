@@ -136,7 +136,12 @@ def _make_moe_attn_config(
     When q_lora_rank == 0, sets wq (not wq_a/wq_b).
     When q_lora_rank > 0, sets wq_a/wq_b (not wq).
     """
-    _inner, _mask = _ezpz_get_attention_config(attn_backend)
+    # Upstream PR #3571 dropped the (config, mask_type) tuple — see
+    # _ezpz_get_attention_config docstring. ezpz/moe's Attention.Config
+    # still has its own mask_type field (see moe/model.py), so we
+    # preserve the previous default of "causal" here.
+    _inner = _ezpz_get_attention_config(attn_backend)
+    _mask = "causal"
     qk_head_dim = qk_nope_head_dim + qk_rope_head_dim
 
     if q_lora_rank == 0:

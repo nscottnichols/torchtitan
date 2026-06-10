@@ -222,15 +222,21 @@ def _default_inner_attention() -> ScaledDotProductAttention.Config:
 
 def _ezpz_get_attention_config(
     backend: str,
-) -> tuple[Module.Config, str]:
+) -> Module.Config:
     """XPU-aware attention config selection.
 
-    For the "sdpa" backend, uses the XPU-optimized SDPA classes instead of
-    upstream's ScaledDotProductAttention. Other backends delegate to the
-    upstream get_attention_config().
+    For the "sdpa" backend, uses the XPU-optimized SDPA classes instead
+    of upstream's ScaledDotProductAttention. Other backends delegate
+    to upstream get_attention_config().
+
+    Upstream PR #3571 (2026-06-09) removed SDPA + mask_type from the
+    language-model attention path entirely; ezpz keeps the "sdpa"
+    branch alive because XPU lacks a working FlexAttention backend.
+    Returns just the config now (upstream dropped the (config, mask_type)
+    tuple too).
     """
     if backend == "sdpa":
-        return _default_inner_attention(), "causal"
+        return _default_inner_attention()
     return get_attention_config(backend)
 
 
@@ -253,9 +259,8 @@ def _build_agpt_layers(
         inner_attention = SoftcappedFlexAttention.Config(
             logit_cap=logit_softcap,
         )
-        mask_type = "causal"
     else:
-        inner_attention, mask_type = _ezpz_get_attention_config(attn_backend)
+        inner_attention = _ezpz_get_attention_config(attn_backend)
     linear_init = _linear_init(dim)
     head_dim = dim // n_heads
     qk_norm_config = RMSNorm.Config(normalized_shape=head_dim, param_init=_NORM_INIT) if qk_norm else None
@@ -297,7 +302,6 @@ def _build_agpt_layers(
                     wo_param_init=_depth_init(dim, layer_id),
                     inner_attention=inner_attention,
                     fuse_qkv=fuse_qkv,
-                    mask_type=mask_type,
                     rope=rope,
                     qk_norm=qk_norm_config,
                 ),

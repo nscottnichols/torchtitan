@@ -338,34 +338,35 @@ def main() -> None:
         while not stop_event.wait(timeout=30):
             log.info(f"[prefetch] rank 0 still building {label} ({time.monotonic()-t0:.0f}s elapsed)")
 
+    # Build the dataset on EVERY rank, no barrier. Two reasons:
+    #   1. The interleaved-mix loader now uses a disk cache at
+    #      ~/.cache/ezpz_sft_mixes/<recipe-hash>/ — the first rank to
+    #      hit a cold cache builds + saves atomically; subsequent ranks
+    #      `load_from_disk()` in <5s via mmap. Concurrent readers are
+    #      safe (atomic rename, mmap-based reads).
+    #   2. The rank-0-only build pattern needed a dist.barrier to
+    #      synchronize workers, and the XPU oneCCL barrier ignores
+    #      PyTorch's per-call `timeout=` kwarg — when rank 0 took
+    #      >10-15 min, workers crashed with
+    #      `atl_comm->wait fails with status: 1` regardless of the
+    #      stated timeout (12468348, 12468371, 12468398 all died here).
+    # Beacon retained for the cold-cache case where the build is slow
+    # — so each rank's progress is visible if it stalls.
+    log.info(f"[rank {rank}] building SFT dataset (mix-cache warm path: <5s)...")
+    beacon_stop = threading.Event()
+    beacon = threading.Thread(
+        target=_rank0_progress_beacon,
+        args=(beacon_stop, ezpz_args.sft_dataset),
+        daemon=True,
+    )
     if rank == 0:
-        log.info(f"[prefetch] rank 0 building SFT dataset (warms HF cache)...")
-        beacon_stop = threading.Event()
-        beacon = threading.Thread(
-            target=_rank0_progress_beacon,
-            args=(beacon_stop, ezpz_args.sft_dataset),
-            daemon=True,
-        )
         beacon.start()
-        try:
-            dataset = sft_ds.build()
-        finally:
-            beacon_stop.set()
-            beacon.join(timeout=5)
-        log.info(f"[prefetch] rank 0 cache warm for {ezpz_args.sft_dataset!r}")
-    if dist.is_initialized():
-        # Long timeout — rank 0 may take many minutes to build a large
-        # interleaved mix (OpenMathInstruct-2 is 14M rows; even with
-        # the HF .map() cache warm, instantiation + interleave setup
-        # is ~20s+; cold first run is ~10 min). The PyTorch default
-        # ProcessGroup timeout is 10 min, but on Sunspot the underlying
-        # oneCCL barrier errors out much sooner (~30s) with
-        # `atl_comm->wait fails with status: 1` — caught this in
-        # job 12468348 where rank 0 was still mid-build when workers
-        # hit the default-timeout barrier and crashed.
-        dist.barrier(timeout=timedelta(minutes=30))
-    if rank != 0:
+    try:
         dataset = sft_ds.build()
+    finally:
+        beacon_stop.set()
+        if rank == 0:
+            beacon.join(timeout=5)
     log.info(f"[rank {rank}] Built SFT dataset: {len(dataset)} samples")
 
     if ezpz_args.max_train_samples > 0 and ezpz_args.max_train_samples < len(dataset):
