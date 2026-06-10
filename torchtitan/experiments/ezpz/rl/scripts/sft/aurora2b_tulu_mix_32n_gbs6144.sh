@@ -86,7 +86,19 @@ ezpz launch --np 384 -ppn 12 --auto-retry --max-failover-retries 3 \
     --save_strategy steps --save_steps 100 \
     --save_total_limit 8 \
     --report_to wandb \
+    --resume_from_checkpoint "${CKPT_DIR}" \
     2>&1 | tee -a "${LOG_DIR}/run.log" || true
+
+# --resume_from_checkpoint <dir> is HF Trainer's auto-resume hook: if
+# <dir> contains a checkpoint-N subdir, training picks up from the
+# latest; if not, training starts from scratch. Safe to leave on for
+# fresh runs. Critical for ezpz auto-retry: when a bad-node crash
+# triggers attempt 2, the relaunch IS a fresh `python3 -m train_sft`
+# invocation (not an in-process restart), so without this flag every
+# retry attempt restarts from step 0 — wasting all prior progress.
+# Caught in job 12468404 attempt 2 after a rank-286 SIGABRT killed
+# attempt 1 at step 140; attempt 2 went back to step 10 instead of
+# resuming from checkpoint-100.
 
 echo "" | tee -a "${LOG_DIR}/run.log"
 echo "=== DONE: log in ${LOG_DIR}/, ckpts in ${CKPT_DIR}/ ===" \
