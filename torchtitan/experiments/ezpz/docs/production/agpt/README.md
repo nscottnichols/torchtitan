@@ -21,12 +21,12 @@ included (no overlay until production ckpts land — see
 
 ## Headline (2026-06-10)
 
-- **🏁 2B 256N async chain ADVANCING NOW** at step **70,400+** (loss ~2.67, ~3.544T tokens, **75.9%** of target). [8521626](2b/n256/README.md#log-8521626) cont9 is **R since 2026-06-10 06:35** after 4 days of queue contention; +5 ckpts persisted so far (step-70,000 → step-70,400). On pace for ~+700 more steps over the remaining ~10h walltime. **+200 step advance since 2026-06-06.**
+- **🏁 2B 256N async chain ADVANCING NOW** at step **72,300+** (loss ~2.67, ~3.640T tokens, **78.0%** of target). [8521626](2b/n256/README.md#log-8521626) cont9 is **R since 2026-06-10 06:35** (~8h elapsed) after 4 days of queue contention; **+24 ckpts persisted** so far (step-70,000 → step-72,300). On pace for ~+300 more steps over the remaining ~4h walltime → ETA **step-72,600**. **+2,400 step advance since 2026-06-06.**
 - **2B 512N sync chain** still stalled at step **30,500** (loss **2.71**, ~3.07T tokens, **65.7%** of target) — no advance since 2026-05-30. Cont10 [8521631](2b/n512/README.md) still Q in `small`; cont11 [8534294](2b/n512/README.md) H'd behind it.
 - **🏁 20B 512N sync chain ADVANCED to step 4,500** (loss ~2.51, ~453.0B tokens, **9.7%** of target). [8521628](20b/n512/README.md#log-8521628) ran 2026-06-10 01:27 → 05:32 (4h04m, exit 143) and **persisted the first new ckpt in 12 days** (since 2026-05-29 step-4,400). The renamed `step-4500.bak-empty-20260606-170503/` placeholder no longer blocked the save. After step-4,500 the failover wrapper hit the documented intermittent `MemoryError: std::bad_alloc` at `set_determinism` rank 3,195 (same mode as 8466848, 8514610) and exhausted 3 retries. Cont12 (8521632) Q'd to resume from step-4,500; cont13 (8534295) H'd behind it.
 - **🏁 20B 512N still leads 2B 256N per token** (step-4,500 ARC-Easy 0.6641, HellaSwag `acc_norm` 0.6346 with only ~453B tokens, vs 2B 256N at step-69,900 with 3.52T tokens scoring HellaSwag 0.5552 — 20B's per-token efficiency advantage is dramatic at this token count).
 - **80B 4N production stack validated end-to-end on Aurora on 2026-06-08** — [interactive smoke r7](80b/n4/README.md) hit step-10 sync ckpt save cleanly (904 GB, 48 distcp shards, .metadata — matches Sunspot 12468197 reference exactly). **256N attempt 8530891** trained but **loss went NaN at step 2** — open hypotheses on bf16 overflow / TP=2 loss-reduction / fp32 second-moment. LR=1e-7 retry (8531721) hit `std::bad_alloc` at model construction. **256N validation still pending.**
-- **Eval task list expanded** — added piqa, openbookqa, boolq to the default 7-task set; **117 ckpt backfill in flight** (2B 512N done 27/27, 2B 256N 32/55, 20B 512N 16/36) re-evaluating all v2 ckpts on `capacity`. New panels render automatically once results land.
+- **Eval task list expanded** — added piqa, openbookqa, boolq to the default 7-task set; backfill nearly complete (2B 512N **27/27 ✓**, 2B 256N **32 fresh + 23 "no DCP" = 55/55 ✓** — early ckpts permanently 4-task-only since their DCPs were destroyed by 2026-05-25 keep-latest-k bug, 20B 512N **30/36** with 6 resume ckpts in flight via 8534628 / 8534655).
 
 ## Single canonical chain per model
 
@@ -76,11 +76,11 @@ extensions.
 | [`8516364`](2b/n256/README.md#log-8516364) | 2026-05-30 | 12h | ~59,700–~64,900 | ~2.67 → ~2.67 | Done (walltime). |
 | [`8516365`](2b/n256/README.md#log-8516365) | 2026-06-01 | 12h | — | — | **Failed** (pals-RPC init fail, no ckpts). |
 | **[`8519833`](2b/n256/README.md#log-8519833)** | 2026-06-06 | 12h | 69,300 → **69,900** | ~2.67 | Done (walltime exit -29). +6 ckpts. |
-| **[`8521626`](2b/n256/README.md#log-8521626)** | 2026-06-10 | R 12h | 69,900 → **70,400+** | ~2.67 | **🏁 R since 06:35.** +5 ckpts persisted (step-70,000 → step-70,400). On pace for ETA step-71,100. |
+| **[`8521626`](2b/n256/README.md#log-8521626)** | 2026-06-10 | R 12h | 69,900 → **72,300+** | ~2.67 | **🏁 R since 06:35** (~8h elapsed). +24 ckpts persisted (step-70,000 → step-72,300). On pace for ETA step-72,600. |
 | `8521630` | 2026-06-06 | 12h | (cont10) | — | Held (`afterany:8521626`). |
 | `8534293` | 2026-06-10 | 12h | (cont11) | — | Held (`afterany:8521630`). |
 
-**Latest cumulative (256N)**: step **70,400+** · loss **2.67** · **~3.544T tokens** (75.9% of 4.67T target). Step-69900 evals:
+**Latest cumulative (256N)**: step **72,300+** · loss **2.67** · **~3.640T tokens** (78.0% of 4.67T target). Step-69900 evals:
 HSn **0.5552**, ARC-E **0.5939**, ARC-C **0.3294**, **Wino 0.5627 (best yet)**. Per-task plateau on HSn/ARC since step-64K
 (~+1pp swings); Wino has the clearest monotonic trend.
 
