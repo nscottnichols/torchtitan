@@ -1,8 +1,10 @@
 # `ShardedTensor.device` fallback hardcodes CUDA, breaking FSDP resume on XPU
 
-**Status:** Local workaround in
+**Status:** Filed upstream as
+[pytorch/pytorch#186938](https://github.com/pytorch/pytorch/issues/186938)
+(2026-06-10). Local workaround in
 `torchtitan/experiments/ezpz/rl/train_sft.py`
-(`_patch_sharded_tensor_device_for_xpu`). Not yet filed upstream.
+(`_patch_sharded_tensor_device_for_xpu`).
 
 **Affects:** torch 2.13 (likely older too — the bad code is unchanged
 back to at least torch 2.5). Bites every XPU host that calls into HF
@@ -94,7 +96,9 @@ to `xpu` on XPU systems via the registered backend. Only the
 ## Proposed upstream fix
 
 Replace the hardcoded fallback with a device-agnostic resolution that
-mirrors what `planner_helpers.py:_init_state_dict` already does:
+mirrors what `planner_helpers.py:_init_state_dict` already does
+(`_get_pg_default_device(pg).type` → `_get_device_module(...)`).
+`_get_device_module` lives in `torch._utils`:
 
 ```python
 @_sharded_op_impl(torch.Tensor.device.__get__)
@@ -106,14 +110,15 @@ def tensor_device(types, args=(), kwargs=None, pg=None):
         return self_st._local_shards[0].tensor.device
     if pg and pg._get_backend_name() == "gloo":
         return torch.device("cpu")
-    # Device-agnostic fallback (works on cuda/xpu/hpu/mps)
+    # Device-agnostic fallback (works on cuda / xpu / hpu / mps).
+    from torch._utils import _get_device_module
     from torch.distributed.distributed_c10d import _get_pg_default_device
-    from torch.distributed._functional_collectives import _get_device_module
     device_type = _get_pg_default_device(pg).type
     return torch.device(_get_device_module(device_type).current_device())
 ```
 
-(or, on torch >= 2.5, use the `torch.accelerator` namespace directly.)
+On torch >= 2.5 the `torch.accelerator` namespace gives an equivalent
+device-agnostic resolution without reaching into private `_utils`.
 
 ## Local workaround (ezpz)
 
