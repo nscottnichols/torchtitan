@@ -455,10 +455,13 @@ class AllToAllTokenDispatcher(LocalTokenDispatcher):
         encoding = {"off": 0, "adaptive": 1, "force": 2}
         decoding = {v: k for k, v in encoding.items()}
         local_code = encoding.get(local, 0)
-        local_tensor = torch.tensor([local_code], dtype=torch.int32)
-        # Use a tiny all_reduce(MAX) rather than the all_to_all_single
-        # pattern used elsewhere — we only need one int agreed across
-        # the mesh.
+        # Tensor must live on the mesh's device — XCCL/NCCL backends
+        # have no CPU op handler, so a CPU tensor would raise
+        # "No backend type associated with device type cpu". Use
+        # ep_mesh.device_type to stay portable across xpu/cuda/etc.
+        local_tensor = torch.tensor(
+            [local_code], dtype=torch.int32, device=ep_mesh.device_type
+        )
         torch.distributed.all_reduce(
             local_tensor,
             op=torch.distributed.ReduceOp.MAX,
@@ -519,7 +522,13 @@ class AllToAllTokenDispatcher(LocalTokenDispatcher):
         local = self._can_use_equal_a2a_splits(splits)
         if self.ep_mesh is None or self.ep_mesh.size() == 1:
             return local
-        local_tensor = torch.tensor([1 if local else 0], dtype=torch.int32)
+        # Same XPU/CUDA caveat as _resolve_normal_equal_a2a_policy:
+        # XCCL/NCCL has no CPU op handler.
+        local_tensor = torch.tensor(
+            [1 if local else 0],
+            dtype=torch.int32,
+            device=self.ep_mesh.device_type,
+        )
         torch.distributed.all_reduce(
             local_tensor,
             op=torch.distributed.ReduceOp.MAX,
