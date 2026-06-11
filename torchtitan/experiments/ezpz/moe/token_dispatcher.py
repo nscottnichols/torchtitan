@@ -392,6 +392,17 @@ class AllToAllTokenDispatcher(LocalTokenDispatcher):
         # rank-agnostic. Defaults are the TP=1 values.
         self.sp_size: int = 1
         self.sp_rank: int | torch.SymInt = 0
+        # Defaults for the normal-equal-A2A-padding policy and its
+        # telemetry flag. `wire_meshes` overwrites these with values
+        # reduced across the EP mesh, so every rank agrees. Without
+        # the reduction, per-rank env-var-read drift inside dispatch()
+        # could cause ranks to take different branches and the
+        # all_to_all_single to hang. Keep local-read defaults for the
+        # EP=1 case (when wire_meshes is called with ep_mesh=None).
+        self._normal_equal_a2a_policy: str = _normal_equal_a2a_padding_policy()
+        self._normal_equal_a2a_telemetry: bool = (
+            _normal_equal_a2a_padding_telemetry_enabled()
+        )
 
     def wire_meshes(
         self,
@@ -409,6 +420,51 @@ class AllToAllTokenDispatcher(LocalTokenDispatcher):
         if tp_mesh is not None:
             self.sp_size = tp_mesh.size()
             self.sp_rank = tp_mesh._sym_get_coordinate(0)
+
+        # Sample the TT_MOE_NORMAL_EQUAL_A2A_PADDING env var once per
+        # dispatcher construction and reduce across the EP mesh so every
+        # rank agrees on the policy. Without this, env propagation skew
+        # across hosts (per-host .bashrc differences, partial PBS
+        # broadcast of `-v` exports) can leave rank 0 seeing "force"
+        # while rank 7 sees "" — the two ranks then take different
+        # branches inside dispatch() and the all_to_all_single hangs
+        # with mismatched argument shapes.
+        #
+        # Reduction is "max" over an int encoding (off=0, adaptive=1,
+        # force=2) so the strongest policy wins. This biases toward
+        # turning on the optimization when any rank requested it,
+        # which keeps behavior consistent if a user mistakenly only
+        # exports the env var on rank 0's host.
+        self._normal_equal_a2a_policy = self._resolve_normal_equal_a2a_policy(ep_mesh)
+        self._normal_equal_a2a_telemetry = (
+            _normal_equal_a2a_padding_telemetry_enabled()
+        )
+
+    @staticmethod
+    def _resolve_normal_equal_a2a_policy(ep_mesh: DeviceMesh | None) -> str:
+        """Reduce the per-rank env-var-derived policy across ep_mesh.
+
+        Returns one of "off", "adaptive", "force". When ep_mesh is None
+        (EP=1) the local read is authoritative.
+        """
+        local = _normal_equal_a2a_padding_policy()
+        if ep_mesh is None or ep_mesh.size() == 1:
+            return local
+        # Encode policy as int for the collective; max-reduce; decode.
+        # off < adaptive < force so max gives the strongest policy.
+        encoding = {"off": 0, "adaptive": 1, "force": 2}
+        decoding = {v: k for k, v in encoding.items()}
+        local_code = encoding.get(local, 0)
+        local_tensor = torch.tensor([local_code], dtype=torch.int32)
+        # Use a tiny all_reduce(MAX) rather than the all_to_all_single
+        # pattern used elsewhere — we only need one int agreed across
+        # the mesh.
+        torch.distributed.all_reduce(
+            local_tensor,
+            op=torch.distributed.ReduceOp.MAX,
+            group=ep_mesh.get_group(),
+        )
+        return decoding[int(local_tensor.item())]
 
     @staticmethod
     def _pad_to_equal_splits(
@@ -446,6 +502,30 @@ class AllToAllTokenDispatcher(LocalTokenDispatcher):
     @staticmethod
     def _can_use_equal_a2a_splits(splits: list[int]) -> bool:
         return len(splits) > 0 and min(splits) != max(splits)
+
+    def _can_use_equal_a2a_splits_global(self, splits: list[int]) -> bool:
+        """All-reduce the local can-use-equal-padding decision across ep_mesh.
+
+        Without this, ranks compute the local boolean from their own
+        ``splits`` and can disagree: rank A's splits are uniform
+        (min==max -> False, no padding) while rank B's splits are
+        uneven (min!=max -> True, pad and pass None/None to
+        all_to_all_single). The two ranks then call the collective
+        with different argument shapes and hang.
+
+        Reduce with op=MAX (True > False) so any rank's decision to
+        pad forces all peers to also pad.
+        """
+        local = self._can_use_equal_a2a_splits(splits)
+        if self.ep_mesh is None or self.ep_mesh.size() == 1:
+            return local
+        local_tensor = torch.tensor([1 if local else 0], dtype=torch.int32)
+        torch.distributed.all_reduce(
+            local_tensor,
+            op=torch.distributed.ReduceOp.MAX,
+            group=self.ep_mesh.get_group(),
+        )
+        return bool(local_tensor.item())
 
     def _global_equal_a2a_split_size(
         self,
@@ -616,21 +696,22 @@ class AllToAllTokenDispatcher(LocalTokenDispatcher):
         normal_equal_a2a_padding = False
         dispatch_input_splits = input_splits_list
         dispatch_output_splits = output_splits_list
+        # Branch decisions for the equal-A2A-padding fast paths must be
+        # IDENTICAL across all EP-mesh ranks, otherwise the
+        # all_to_all_single below gets different argument shapes from
+        # different ranks and hangs. Two sources of per-rank divergence
+        # to globally reduce:
+        #   1. `_can_use_equal_a2a_splits` is a local min!=max check.
+        #      `_can_use_equal_a2a_splits_global` reduces with op=MAX.
+        #   2. The TT_MOE_NORMAL_EQUAL_A2A_PADDING env var is read at
+        #      `wire_meshes` time and reduced into
+        #      `self._normal_equal_a2a_policy` to be robust against
+        #      env-propagation skew across hosts.
         if (
             self.force_load_balance
             and self.sp_size == 1
-            and self._can_use_equal_a2a_splits(input_splits_list)
+            and self._can_use_equal_a2a_splits_global(input_splits_list)
         ):
-            # Use the global max across the EP mesh, not the local max:
-            # with force_load_balance the per-rank input_splits are
-            # nearly uniform, but per-rank totals can still differ
-            # slightly. If rank A picks `max(local)==128` and rank B
-            # picks `max(local)==130`, the two `all_to_all_single(None,
-            # None)` calls demand different evenly-divisible buffer
-            # sizes and the collective hangs / errors with size
-            # mismatch. The sibling normal-equal-padding branch below
-            # already uses `_global_equal_a2a_split_size`; mirror it
-            # here.
             equal_a2a_split_size = self._global_equal_a2a_split_size(
                 input_splits_list,
                 num_local_tokens_per_expert_E.device,
@@ -640,11 +721,11 @@ class AllToAllTokenDispatcher(LocalTokenDispatcher):
             dispatch_input_splits = None
             dispatch_output_splits = None
         elif (
-            _normal_equal_a2a_padding_enabled()
+            self._normal_equal_a2a_policy in {"force", "adaptive"}
             and self.sp_size == 1
             and len(input_splits_list) > 0
         ):
-            normal_equal_policy = _normal_equal_a2a_padding_policy()
+            normal_equal_policy = self._normal_equal_a2a_policy
             equal_a2a_split_size = self._global_equal_a2a_split_size(
                 input_splits_list,
                 num_local_tokens_per_expert_E.device,
@@ -664,7 +745,7 @@ class AllToAllTokenDispatcher(LocalTokenDispatcher):
                     output_splits=output_splits_list,
                     equal_split_size=equal_a2a_split_size,
                     device=num_local_tokens_per_expert_E.device,
-                    reduce_global=_normal_equal_a2a_padding_telemetry_enabled(),
+                    reduce_global=self._normal_equal_a2a_telemetry,
                 )
             if adaptive_allowed:
                 normal_equal_a2a_padding = True
