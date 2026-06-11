@@ -99,9 +99,19 @@ def _default_inner_attention() -> ScaledDotProductAttention.Config:
     return EzpzScaledDotProductAttention.Config()
 
 
-def _ezpz_get_attention_config(backend: str) -> tuple[Module.Config, str]:
+def _ezpz_get_attention_config(backend: str) -> Module.Config:
+    """XPU-aware attention config selection.
+
+    Mirrors the agpt sibling. Upstream PR #3571 (replayed at ezpz
+    `db3b916a8`) dropped the `(config, mask_type)` tuple return in
+    favor of returning just the config; the caller now supplies
+    mask_type separately (see `_build_moe_layers` which sets
+    `_mask = "causal"` next to the call site). Returning a tuple
+    here would break the downstream `inner_attention.sharding_config`
+    setattr in `moe/sharding.py:set_gqa_inner_attention_local_map`.
+    """
     if backend == "sdpa":
-        return _default_inner_attention(), "causal"
+        return _default_inner_attention()
     return get_attention_config(backend)
 
 
