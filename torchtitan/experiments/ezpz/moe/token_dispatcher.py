@@ -1014,7 +1014,7 @@ class DeepEPTokenDispatcher(LocalTokenDispatcher):
         del num_local_tokens_per_expert_E
         assert self.ep_mesh is not None, (
             "ep_mesh must be set before dispatch. "
-            "ExpertParallel._partition_fn() should set it."
+            "MoE.parallelize() must call token_dispatcher.wire_meshes()."
         )
         ep_group = self.ep_mesh.get_group()
         num_local_experts = self.num_experts // ep_group.size()
@@ -1153,7 +1153,7 @@ class HybridEPTokenDispatcher(LocalTokenDispatcher):
         del num_local_tokens_per_expert_E
         assert self.ep_mesh is not None, (
             "ep_mesh must be set before dispatch. "
-            "ExpertParallel._partition_fn() should set it."
+            "MoE.parallelize() must call token_dispatcher.wire_meshes()."
         )
         ep_group = self.ep_mesh.get_group()
         num_local_experts = self.num_experts // ep_group.size()
