@@ -21,6 +21,10 @@ from torchtitan.models.common.attention import (
 from torchtitan.models.common.decoder import Decoder, TransformerBlock
 from torchtitan.models.common.nn_modules import Linear, RMSNorm
 from torchtitan.models.common.rope import RoPE
+from torchtitan.models.common.token_dispatcher import (
+    DeepEPTokenDispatcher,
+    HybridEPTokenDispatcher,
+)
 from torchtitan.models.utils import get_moe_model_nparams_and_flops
 from torchtitan.protocols.module import Module
 from torchtitan.tools.logging import logger
@@ -251,25 +255,36 @@ class moeModel(Decoder):  # noqa: N801
                         layer_cfg.moe.experts.token_dispatcher.force_load_balance = (
                             debug.moe_force_load_balance
                         )
-                    comm_backend = getattr(
+                    # Detect deepep/hybridep configs by the dispatcher
+                    # Config class, not by a `comm_backend` attribute that
+                    # doesn't exist on the dispatcher Config. The old
+                    # `getattr(..., "comm_backend", "standard")` lookup
+                    # always returned "standard" (the function-arg name
+                    # was never stored on the resulting Config), so the
+                    # downstream EP=1 guard was dead code.
+                    #
+                    # We also dropped the `MoE → DeepEPMoE.Config` swap
+                    # that used to live here — `DeepEPMoE` no longer
+                    # exists upstream (the dispatcher classes now own
+                    # the comm-backend-specific logic via their own
+                    # `dispatch` / `combine` implementations). Keep
+                    # the EP=1 guard so a misconfigured deepep/hybridep
+                    # user gets a clear error before model init.
+                    if isinstance(
                         layer_cfg.moe.experts.token_dispatcher,
-                        "comm_backend",
-                        "standard",
-                    )
-                    if comm_backend in ("deepep", "hybridep"):
+                        (
+                            DeepEPTokenDispatcher.Config,
+                            HybridEPTokenDispatcher.Config,
+                        ),
+                    ):
+                        dispatcher_name = type(
+                            layer_cfg.moe.experts.token_dispatcher
+                        ).__qualname__.split(".")[0]
                         if parallelism.expert_parallel_degree == 1:
                             raise ValueError(
-                                f"{comm_backend.upper()} requires expert "
+                                f"{dispatcher_name} requires expert "
                                 "parallelism (expert_parallel_degree > 1)."
                             )
-                        from torchtitan.models.common.moe_deepep import DeepEPMoE
-
-                        init_kwargs = {
-                            f.name: getattr(layer_cfg.moe, f.name)
-                            for f in dataclasses.fields(layer_cfg.moe)
-                            if f.init
-                        }
-                        layer_cfg.moe = DeepEPMoE.Config(**init_kwargs)
 
             if parallelism.context_parallel_degree > 1 and not isinstance(
                 self.layers[0].attention.inner_attention,
