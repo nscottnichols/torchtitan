@@ -25,7 +25,10 @@ import torch.nn.functional as F
 from torch.distributed.tensor import DTensor
 from torch.utils.checkpoint import checkpoint
 
-from .moe import GroupedExperts
+# GroupedExperts comes straight from upstream — the local `.moe` copy
+# was deleted because it was byte-identical to the upstream module. See
+# moe/__init__.py for the same import-re-route.
+from torchtitan.models.common.moe import GroupedExperts
 
 
 ExpertComputeBackend = Literal["for_loop", "grouped_mm"]

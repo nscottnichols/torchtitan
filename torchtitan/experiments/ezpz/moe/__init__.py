@@ -32,9 +32,15 @@ from torchtitan.models.common.param_init import depth_scaled_std
 from torchtitan.protocols.module import Module
 from torchtitan.protocols.model_spec import ModelSpec
 
+# MoE and TokenChoiceTopKRouter come straight from upstream — we have no
+# ezpz-specific override for them. Earlier this re-imported from a local
+# `.moe` copy that was a byte-for-byte fork of `torchtitan/models/common/moe.py`;
+# that fork has been deleted to avoid silent skew on upstream MoE/router
+# fixes (e.g. the CP-friendly 3-D experts output added in upstream PR #3447).
+from torchtitan.models.common.moe import MoE, TokenChoiceTopKRouter
+
 from .experts import ExpertComputeBackend, EzpzGroupedExperts
 from .model import Attention, moeModel, moeTransformerBlock
-from .moe import MoE, TokenChoiceTopKRouter
 from .token_dispatcher import (
     AllToAllTokenDispatcher,
     DeepEPTokenDispatcher,
