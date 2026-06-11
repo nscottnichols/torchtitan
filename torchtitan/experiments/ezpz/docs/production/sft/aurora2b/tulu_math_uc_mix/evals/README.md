@@ -126,8 +126,11 @@ lm-eval-on-XPU work:
 ## Related
 
 - SFT training writeup: [`20260610-sft-2b-tulu-mix-n32-failover.md`](../failover-story.md)
-- IFEval results (in progress): TBD link
-- GRPO smoke results (in progress): TBD link
+- IFEval results: [`ifeval.md`](ifeval.md) — +8 pp on
+  `prompt_level_strict_acc` (0.1645 → 0.2440, ~4-5σ), +48% relative
+- GRPO smoke results: [`grpo-smoke.md`](grpo-smoke.md) — 8×
+  speedup over baseline (0.117 → 0.922 mean reward over last 10 steps,
+  100% accuracy by step 40)
 - Eval scripts:
   [`rl/scripts/sft/eval_sft_vs_baseline_parallel.sh`](../../../../../../rl/scripts/sft/eval_sft_vs_baseline_parallel.sh)
   (base-LM tasks),
