@@ -621,7 +621,21 @@ class AllToAllTokenDispatcher(LocalTokenDispatcher):
             and self.sp_size == 1
             and self._can_use_equal_a2a_splits(input_splits_list)
         ):
-            equal_a2a_split_size = max(input_splits_list)
+            # Use the global max across the EP mesh, not the local max:
+            # with force_load_balance the per-rank input_splits are
+            # nearly uniform, but per-rank totals can still differ
+            # slightly. If rank A picks `max(local)==128` and rank B
+            # picks `max(local)==130`, the two `all_to_all_single(None,
+            # None)` calls demand different evenly-divisible buffer
+            # sizes and the collective hangs / errors with size
+            # mismatch. The sibling normal-equal-padding branch below
+            # already uses `_global_equal_a2a_split_size`; mirror it
+            # here.
+            equal_a2a_split_size = self._global_equal_a2a_split_size(
+                input_splits_list,
+                num_local_tokens_per_expert_E.device,
+                num_local_tokens_per_expert_E.dtype,
+            )
             _record_moe_fastpath("equal_a2a_padding_dispatch")
             dispatch_input_splits = None
             dispatch_output_splits = None
