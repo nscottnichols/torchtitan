@@ -3,7 +3,7 @@
 #PBS -N 80b-n128-det
 #PBS -l walltime=01:00:00
 #PBS -l filesystems=home:flare
-#PBS -l select=128
+#PBS -l select=134
 #PBS -q debug-scaling
 #PBS -j oe
 
@@ -12,7 +12,7 @@
 cd /flare/AuroraGPT/foremans/runs/agpt-80b-v2/torchtitan-ezpz
 
 NHOSTS_TRAIN=128 \
-FAILOVER_MAX_RETRIES=0 \
+FAILOVER_MAX_RETRIES=2 \
 TRAINING_STEPS=20 \
 CKPT_INTERVAL=10 \
 OPTIMIZER=adamw \
