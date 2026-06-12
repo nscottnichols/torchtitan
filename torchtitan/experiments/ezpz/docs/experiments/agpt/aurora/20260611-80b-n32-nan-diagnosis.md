@@ -1,11 +1,80 @@
-# 80B n=32 NaN diagnosis — XPU nondeterministic op output, not bf16 overflow
+# 80B NaN diagnosis — bf16 forward overflow at GBS≥384, only fp32-activations confirmed-clean
 
-**Date**: 2026-06-11 → 2026-06-12
-**Status**: Diagnosis revised. The cheap fix (`--debug.deterministic`)
-makes the n=32 baseline train clean. fp32-activations still works as a
-heavier alternative but isn't required.
+**Date**: 2026-06-11 → 2026-06-12 (3 revisions)
+**Status**: Open. Two previous "fixes" refuted. The only thing that has
+trained 20 steps clean at GBS≥192 is `--training.mixed-precision-param=float32`
+at TP=4.
 
-## 🚨 Revised TL;DR (2026-06-12)
+## 🚨🚨 Counter-evidence (2026-06-12 evening, 8540102)
+
+**`--debug.deterministic` does NOT scale to n=64.** The fix that was
+declared validated at n=32 fails at n=64 / GBS=384:
+
+> Job 8540102, n=64, GBS=384, `--debug.seed=42 --debug.deterministic`,
+> overprovisioned (select=68, FAILOVER_MAX_RETRIES=2), clean attempt.
+> Training: loss 12.92 → 12.41 across steps 1–8 (clean), then
+> **grad_norm = nan at step 9** → **loss = nan at step 10**, NaN
+> persisted through step 20. No node failure (failover wrapper
+> reported "attempt 1 succeeded (exit 0)"). MFU ~9% (matches n=32
+> deterministic).
+
+Earlier intermediate signal in the same run: grad_norm = `inf` at step 3,
+the clip kicked in, loss spiked 12.86 → 13.28, and the model recovered
+for 5 more steps before the second overflow at step 9 finished it.
+
+This **refutes the "XPU nondeterminism is the root cause" hypothesis**
+that was the headline of the 2026-06-12 afternoon revision. Determinism
+mode is a per-step coin flip that bought us one clean run at n=32 GBS=192;
+it does not fix the actual failure mode. The actual mechanism is closer
+to the *original* (2026-06-11) finding: a bf16 forward overflow that
+crosses some weight-state threshold and produces inf activations that
+NaN the loss.
+
+### Revised production-fix ranking (after 8540102)
+
+| Fix | Status at n=32 | Status at n=64 | Throughput cost |
+|-----|----------------|----------------|-----------------|
+| `--debug.deterministic` | ✓ clean (8539896, 8539982) | **❌ NaN at step 10 (8540102)** | ~50% |
+| `--training.mixed-precision-param=float32` at TP=4 | ✓ clean (8537349) | **Untested at GBS=384** | ~75% |
+
+The fp32-activations-at-TP=4 fix is now the only candidate with any
+clean-training evidence, and it has **only been tested at GBS=96**. The
+next test is to confirm it survives GBS=384 — running fp32-activations
+at TP=4, LBS=2 (or LBS=1 at n=64 → GBS=192) and seeing whether the
+GBS=96 success was about the dtype or about the batch size.
+
+### What this rules out
+
+1. **"Just enable determinism"** is not a production fix.
+2. **n=32 success was lucky, not causal.** The 20-step clean run at n=32
+   GBS=192 deterministic was sampling a region where the bf16 forward
+   happened not to overflow. Doubling GBS to 384 reaches a region where
+   it does.
+3. The grad_norm = inf at step 3 followed by recovery is the same
+   pattern the n=16 baseline shows — the bf16 forward is producing
+   overflow regularly across the chain; the model just absorbs it as
+   long as the post-clip update is in the safe regime. At n=64 it's no
+   longer in the safe regime.
+
+### Open questions
+
+- Does **fp32-activations at TP=4, GBS=384** train clean? (Next test.)
+- Does **lowering LR to 1e-8** (untested in original factorial) buy
+  any margin? Possibly small enough that the bf16 forward doesn't get
+  pushed into overflow territory.
+- Is this a torchtitan-stack issue or an Aurora-XPU bf16-matmul issue?
+  Would need a Polaris (A100) comparison, but we don't have an 80B
+  config that fits on A100.
+
+### What the n=128/n=256 deterministic scripts would have shown
+
+Nothing useful — both would NaN earlier than n=64 (GBS scales with N).
+Not submitting them. (Per [[feedback_never_kill_running_jobs]], they
+weren't actually queued — only n=64-det was.)
+
+---
+
+## 🚨 Earlier "Revised TL;DR" (2026-06-12 afternoon, partially superseded)
 
 The original conclusion below — that this is a bf16 forward overflow —
 **is wrong about the mechanism**. The actual finding:
@@ -20,19 +89,14 @@ bypasses it but at higher throughput cost. The grad-norm "spikes to
 79K" we measured in the fp32 run are the *true* gradient magnitudes
 that the nondeterministic bf16 path was silently overflowing.
 
-| Fix | Throughput cost | Status |
-|-----|-----------------|--------|
-| `--debug.deterministic` | ~50% (n=32 dropped MFU from ~18% → ~9%) | **Validated** at n=32 (8539896) |
-| `--training.mixed-precision-param=float32` at TP=4 | ~75% (3-5× slower) | Validated at n=32 TP=4 (8537349) |
+**SUPERSEDED 2026-06-12 evening**: this was wrong too. n=64 with
+determinism also NaNs (8540102). See "Counter-evidence" section above.
+The factorial below correctly maps LR / data / clip-norm as non-causes,
+but the production-fix recommendation in this section is wrong.
 
-Production recommendation: **use `--debug.deterministic` for the 256N
-production chain restart**. It's a single env flag, no TP change, no
-config rewrite. The 50% throughput hit is the cost of stability until
-the nondeterministic op is identified and patched upstream.
-
-The original diagnosis below is preserved for the record — it correctly
-mapped LR / data / clip-norm as non-causes, but missed determinism as a
-factor.
+The mid-day production recommendation was: "use `--debug.deterministic`
+for the 256N production chain restart". **Do not do this** — the
+8540102 evidence is clear that this fix doesn't scale past n=32.
 
 ---
 
@@ -242,8 +306,9 @@ re-rolled the nondeterminism dice.
 | 8537349 | n32-tp4-fp32-mp.sh (✓ 20 steps) | (job 8537349) |
 | 8539568 | n32-tight-clip.sh (PBS protocol flake — preflight failed) | — |
 | 8539593 | n32-tight-clip.sh (resubmit) — NaN'd step 4, refuting tight-clip hypothesis | (job 8539593) |
-| 8539896 | **n32-det.sh** — `--debug.seed=42 --debug.deterministic` → **✓ clean 20 steps** | (job 8539896) |
-| 8539982 | n32-det-tight-clip.sh — det + max_norm=0.1, confirms determinism is the key | (job 8539982, in flight) |
+| 8539896 | n32-det.sh — `--debug.seed=42 --debug.deterministic` → ✓ clean 20 steps (but see 8540102 below — does not generalize past n=32) | (job 8539896) |
+| 8539982 | n32-det-tight-clip.sh — det + max_norm=0.1 → ✓ clean (n=32 only, same caveat) | (job 8539982) |
+| **8540102** | **n64-det.sh** — `--debug.seed=42 --debug.deterministic` at n=64 GBS=384, overprovisioned (select=68, FAILOVER_MAX_RETRIES=2) → **❌ NaN: grad_norm=inf step 3, recovered, grad_norm=nan step 9, loss=nan step 10**. Clean exit (failover wrapper reported attempt 1/2 succeeded, exit 0) — this is a training failure not an infra failure. **Refutes the determinism hypothesis.** | https://wandb.ai/aurora_gpt/torchtitan.ezpz.train/runs/wz9tr023 |
 
 All logs in `/flare/AuroraGPT/foremans/runs/agpt-80b-v2/torchtitan-ezpz/80b-*.o*`.
 
