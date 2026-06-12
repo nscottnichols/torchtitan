@@ -12,20 +12,12 @@ from pathlib import Path
 
 import matplotlib
 matplotlib.use("Agg")
-import matplotlib.font_manager as fm
 import matplotlib.pyplot as plt
 import numpy as np
 
-import ambivalent
+from torchtitan.experiments.ezpz.utils.plot_style import apply_style
 
-_IOSEVKA = Path.home() / ".local/share/fonts/Iosevka"
-if _IOSEVKA.is_dir():
-    for f in _IOSEVKA.iterdir():
-        if f.suffix in (".ttf", ".ttc", ".otf"):
-            fm.fontManager.addfont(str(f))
-
-plt.style.use(ambivalent.STYLES["ambivalent"])
-plt.rcParams["font.family"] = ["Iosevka", "DejaVu Sans Mono", "monospace"]
+apply_style()
 
 ROOT = Path("/lus/tegu/projects/datascience/foremans/projects/saforem2/torchtitan")
 TRAINER_STATE = ROOT / "outputs/sft/aurora2b-sophiag-tulu-mix-32n-gbs6144/checkpoint-729/trainer_state.json"

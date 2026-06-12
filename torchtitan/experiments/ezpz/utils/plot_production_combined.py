@@ -36,13 +36,13 @@ import matplotlib
 
 matplotlib.use("Agg")
 
-# ambivalent is required — silent fallback hides style regressions.
-import ambivalent  # noqa: F401
 import matplotlib.pyplot as plt
 import numpy as np
 
-plt.style.use(ambivalent.STYLES["ambivalent"])
-plt.rcParams["font.family"] = "monospace"
+# Shared ambivalent + Iosevka style helper.
+from torchtitan.experiments.ezpz.utils.plot_style import apply_style
+
+apply_style()
 
 # Reuse the W&B fetch + .o-log fallback already proven in
 # plot_production_wandb.py — same data path that feeds the per-trajectory
