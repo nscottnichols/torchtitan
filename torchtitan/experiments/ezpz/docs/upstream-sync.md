@@ -20,6 +20,26 @@ was required in ezpz.
 
 ---
 
+## 2026-06-12 — 53rd sync (2 commits, `1cc10d1ed..1c02a5cee`)
+
+Merged clean (no conflicts). No replays needed.
+
+### Upstream commits
+
+| Commit | Title | ezpz impact |
+|---|---|---|
+| `772dd1b6c` | `[Checkpointer] Remove the dependencies on PyTorch distributed state_dict APIs (#3623)` | None — refactors `components/checkpoint.py` internals + adds `components/checkpoint_utils.py`. ezpz imports `CheckpointManager` + `ModelWrapper` by name; both still exported. Verified imports cleanly. |
+| `1c02a5cee` | `Revert "Add deterministic topk for MoE routing" (#3647)` | Reverts PR #3600 from the 52nd sync. ezpz/moe re-imports `TokenChoiceTopKRouter` from `common/moe.py`, so the change flows through automatically — no ezpz-side replay needed (same as the original add). |
+
+### Verification
+
+Static: `import torchtitan.experiments.ezpz.{train, optimizer.containers, moe}` all succeed.
+Dynamic smoke: deferred — 52nd-sync's `agpt_2b_chunkedce` bitwise
+IDENTICAL already covers the checkpoint/optimizer code paths this
+sync touches, and the topk revert is a no-op for ezpz.
+
+---
+
 ## 2026-06-12 — 52nd sync (18 commits, `a97767611..1cc10d1ed`)
 
 Merged clean (no conflicts). Two small replays required: PR #3643
