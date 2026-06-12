@@ -1,11 +1,29 @@
 # `_dist_reduce` skips mesh all_reduce on DTensor inputs, breaking loss reporting on TP > 1
 
-**Status:** Filed upstream as
-[pytorch/torchtitan#3204](https://github.com/pytorch/torchtitan/pull/3204)
-(2026-05-03).
+**Status:** **Resolved upstream** as of commit
+[`d64eabcce`](https://github.com/pytorch/torchtitan/commit/d64eabcce)
+([PR #3159](https://github.com/pytorch/torchtitan/pull/3159), merged
+2026-05-18). The fix switched the DTensor branch of `_dist_reduce`
+from `full_tensor()` to `x = x.to_local()` followed by the
+unconditional mesh `all_reduce` on the resulting plain tensor.
 
-**Affects:** torchtitan since commit `1786292d` (2026-04-27,
-"[Module][Full DTensor] Config-based sharding infrastructure").
+Our originally-filed
+[PR #3204](https://github.com/pytorch/torchtitan/pull/3204) proposed a
+mesh-overlap-helper approach; @fegin requested the simpler `to_local()`
+shape during review, which landed via #3159 (alongside other Full
+DTensor work that needed the same fix). PR #3204 was closed as
+superseded on 2026-06-12.
+
+The local ezpz workarounds (`loss.full_tensor()` in `trainer.py` +
+`EzpzValidator.validate()` doing the same) were removed once the
+upstream fix had been in our `ezpz` branch via sync long enough to
+be smoke-validated.
+
+The remainder of this doc is preserved as historical context.
+
+**Affected:** torchtitan window 2026-04-27 (commit `1786292d`,
+"[Module][Full DTensor] Config-based sharding infrastructure") through
+2026-05-18 (commit `d64eabcce`).
 
 ## Summary
 

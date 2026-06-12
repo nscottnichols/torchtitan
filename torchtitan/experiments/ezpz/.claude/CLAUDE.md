@@ -248,19 +248,22 @@ that touches one of these areas.
     layers. Final-norm channels scaled up uniformly to ~10% above init.
   See [`docs/guides/training-dtype-bf16-norm-freeze.md`](../docs/guides/training-dtype-bf16-norm-freeze.md).
 
-- **TP > 1 loss reporting is off by `dp_world_size`** (since upstream
-  2026-04-27, commit `1786292d`). `_dist_reduce` short-circuits DTensor
-  inputs with `full_tensor()` and skips the requested mesh `all_reduce`
-  when the meshes are orthogonal. Loss is a Replicated DTensor on the
-  TP mesh; reductions are requested across `loss_mesh = batch × cp`.
-  Result: reported loss = `true / dp_world_size`. Gradients/optimizer
-  steps unaffected. Fix filed as
-  [pytorch/torchtitan#3204](https://github.com/pytorch/torchtitan/pull/3204).
-  Local workaround: `loss.full_tensor()` before `dist_sum` in
-  `trainer.py`, plus a new `EzpzValidator(Validator)` subclass in
-  `validator.py` that does the same in `validate()`. **No current
+- **TP > 1 loss reporting was off by `dp_world_size`** in the window
+  2026-04-27 (upstream commit `1786292d`) through 2026-05-18 (upstream
+  commit `d64eabcce`, [PR #3159](https://github.com/pytorch/torchtitan/pull/3159)).
+  `_dist_reduce` short-circuited DTensor inputs with `full_tensor()`
+  and skipped the requested mesh `all_reduce` when the meshes were
+  orthogonal. Loss is a Replicated DTensor on the TP mesh; reductions
+  are requested across `loss_mesh = batch × cp`. Reported `loss =
+  true / dp_world_size` (gradients/optimizer steps unaffected). Fix:
+  PR #3159 switched the DTensor branch to `x = x.to_local()` followed
+  by the unconditional mesh `all_reduce`. Our local workarounds
+  (`loss.full_tensor()` in `trainer.py` + `EzpzValidator(Validator)`
+  in `validator.py`) were removed once the upstream fix had been in
+  our `ezpz` branch via sync long enough to validate. **No current
   production runs use TP > 1**, so no live dashboard is wrong — but
-  historical 80B v1 W&B traces show `loss / 1536`. See
+  historical 80B v1 W&B traces from the affected window show
+  `loss / 1536`. See
   [`docs/guides/loss-reporting-tp-dist-reduce.md`](../docs/guides/loss-reporting-tp-dist-reduce.md).
 
 - **`compile + AC + TP=2` crashes on torch 2.13 for the entire
@@ -452,11 +455,6 @@ training in v2. See `docs/guides/training-dtype-bf16-norm-freeze.md`.
 
 Active issues with workarounds in place. For the full diagnosis +
 empirical evidence, follow the doc link.
-
-- **TP > 1 loss reporting off by `dp_world_size`** (since upstream
-  2026-04-27). Fix filed as `pytorch/torchtitan#3204`. Local workaround
-  in `trainer.py` + `validator.py`. See
-  [`docs/guides/loss-reporting-tp-dist-reduce.md`](../docs/guides/loss-reporting-tp-dist-reduce.md).
 
 - **HSDP init crashes** with `aten.normal_.default: in-place operations
   that require placement changes are not supported`. Workaround: pure
