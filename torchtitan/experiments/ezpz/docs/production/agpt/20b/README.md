@@ -1,22 +1,23 @@
 # Production Training — agpt 20B
 
-> Last updated: 2026-06-09
+> Last updated: 2026-06-12
 >
 > Current v2 production runs on `--training.dtype=float32`.
 > Historical v1 (bf16-tainted) runs are archived at
 > [`../historical/v1-bf16/`](../historical/v1-bf16/README.md) along
 > with the diagnosis link.
 
-## All chains overlaid (every dense agpt trajectory)
+## 20B chains overlaid
 
-![all dense agpt chains](../../figures/all_production_training.svg)
+![all 20B trajectories](../../figures/production_20b_training.svg)
 
-Cross-model overview: every 20B trajectory (TT v2 256N + TT v2 512N)
-**alongside** every 2B trajectory (MDS-reference + TT v2 256N + TT v2
-512N), all overlaid on shared axes vs tokens consumed (log-scale).
-Three panels: training loss / TPS-per-GPU / MFU. Use this to read 20B's
-per-token efficiency advantage directly against the 2B chains.
-Refreshed via `scripts/update_all_charts.sh`.
+Every 20B trajectory (TT v2 256N + TT v2 512N sync) overlaid on shared
+axes vs tokens consumed. Three panels: training loss / TPS-per-GPU /
+MFU. Refreshed via `python3 -m
+torchtitan.experiments.ezpz.utils.plot_production_combined`.
+
+For the cross-model view (2B + 20B together) with per-token efficiency
+comparison, see [`../README.md`](../README.md).
 
 ## 🏁 Headline (2026-06-09)
 

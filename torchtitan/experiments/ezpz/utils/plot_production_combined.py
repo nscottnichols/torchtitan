@@ -1,27 +1,24 @@
 #!/usr/bin/env python3
-"""Combined-overlay production chart across all production trajectories.
+"""Per-model and combined production overlay charts.
 
-One figure, 3 subplot panels (Loss / TPS-per-GPU / MFU), with up to 5
-curves per panel — one per production trajectory — plotted against
-**tokens consumed (log scale)** so trajectories with different GBS can
-be compared directly:
+For each configured production trajectory we emit one or two artifacts:
 
-    - AuroraGPT-2B
-        - MDS (256N reference, ~7.77T tokens, GBS=3072)
-        - TT v2 256N async (canonical 2B comparator)
-        - TT v2 512N sync (canonical 2B chain)
-    - AuroraGPT-20B
-        - TT v2 256N (per-token comparator)
-        - TT v2 512N sync (canonical 20B chain)
+    - ``all_production_training.{svg,png}`` — every trajectory overlaid
+      (top-level ``docs/production/README.md`` + cross-model
+      ``docs/production/agpt/README.md``).
+    - ``production_2b_training.{svg,png}`` — 2B trajectories only
+      (embedded on ``docs/production/agpt/2b/README.md``).
+    - ``production_20b_training.{svg,png}`` — 20B only
+      (embedded on ``docs/production/agpt/20b/README.md``).
+    - ``production_80b_training.{svg,png}`` — 80B only
+      (embedded on ``docs/production/agpt/80b/README.md``); skipped if
+      no 80B trajectory has live W&B data yet.
 
-MDS has no MFU column so it's only on the Loss + TPS panels.
-
-Writes a single artifact to docs/production/figures/all_production_training.svg
-that is embedded on the landing page (docs/production/README.md), the
-dir-level rollup (docs/production/agpt/README.md), and each per-model
-README (docs/production/agpt/{2b,20b,80b}/README.md). All four pages
-show the same overlay so you can read the cross-trajectory comparison
-from whichever entry-point you land on.
+Each chart is 3 subplot panels (Loss / TPS-per-GPU / MFU) vs tokens
+consumed. The 2B-MDS reference is on the Loss + TPS panels only (MDS
+doesn't log MFU). All charts pull from the same trajectory definitions
+below and the same W&B fetch path as ``plot_production_wandb.py``, so
+per-model and combined views can't drift from each other.
 
 Run:
     python3 -m torchtitan.experiments.ezpz.utils.plot_production_combined
@@ -55,10 +52,8 @@ from torchtitan.experiments.ezpz.utils.plot_production_wandb import (  # noqa: E
 import wandb  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
-OUT_PATH = (
-    REPO_ROOT
-    / "torchtitan/experiments/ezpz/docs/production/figures/all_production_training.svg"
-)
+FIGURES_DIR = REPO_ROOT / "torchtitan/experiments/ezpz/docs/production/figures"
+OUT_PATH = FIGURES_DIR / "all_production_training.svg"
 
 # MDS data lives as a CSV pulled separately from the MDS W&B project.
 MDS_CSV = (
@@ -77,6 +72,7 @@ COLOR_20B_TT_512N = "#1b8a3a"  # green
 
 TRAJECTORIES: list[dict] = [
     {
+        "model": "2b",
         "label": "2B-MDS (n256, SophiaG ref)",
         "source": "mds",
         "csv_path": str(MDS_CSV),
@@ -86,6 +82,7 @@ TRAJECTORIES: list[dict] = [
         "marker": None,
     },
     {
+        "model": "2b",
         "label": "2B-TT v2 (n256, async)",
         "source": "wandb",
         "key": "2b_v2_256",
@@ -95,6 +92,7 @@ TRAJECTORIES: list[dict] = [
         "marker": None,
     },
     {
+        "model": "2b",
         "label": "2B-TT v2 (n512, sync)",
         "source": "wandb",
         "key": "2b_v2_512",
@@ -104,6 +102,7 @@ TRAJECTORIES: list[dict] = [
         "marker": None,
     },
     {
+        "model": "20b",
         "label": "20B-TT v2 (n256)",
         "source": "wandb",
         "key": "20b_v2_256",
@@ -113,6 +112,7 @@ TRAJECTORIES: list[dict] = [
         "marker": None,
     },
     {
+        "model": "20b",
         "label": "20B-TT v2 (n512, sync)",
         "source": "wandb",
         "key": "20b_v2_512",
@@ -174,32 +174,22 @@ def load_mds_trajectory(csv_path: str) -> tuple[np.ndarray, np.ndarray, np.ndarr
     return np.array(iters), np.array(losses), np.array(tps_list)
 
 
-def main() -> None:
-    api = wandb.Api()
-
-    # Pull all trajectories
-    series: list[dict] = []
-    for traj in TRAJECTORIES:
-        print(f"\n=== loading {traj['label']} ===")
-        if traj["source"] == "wandb":
-            steps, loss, tps, mfu = load_wandb_trajectory(api, traj["key"])
-            tokens_b = steps * traj["tokens_per_step"] / 1e9
-            print(f"  {len(steps)} rows, tokens [{tokens_b[0]:.1f}B, {tokens_b[-1]:.1f}B]")
-            series.append({**traj, "tokens_b": tokens_b, "loss": loss, "tps": tps, "mfu": mfu})
-        else:  # mds
-            iters, loss, tps = load_mds_trajectory(traj["csv_path"])
-            tokens_b = iters * traj["tokens_per_step"] / 1e9
-            print(f"  {len(iters)} rows, tokens [{tokens_b[0]:.1f}B, {tokens_b[-1]:.1f}B]")
-            series.append({**traj, "tokens_b": tokens_b, "loss": loss, "tps": tps, "mfu": None})
-
-    # 3 panels: Loss, TPS/GPU, MFU
+def render_figure(
+    series: list[dict],
+    *,
+    suptitle: str,
+    out_path: Path,
+) -> None:
+    """Render a 3-panel (Loss / TPS / MFU) figure for the given series
+    list. Saves both SVG and PNG next to ``out_path``.
+    """
+    if not series:
+        print(f"  (skipping {out_path.name}: no trajectories)")
+        return
     fig, axes = plt.subplots(3, 1, figsize=(14, 11), sharex=True)
-    fig.suptitle(
-        "AuroraGPT production training — all canonical chains overlaid",
-        fontsize=15, fontweight="bold",
-    )
+    fig.suptitle(suptitle, fontsize=15, fontweight="bold")
 
-    # Panel 1: Loss vs tokens (all 5)
+    # Panel 1: Loss vs tokens
     ax = axes[0]
     for s in series:
         ax.plot(
@@ -216,7 +206,7 @@ def main() -> None:
     ax.grid(alpha=0.25)
     ax.legend(fontsize=8, loc="upper right", frameon=False)
 
-    # Panel 2: TPS/GPU vs tokens (all 5)
+    # Panel 2: TPS/GPU vs tokens
     ax = axes[1]
     for s in series:
         ax.plot(
@@ -232,11 +222,13 @@ def main() -> None:
     ax.set_title("Throughput per GPU")
     ax.grid(alpha=0.25)
 
-    # Panel 3: MFU vs tokens (TT only — MDS has no MFU)
+    # Panel 3: MFU vs tokens (skip MDS — no MFU column)
     ax = axes[2]
+    have_mfu = False
     for s in series:
         if s["mfu"] is None:
             continue
+        have_mfu = True
         ax.plot(
             s["tokens_b"], s["mfu"],
             color=s["color"], alpha=0.18, linewidth=0.5, rasterized=True,
@@ -248,18 +240,58 @@ def main() -> None:
         )
     ax.set_ylabel("MFU (%)")
     ax.set_xlabel("Tokens consumed (B)")
-    ax.set_title("Model FLOPs Utilization (TT only — MDS does not log MFU)")
+    mfu_title = (
+        "Model FLOPs Utilization (TT only — MDS does not log MFU)"
+        if any(s["mfu"] is None for s in series) and have_mfu
+        else "Model FLOPs Utilization"
+    )
+    ax.set_title(mfu_title)
     ax.grid(alpha=0.25)
 
     fig.tight_layout(rect=(0, 0, 1, 0.96))
-    OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    # SVG keeps axes/labels/legend vector + dense raw lines rasterized
-    fig.savefig(OUT_PATH, dpi=200, bbox_inches="tight", transparent=True)
-    png_path = OUT_PATH.with_suffix(".png")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path, dpi=200, bbox_inches="tight", transparent=True)
+    png_path = out_path.with_suffix(".png")
     fig.savefig(png_path, dpi=200, bbox_inches="tight", transparent=True)
     plt.close(fig)
-    print(f"\nSaved: {OUT_PATH}")
-    print(f"Saved: {png_path}")
+    print(f"  saved: {out_path}")
+    print(f"  saved: {png_path}")
+
+
+def main() -> None:
+    api = wandb.Api()
+
+    # Pull all trajectories once and cache results.
+    series: list[dict] = []
+    for traj in TRAJECTORIES:
+        print(f"\n=== loading {traj['label']} ===")
+        if traj["source"] == "wandb":
+            steps, loss, tps, mfu = load_wandb_trajectory(api, traj["key"])
+            tokens_b = steps * traj["tokens_per_step"] / 1e9
+            print(f"  {len(steps)} rows, tokens [{tokens_b[0]:.1f}B, {tokens_b[-1]:.1f}B]")
+            series.append({**traj, "tokens_b": tokens_b, "loss": loss, "tps": tps, "mfu": mfu})
+        else:  # mds
+            iters, loss, tps = load_mds_trajectory(traj["csv_path"])
+            tokens_b = iters * traj["tokens_per_step"] / 1e9
+            print(f"  {len(iters)} rows, tokens [{tokens_b[0]:.1f}B, {tokens_b[-1]:.1f}B]")
+            series.append({**traj, "tokens_b": tokens_b, "loss": loss, "tps": tps, "mfu": None})
+
+    # 1) Combined chart (all models)
+    print("\n=== rendering all_production_training ===")
+    render_figure(
+        series,
+        suptitle="AuroraGPT production training — all canonical chains overlaid",
+        out_path=OUT_PATH,
+    )
+
+    # 2) Per-model charts (one per distinct `model` field)
+    models_present = sorted({s.get("model", "?") for s in series})
+    for model in models_present:
+        model_series = [s for s in series if s.get("model") == model]
+        suptitle = f"AuroraGPT-{model.upper()} production training"
+        out_path = FIGURES_DIR / f"production_{model}_training.svg"
+        print(f"\n=== rendering production_{model}_training ===")
+        render_figure(model_series, suptitle=suptitle, out_path=out_path)
 
 
 if __name__ == "__main__":
