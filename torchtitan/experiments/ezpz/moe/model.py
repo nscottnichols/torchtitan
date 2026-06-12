@@ -21,6 +21,7 @@ from torchtitan.models.common.nn_modules import Linear, RMSNorm
 from torchtitan.models.common.rope import RoPE
 from torchtitan.models.utils import get_moe_model_nparams_and_flops
 from torchtitan.protocols.module import Module
+from torchtitan.experiments.ezpz.logging import warn_once
 from torchtitan.tools.logging import logger
 from torchtitan.tools.utils import has_cuda_capability
 
@@ -218,7 +219,11 @@ class moeModel(Decoder):  # noqa: N801
                     if getattr(
                         experts_cfg, "compute_backend", "grouped_mm"
                     ) == "grouped_mm" and not has_cuda_capability(9, 0):
-                        logger.warning(
+                        # warn_once collapses the per-layer repetition
+                        # (this loop fires once per MoE layer → 26 dup
+                        # lines on a 26-layer model otherwise).
+                        warn_once(
+                            logger,
                             "torch._grouped_mm requires SM90+ CUDA; falling "
                             "back to for_loop expert backend.",
                         )
