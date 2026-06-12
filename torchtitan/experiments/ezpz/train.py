@@ -525,4 +525,14 @@ if __name__ == "__main__":
     # while a non-daemon thread is alive. os._exit bypasses the cleanup
     # chain; we've already destroy_process_group()'d and wandb has
     # flushed by this point, so there's nothing important left to run.
+    # Kill the mp resource_tracker daemon first so it can't print
+    # "leaked semaphore" warnings on shutdown (the semaphores are
+    # kernel-cleaned anyway when the process group dies).
+    try:
+        from multiprocessing.resource_tracker import _resource_tracker as _rt
+        import signal
+        if getattr(_rt, "_pid", None) is not None:
+            os.kill(_rt._pid, signal.SIGKILL)
+    except Exception:
+        pass
     os._exit(0)
