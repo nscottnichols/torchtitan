@@ -428,7 +428,15 @@ class FaultTolerantTrainer(Trainer):
         loss_parallel_enabled = (
             parallel_dims.tp_enabled and not config.parallelism.disable_loss_parallel
         )
-        self.train_context = dist_utils.get_train_context(loss_parallel_enabled)
+        # 52nd sync: PR #3641 changed get_train_context to keyword-only
+        # signature (`enable_loss_parallel`, plus optional `parallel_dims`
+        # and `spmd_typechecking` for the new spmd_types backend). ezpz
+        # doesn't use the spmd_types backend, so just forward the loss
+        # parallel flag.
+        self.train_context = dist_utils.get_train_context(
+            enable_loss_parallel=loss_parallel_enabled,
+            parallel_dims=parallel_dims,
+        )
 
         # Build validator if validation is configured
         if config.validator.enable:
