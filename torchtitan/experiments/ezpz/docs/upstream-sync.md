@@ -111,9 +111,35 @@ so the inheritance story matters:
 
 ### Verification
 
-Smoke-test pending — will run after replays merge. Expected: clean
-imports (already verified for both replays), agpt_2b 20-step bitwise
-sync vs pre-merge HEAD, moe_debugmodel_ep 10-step smoke.
+Three smoke runs total. Net result: merge-ready.
+
+1. **`agpt_2b_chunkedce` 20-step bitwise sync** (job `12468664`, 2N,
+   `--debug.deterministic`, post-merge HEAD `3738b6dfb` vs pre-merge
+   `1b43fb152`) — **IDENTICAL**. Loss + grad_norm match bit-for-bit
+   across all 20 steps. ~3 min wall.
+
+2. **`moe_10b_2b_sdpa_ep` 10-step drift check** (job `12468666`, 2N,
+   seed-only no determ) — **drift ≤4e-4 nats / ≤0.03 grad_norm**
+   through step 10. Step 1 bit-identical (12.92541 / 2.2413 on both
+   sides), subsequent drift follows the same FP-summation noise
+   pattern we already characterized in the PR #14 A/B work
+   (non-deterministic XCCL reduction order). Both head and pre
+   completed cleanly; no infra issues.
+
+3. **`moe_debugmodel_ep` 10-step `--debug.deterministic`** (jobs
+   `12468665` + `12468667`, both attempts) — **infrastructure
+   failure, unrelated to sync**. oneCCL bails with
+   `comm.cpp:661 get_scaleout_device_buf: EXCEPTION: malloc
+   scaleout_device_buf failed` during the first `reduce_scatter_tensor`
+   on both attempts on different node sets. The determinism flag
+   forces XCCL to use larger workspace pools; this path is broken
+   on the current oneCCL build regardless of the sync. Filed as
+   pre-existing infra, not a 52nd-sync regression.
+
+The trainer fix (PR #3641 keyword-only `get_train_context`) was a
+post-merge replay required to even boot the training entry point —
+discovered by the head phase of job `12468663`'s first attempt.
+Committed at `3738b6dfb`.
 
 ---
 
