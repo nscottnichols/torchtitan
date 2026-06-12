@@ -15,7 +15,6 @@ from typing import Annotated
 import tyro
 import torch
 import tyro
-
 from torchtitan.config import Configurable
 from torchtitan.config.function import Function
 from torchtitan.observability import structured_logger as sl
@@ -36,9 +35,6 @@ MEMORY_FILE = (
     "{rank:06d}_step_{step}.pickle"  # MEMORY_DIR/MEMORY_STEP_DIR/{MEMORY_FILE}
 )
 
-# how much memory allocation/free ops to record in memory snapshots
-MEMORY_SNAPSHOT_MAX_ENTRIES = 100000
-
 
 class MemoryProfiler:
     """Records periodic memory snapshots during training.
@@ -55,9 +51,15 @@ class MemoryProfiler:
         snapshot_dir: str,
         leaf_folder: str,
         rank: int,
+        max_entries: int,
     ) -> None:
         device_module.memory._record_memory_history(
-            max_entries=MEMORY_SNAPSHOT_MAX_ENTRIES
+            # stacks="python" records only Python frames (not C++), which is much
+            # cheaper to capture and serialize, keeping the snapshot dump from
+            # taking minutes -- the default stacks="all" symbolizes C++ frames,
+            # which is very slow for torchtitan workload.
+            stacks="python",
+            max_entries=max_entries,
         )
         # when resume training, we start from the last step
         self.step_num = step_num
@@ -168,6 +170,13 @@ class Profiler(Configurable):
 
         save_memory_snapshot_folder: str = MEMORY_DIR
         """Memory snapshot files location."""
+
+        memory_snapshot_max_entries: int = 1_000_000
+        """Max alloc/free events recorded per memory snapshot (ring buffer).
+
+        Caps the history passed to ``_record_memory_history``; the oldest events
+        are dropped once full. Bounds host memory and snapshot size / dump time.
+        """
 
         trace_post_processor: Annotated[
             Function.Config | None, tyro.conf.Suppress
@@ -354,5 +363,10 @@ class Profiler(Configurable):
 
         logger.info(f"Memory profiler active. Snapshot will be saved at {snapshot_dir}")
         return MemoryProfiler(
-            global_step, cfg.profile_freq, snapshot_dir, leaf_folder, rank
+            global_step,
+            cfg.profile_freq,
+            snapshot_dir,
+            leaf_folder,
+            rank,
+            cfg.memory_snapshot_max_entries,
         )
