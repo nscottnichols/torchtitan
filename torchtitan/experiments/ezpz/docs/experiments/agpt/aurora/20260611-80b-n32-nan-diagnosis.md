@@ -129,13 +129,20 @@ Ranked by cost-if-it-works:
 
 | Candidate | Hypothesis | Throughput cost | Status |
 |-----------|------------|-----------------|--------|
-| Tighter `max_norm` (1.0 → 0.1) | Smaller weight updates → weights stay near init → bf16 forward doesn't overflow | ~0% | **In flight as 8539568** |
+| Tighter `max_norm` (1.0 → 0.1) | Smaller weight updates → weights stay near init → bf16 forward doesn't overflow | ~0% | **❌ Refuted by 8539593** (NaN'd at step 4 — earlier than baseline, since clipping is post-backward and can't prevent forward-pass overflow) |
 | Lower LR (1e-6 → 1e-8) | Same mechanism as tighter clip | ~0% (slower convergence in nat/token but not in throughput/sec) | Untested |
 | Logit softcap (Gemma-2 style) | Caps logits pre-softmax → fewer paths to inf | ~0% via FlexAttention | **Not available on XPU** (FlexAttention unsupported, would need custom impl) |
 | `mixed_precision_param=float32` at TP=4 | Forces all-fp32 forward/backward | **~3-5× slower** | **Validated** (8537349 cleanly trained 20 steps) |
 
-The slow fallback is fp32 activations at TP=4. The cheap fix is one of
-the clip/LR knobs.
+**Update (2026-06-12)**: tighter `max_norm` was refuted by 8539593 —
+NaN at step 4 instead of step 6. This makes sense in hindsight:
+gradient clipping runs AFTER backward, so by the time `max_norm`
+would constrain the gradient, the bf16 forward has already
+overflowed and the gradient tensor already contains nan. Clipping
+nan→nan doesn't help.
+
+**The only known production-viable fix is `mixed_precision_param=float32`
+at TP=4**, with the 3-5× throughput cost.
 
 ## Implications for production
 
@@ -162,7 +169,8 @@ the clip/LR knobs.
 | 8537029 | n32-tp4-lbs1.sh | (job 8537029) |
 | 8537168 | n32-tp4-lbs2.sh | (job 8537168) |
 | 8537349 | n32-tp4-fp32-mp.sh (✓ 20 steps) | (job 8537349) |
-| 8539568 | n32-tight-clip.sh (in flight) | TBD |
+| 8539568 | n32-tight-clip.sh (PBS protocol flake — preflight failed) | — |
+| 8539593 | n32-tight-clip.sh (resubmit) — NaN'd step 4, refuting tight-clip hypothesis | (job 8539593) |
 
 All logs in `/flare/AuroraGPT/foremans/runs/agpt-80b-v2/torchtitan-ezpz/80b-*.o*`.
 
