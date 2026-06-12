@@ -15,7 +15,6 @@ import ezpz
 
 import torch
 from torch.distributed.elastic.multiprocessing.errors import record
-from torch.distributed.tensor import DTensor
 
 from torchtitan.components.dataloader import DataloaderExhaustedError
 from torchtitan.components.loss import ChunkedCELoss, IGNORE_INDEX
@@ -591,16 +590,6 @@ class FaultTolerantTrainer(Trainer):
 
         if parallel_dims.dp_cp_enabled:
             loss = loss.detach()
-            # When TP > 1, loss comes back as a Replicated DTensor on the TP
-            # mesh. Upstream `_dist_reduce` short-circuits DTensor inputs and
-            # skips the requested mesh all-reduce (it assumes the DTensor's
-            # mesh equals the reduction mesh, which is not true here — we
-            # want to reduce across batch_mesh, not TP). Convert to a plain
-            # tensor here so the regular all-reduce path runs and we get the
-            # correct sum across batch ranks. See
-            # docs/guides/known-bugs/loss-reporting-tp-dist-reduce.md.
-            if isinstance(loss, DTensor):
-                loss = loss.full_tensor()
             # FT addition: use ft_manager.loss_sync_pg for extra process group
             ft_pg = self.ft_manager.loss_sync_pg
             loss_mesh = parallel_dims.get_optional_mesh("loss")

@@ -4,28 +4,21 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Subclass of upstream Validator that fixes loss reporting on TP > 1.
+"""Subclass of upstream Validator with two ezpz-side adjustments.
 
-Upstream's `_dist_reduce` (torchtitan/distributed/utils.py) short-circuits
-DTensor inputs by returning `float(x.full_tensor().item())` and skips the
-requested mesh all_reduce. That is correct only when the DTensor's mesh
-equals the reduction mesh. The validator's loss reduction passes the
-loss_mesh (= batch x cp), but the loss is a Replicated DTensor on the TP
-mesh — orthogonal to loss_mesh — so the cross-batch reduction is silently
-dropped and reported val loss is off by a factor of `dp_world_size`.
-
-This subclass overrides `validate()` to convert the loss DTensor to a
-plain tensor before calling `dist_sum`, so the regular all_reduce path
-runs and val loss is correct on TP > 1.
-
-See docs/guides/known-bugs/loss-reporting-tp-dist-reduce.md.
+1. Caches the validation dataloader on the instance instead of rebuilding
+   it on every `validate()` call. Upstream rebuilds per call, which is
+   cheap for the default `c4_validation` HF stream but re-runs
+   `build_gpt_datasets()` for our blendcorpus-backed loader.
+2. Captures `job_config` in `__init__` and forwards `training_steps` +
+   `global_batch_size` to the validation dataloader, so the blendcorpus
+   loader gets the same sample budget the trainer used.
 """
 
 from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
-from torch.distributed.tensor import DTensor
 
 from torchtitan.components.loss import IGNORE_INDEX
 from torchtitan.components.validate import Validator
@@ -178,12 +171,6 @@ class EzpzValidator(Validator):
 
         loss = torch.sum(torch.stack(accumulated_losses))
         loss /= num_steps
-        # Workaround for upstream `_dist_reduce` skipping the mesh all_reduce
-        # when the input is a DTensor. The loss is a Replicated DTensor on
-        # the TP mesh; we want a sum across batch_mesh (orthogonal). Convert
-        # to a plain tensor first so the regular reduction runs.
-        if isinstance(loss, DTensor):
-            loss = loss.full_tensor()
         if parallel_dims.dp_cp_enabled:
             global_avg_loss = dist_utils.dist_sum(
                 loss, parallel_dims.get_optional_mesh("loss")
