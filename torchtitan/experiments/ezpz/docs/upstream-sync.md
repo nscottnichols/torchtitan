@@ -20,6 +20,40 @@ was required in ezpz.
 
 ---
 
+## 2026-06-12 — 54th sync (3 commits, `1c02a5cee..96ab7487d`)
+
+Merged clean (no conflicts). No replays needed — all three commits
+either don't touch surfaces ezpz overrides, or fix bugs in code paths
+ezpz doesn't exercise.
+
+### Upstream commits
+
+| Commit | Title | ezpz impact |
+|---|---|---|
+| `88030eec1` | `[rl] Fix batch invariant logprob calculation by forcing vllm use trainer's function (#3629)` | None — touches `experiments/rl/actors/generator.py`. ezpz/rl has its own `train_grpo.py` / `train_sft.py` that don't import from `experiments/rl/actors/`. |
+| `5ba439938` | `[Bug] Fix MoE SP token combine indices (#3604)` | **Inherited (no-op in practice)** — fixes a `B > 1` × `sp_size > 1` bug in `common/token_dispatcher.py`. ezpz/moe re-imports the dispatcher unchanged, so the fix flows automatically. Our MoE configs (`moe_2b_ep`, `moe_10b_2b_sdpa_ep`) run with `sp_size == 1`, so the buggy code path was never live for us. |
+| `96ab7487d` | `chore(ci): migrate ROCm matrix from 7.1 to 7.2 (#3267)` | None — CI matrix + ROCm loss reference files only. ezpz doesn't run on ROCm or hit these CI configs. |
+
+### Verification
+
+Static: `import torchtitan.experiments.ezpz.{train, optimizer.containers, moe}` all succeed.
+
+Dynamic:
+
+1. **agpt_2b_chunkedce bitwise check** (job `12468696`, 2N,
+   `bitwise_sync_check.sh` comparing `434cfe5d1` pre-merge vs
+   `f8be3bcd1` post-merge with `--debug.seed=42 --debug.deterministic`)
+   — **VERDICT: IDENTICAL** (loss + grad_norm match bit-for-bit
+   across all 20 steps; head step 20 = pre step 20 = 10.66272 /
+   18.1259).
+2. **moe_10b_2b_sdpa_ep 10-step smoke** (job `12468697`, 2N) —
+   **passed** (loss 12.89 → 8.87 over 10 steps; grad_norm stayed
+   bounded; ~80 GiB peak). EP=2, SP=1, so the `5ba439938` SP fix
+   doesn't enter our code path — this just confirms no regression
+   in the EP forward/backward.
+
+---
+
 ## 2026-06-12 — 53rd sync (2 commits, `1cc10d1ed..1c02a5cee`)
 
 Merged clean (no conflicts). No replays needed.
