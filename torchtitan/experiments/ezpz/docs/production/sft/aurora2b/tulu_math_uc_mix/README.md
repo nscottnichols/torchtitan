@@ -23,7 +23,7 @@
 
 ## Loss trajectory
 
-![SFT training curves](charts/sft-curves.png)
+[![SFT training curves](charts/sft-curves.svg)](charts/sft-curves.svg)
 
 Loss + grad_norm + LR + mean-token-accuracy + entropy + tokens-seen
 over the 729 global steps that span the 3-epoch cosine schedule.
