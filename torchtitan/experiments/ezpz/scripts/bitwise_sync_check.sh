@@ -64,7 +64,7 @@ SUBMIT_DIR="${PBS_O_WORKDIR:-$(pwd)}"
 source <(curl -fsSL https://bit.ly/ezpz-utils) && ezpz_setup_job
 cd "${SUBMIT_DIR}"
 
-HEAD_COMMIT="$(git rev-parse HEAD)"
+HEAD_COMMIT="${HEAD_COMMIT:-$(git rev-parse HEAD)}"
 PRE_MERGE_COMMIT="${PRE_MERGE_COMMIT:-$(git rev-parse HEAD^1 2>/dev/null)}"
 if [[ -z "$PRE_MERGE_COMMIT" ]] || ! git rev-parse "$PRE_MERGE_COMMIT" >/dev/null 2>&1; then
     echo "FATAL: PRE_MERGE_COMMIT='$PRE_MERGE_COMMIT' is not a valid git ref"
