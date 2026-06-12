@@ -332,6 +332,9 @@ class LocalTokenDispatcher(Configurable):
         routed_output_RD: torch.Tensor,
         metadata: LocalDispatchMetadata,
         x_TD: torch.Tensor,
+        *,
+        num_local_tokens_after_padding: int | None = None,
+        local_seq_len_after_padding: int | None = None,
     ) -> torch.Tensor:
         """Score and scatter_add routed expert outputs.
 
@@ -339,10 +342,15 @@ class LocalTokenDispatcher(Configurable):
             routed_output_RD: ``(R, D)`` expert outputs
             metadata: LocalDispatchMetadata from dispatch()
             x_TD: ``(T, D)`` original input tokens
+            num_local_tokens_after_padding: Unused for local dispatch; kept
+                for a shared dispatcher combine signature.
+            local_seq_len_after_padding: Unused for local dispatch; kept for
+                a shared dispatcher combine signature.
 
         Returns:
             out_TD: ``(T, D)`` combined output.
         """
+        del num_local_tokens_after_padding, local_seq_len_after_padding
         out_TD = torch.zeros_like(x_TD)
 
         if not self.score_before_experts:
@@ -361,6 +369,33 @@ class LocalTokenDispatcher(Configurable):
             x_TD,
         )
         return out_TD
+
+    def _sp_global_token_indices(
+        self,
+        local_indices: torch.Tensor,
+        local_seq_len: int,
+    ) -> torch.Tensor:
+        """Map SP-local token indices to full-sequence global indices.
+
+        Replays upstream PR #3604 (commit ``5ba439938``): with sequence
+        parallel and ``B > 1``, the previous ``local_idx + local_T * sp_rank``
+        offset placed tokens into wrong global positions because each batch
+        has its own sequence shard. Convert to batch-aware indexing instead.
+
+        For ``sp_size == 1`` this is a no-op; the EP=1 ``LocalTokenDispatcher``
+        path never sets SP attrs, but inheriting subclasses do.
+        """
+        sp_size = getattr(self, "sp_size", 1)
+        if sp_size == 1:
+            return local_indices
+
+        local_pos = local_indices % local_seq_len
+        batch_idx = local_indices // local_seq_len
+        global_seq_len = local_seq_len * sp_size
+        global_indices = batch_idx * global_seq_len + local_pos
+        return torch.add(  # pyrefly: ignore [no-matching-overload]
+            global_indices, self.sp_rank * local_seq_len
+        )
 
 
 class AllToAllTokenDispatcher(LocalTokenDispatcher):
@@ -886,6 +921,9 @@ class AllToAllTokenDispatcher(LocalTokenDispatcher):
         routed_output_RD: torch.Tensor,
         metadata: AllToAllDispatchMetadata,
         x_TD: torch.Tensor,
+        *,
+        num_local_tokens_after_padding: int | None = None,
+        local_seq_len_after_padding: int | None = None,
     ) -> torch.Tensor:
         """Reverse the dispatch: unpermute + all-to-all + score + scatter_add.
 
@@ -897,13 +935,27 @@ class AllToAllTokenDispatcher(LocalTokenDispatcher):
             routed_output_RD: ``(R, D)`` expert outputs in expert-major order
             metadata: AllToAllDispatchMetadata from dispatch()
             x_TD: ``(T, D)`` original input tokens
+            num_local_tokens_after_padding: Local token count to use for the
+                combined SP view after logical padding. MoE padding passes this
+                count without materializing pad rows. Defaults to
+                ``x_TD.shape[0]`` if not provided (back-compat for callers
+                that pre-date the upstream PR #3604 signature).
+            local_seq_len_after_padding: Per-batch local sequence length after
+                logical padding, used to map local token indices to global SP
+                positions. Required when ``sp_size > 1``.
 
         Returns:
             out_TD: ``(T, D)`` combined output.
         """
         # EP=1: fall back to local combine (no all-to-all needed)
         if self.ep_mesh is None:
-            return super().combine(routed_output_RD, metadata, x_TD)
+            return super().combine(
+                routed_output_RD,
+                metadata,
+                x_TD,
+                num_local_tokens_after_padding=num_local_tokens_after_padding,
+                local_seq_len_after_padding=local_seq_len_after_padding,
+            )
 
         # Reverse expert-major reordering
         routed_output_RD = self._unpermute(
@@ -949,9 +1001,17 @@ class AllToAllTokenDispatcher(LocalTokenDispatcher):
 
         # With SP, x_TD is the local shard. Create full-size buffer for
         # scatter_add so routed results from all SP ranks can be placed
-        # at global positions.
+        # at global positions. Use ``num_local_tokens_after_padding`` when
+        # the caller provides it (post-PR #3604 upstream callsite); fall
+        # back to ``x_TD.shape[0]`` to preserve the prior behavior when
+        # callers haven't been updated yet.
+        local_T = (
+            num_local_tokens_after_padding
+            if num_local_tokens_after_padding is not None
+            else x_TD.shape[0]
+        )
         out_TD = torch.zeros(
-            x_TD.shape[0] * self.sp_size,
+            local_T * self.sp_size,
             x_TD.shape[-1],
             device=x_TD.device,
             dtype=x_TD.dtype,
@@ -967,10 +1027,16 @@ class AllToAllTokenDispatcher(LocalTokenDispatcher):
             ).reshape(-1, 1)
 
         # With SP, token indices are 0-based within the local shard.
-        # Offset to global positions for the full-size scatter buffer.
+        # Map them to global positions in the full-size scatter buffer
+        # via the batch-aware helper (replays upstream PR #3604).
         if self.sp_size > 1:
-            token_indices_experts_sorted_N = (
-                metadata.token_indices_experts_sorted_N + x_TD.shape[0] * self.sp_rank
+            assert local_seq_len_after_padding is not None, (
+                "AllToAllTokenDispatcher.combine requires "
+                "local_seq_len_after_padding when sp_size > 1"
+            )
+            token_indices_experts_sorted_N = self._sp_global_token_indices(
+                metadata.token_indices_experts_sorted_N,
+                local_seq_len_after_padding,
             )
         else:
             token_indices_experts_sorted_N = metadata.token_indices_experts_sorted_N
@@ -1144,6 +1210,9 @@ class DeepEPTokenDispatcher(LocalTokenDispatcher):
         routed_output_RD: torch.Tensor,
         metadata: DeepEPDispatchMetadata,
         x_TD: torch.Tensor,
+        *,
+        num_local_tokens_after_padding: int | None = None,
+        local_seq_len_after_padding: int | None = None,
     ) -> torch.Tensor:
         """Combine tokens via DeepEP.
 
@@ -1151,13 +1220,21 @@ class DeepEPTokenDispatcher(LocalTokenDispatcher):
         to MoE.forward, enabling overlap with shared_experts.
         When sp_size > 1, there is no overlap: sync is forced here because
         the SP expansion must read the combine result before returning.
+        ``local_seq_len_after_padding`` is required when ``sp_size > 1``
+        so the SP expansion uses batch-aware global indices (upstream
+        PR #3604).
         """
+        del num_local_tokens_after_padding  # unused; combined_TD.shape[0] carries it
         from torchtitan.distributed.deepep.deepep import combine_tokens, sync_combine
 
         # pyrefly: ignore [bad-argument-type]
         combined_TD = combine_tokens(routed_output_RD, metadata.state)
 
         if self.sp_size > 1:
+            assert local_seq_len_after_padding is not None, (
+                "DeepEPTokenDispatcher.combine requires "
+                "local_seq_len_after_padding when sp_size > 1"
+            )
             sync_combine()
             out_TD = torch.zeros(
                 combined_TD.shape[0] * self.sp_size,
@@ -1165,8 +1242,14 @@ class DeepEPTokenDispatcher(LocalTokenDispatcher):
                 device=combined_TD.device,
                 dtype=combined_TD.dtype,
             )
-            offset = combined_TD.shape[0] * self.sp_rank
-            out_TD[offset : offset + combined_TD.shape[0]] = combined_TD
+            local_indices = torch.arange(
+                combined_TD.shape[0], device=combined_TD.device
+            )
+            global_indices = self._sp_global_token_indices(
+                local_indices,
+                local_seq_len_after_padding,
+            )
+            out_TD[global_indices] = combined_TD
             return out_TD
 
         return combined_TD
@@ -1285,8 +1368,17 @@ class HybridEPTokenDispatcher(LocalTokenDispatcher):
         routed_output_RD: torch.Tensor,
         metadata: DeepEPDispatchMetadata,
         x_TD: torch.Tensor,
+        *,
+        num_local_tokens_after_padding: int | None = None,
+        local_seq_len_after_padding: int | None = None,
     ) -> torch.Tensor:
-        """Combine tokens via HybridEP."""
+        """Combine tokens via HybridEP.
+
+        ``local_seq_len_after_padding`` is required when ``sp_size > 1``
+        so the SP expansion uses batch-aware global indices (upstream
+        PR #3604).
+        """
+        del num_local_tokens_after_padding  # unused; combined_TD.shape[0] carries it
         from torchtitan.distributed.deepep import hybridep
 
         combined_TD = hybridep.combine_tokens(
@@ -1296,14 +1388,24 @@ class HybridEPTokenDispatcher(LocalTokenDispatcher):
         )
 
         if self.sp_size > 1:
+            assert local_seq_len_after_padding is not None, (
+                "HybridEPTokenDispatcher.combine requires "
+                "local_seq_len_after_padding when sp_size > 1"
+            )
             out_TD = torch.zeros(
                 combined_TD.shape[0] * self.sp_size,
                 combined_TD.shape[-1],
                 device=combined_TD.device,
                 dtype=combined_TD.dtype,
             )
-            offset = combined_TD.shape[0] * self.sp_rank
-            out_TD[offset : offset + combined_TD.shape[0]] = combined_TD
+            local_indices = torch.arange(
+                combined_TD.shape[0], device=combined_TD.device
+            )
+            global_indices = self._sp_global_token_indices(
+                local_indices,
+                local_seq_len_after_padding,
+            )
+            out_TD[global_indices] = combined_TD
             return out_TD
 
         return combined_TD
