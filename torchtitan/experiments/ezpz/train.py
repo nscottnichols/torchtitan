@@ -518,3 +518,11 @@ if __name__ == "__main__":
     ezpz.distributed.setup_torch()
     _ensure_rank_env()
     main()
+    # Hard-exit after main() returns. Without this, mpiexec hangs
+    # post-training waiting on a wedged C++ thread on most ranks (kernel
+    # stack: one thread in __do_sys_pause + a non-daemon torch signal
+    # handler that never returns). Python's normal shutdown can't finish
+    # while a non-daemon thread is alive. os._exit bypasses the cleanup
+    # chain; we've already destroy_process_group()'d and wandb has
+    # flushed by this point, so there's nothing important left to run.
+    os._exit(0)
