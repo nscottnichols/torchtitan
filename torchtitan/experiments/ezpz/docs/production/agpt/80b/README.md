@@ -1,19 +1,19 @@
 # Production Training — agpt 80B
 
-> Last updated: 2026-06-09
+> Last updated: 2026-06-12
 
-## All chains overlaid (every dense agpt trajectory)
+## 80B trajectory chart
 
-![all dense agpt chains](../../figures/all_production_training.svg)
+**No live 80B production chart yet** — production has not begun (4N
+smokes are ≤20 steps each, and 256N is currently blocked on the NaN
+diagnosed [here](../../experiments/agpt/aurora/20260611-80b-n32-nan-diagnosis.md)).
+The per-trajectory stub [`n4/README.md`](n4/README.md) holds the 4N
+validation details, and the 256N production-fix recipe will be linked
+here once `--debug.deterministic` n=64/128/256 sweep validates and a
+production chain starts persisting ckpts.
 
-Cross-model overview: every 2B + 20B production trajectory overlaid on
-shared axes vs tokens consumed (log-scale). Three panels: training
-loss / TPS-per-GPU / MFU. **80B is not on this chart yet** — production
-has not begun (4N smokes are ≤20 steps each, and the only 256N attempt
-8530891 NaN'd at step 2). 80B will be added once either (a) production
-starts persisting ckpts or (b) a longer-running smoke seeds the
-loss/MFU panels. The per-trajectory stub [`n4/README.md`](n4/README.md)
-holds the 4N validation details until then.
+For the cross-model view (2B + 20B together — 80B is not on it yet for
+the reasons above), see [`../README.md`](../README.md).
 
 ## v2 status — 4N validated 2026-06-08; 256N still blocked
 

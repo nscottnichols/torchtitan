@@ -4,6 +4,45 @@ Running log of what's happening, session by session. Most recent first.
 
 ---
 
+## 2026-06-12 (sunspot pm) — 54th upstream sync (3 commits, no replays)
+
+Three new upstream commits since the 53rd sync (`1c02a5cee..96ab7487d`):
+
+- `88030eec1` `[rl] Fix batch invariant logprob calculation by forcing vllm
+  use trainer's function (#3629)` — `experiments/rl/actors/generator.py`;
+  ezpz/rl doesn't override that path.
+- `5ba439938` `[Bug] Fix MoE SP token combine indices (#3604)` — fixes
+  a `B > 1` × `sp_size > 1` bug in `common/token_dispatcher.py`; ezpz/moe
+  re-imports the dispatcher unchanged, so the fix flows automatically.
+  Our ezpz MoE configs run with `sp_size == 1` so the bug was never
+  live for us anyway.
+- `96ab7487d` `chore(ci): migrate ROCm matrix from 7.1 to 7.2 (#3267)` —
+  CI matrix + ROCm loss reference files only.
+
+Merge `f8be3bcd1` was clean — no conflicts, no replays needed.
+
+Submitted bitwise checks in parallel:
+
+- `12468696` — `bitwise_sync_check.sh` agpt_2b_chunkedce, 2N, 20 steps,
+  comparing `434cfe5d1` pre-merge vs `f8be3bcd1` post-merge with
+  `--debug.seed=42 --debug.deterministic`.
+- `12468697` — `submit_moe_smoke.sh CONFIG=moe_10b_2b_sdpa_ep STEPS=10`,
+  2N, head-only smoke compared against 52nd-sync baseline `12468666`.
+
+Sync entry added to [`docs/upstream-sync.md`](upstream-sync.md).
+
+Both bitwise jobs passed:
+
+- `12468696` (agpt) — **VERDICT: IDENTICAL** across all 20 steps
+  (head step 20 = pre step 20 = `loss 10.66272 / grad_norm 18.1259`).
+- `12468697` (MoE) — clean 10-step run (loss 12.89 → 8.87, grad_norm
+  bounded, ~80 GiB peak).
+
+Merge-ready: `ezpz` already at `f8be3bcd1` (merged on the live branch,
+not in a separate worktree). Push pending after committing doc updates.
+
+---
+
 ## 2026-06-10 (sunspot) — 32N SFT auto-resume blocker: torch ShardedTensor.device hardcodes CUDA
 
 > **Canonical writeup** (with the full failover-cycle worked

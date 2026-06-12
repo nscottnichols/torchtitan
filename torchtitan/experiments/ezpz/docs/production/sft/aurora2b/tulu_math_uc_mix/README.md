@@ -23,6 +23,16 @@
 
 ## Loss trajectory
 
+[![SFT training curves](charts/sft-curves.svg)](charts/sft-curves.svg)
+
+Loss + grad_norm + LR + mean-token-accuracy + entropy + tokens-seen
+over the 729 global steps that span the 3-epoch cosine schedule.
+Background shading marks PBS job × autoretry-attempt boundaries (4
+jobs, 8 successful attempts). Data: per-10-step TRL metrics from
+`outputs/sft/.../checkpoint-729/trainer_state.json`.
+
+### Per-attempt summary (text form)
+
 ```
 job 12468404 attempt 1  step  10 → 140  loss 1.16 → 0.86   LR 2e-5    → 1.73e-5
 job 12468404 attempt 2  step  10 → 100  loss 0.96 → 0.86   LR 1.97e-5 → 1.75e-5   (restart from 0)
@@ -38,6 +48,25 @@ job 12468437 attempt 4  step 610 → 729  loss 0.78 → 0.77   LR 2.74e-6 → 0 
 End-of-training: `mean_token_accuracy = 0.7957`, last-step
 `train_loss = 0.137`. Exactly 3 epochs at GBS=6144 over the
 materialized mix.
+
+### Throughput (final successful attempt)
+
+From `train_samples_per_second` reported by TRL at the end of the
+final attempt (run `br7gopsj`, job 12468437 attempt 4):
+
+| metric | value |
+|---|--:|
+| samples / sec | 3,996 |
+| steps / sec   | 0.652 |
+| runtime / attempt | 18.6 min (1118 s) |
+| tokens consumed | 803 M |
+
+Throughput per attempt isn't charted because all earlier attempts
+crashed mid-training without emitting the TRL final-summary line —
+only this final 119-step attempt has clean wall-clock numbers. Earlier
+attempts' per-step loss curves are still captured in the trainer
+state via the periodic checkpoint serialization, hence the unbroken
+curves above.
 
 ## What this recipe is for
 

@@ -69,6 +69,15 @@ def init_logger() -> None:
     else:
         # Keep CRITICAL logs from non-zero ranks and suppress everything else.
         logging.disable(logging.CRITICAL - 1)
+        # Also gag the Python `warnings` module on non-zero ranks. The
+        # `logging.disable` above only covers the `logging` package;
+        # things like torch.autocast's UserWarning ("XPU autocast only
+        # supports bf16/fp16") and the inductor "complex operators"
+        # warning go through `warnings.warn`, which isn't routed
+        # through our logger. Without this they fan out N_rank-fold.
+        import warnings
+
+        warnings.filterwarnings("ignore")
 
     # suppress verbose torch.profiler logging
     os.environ["KINETO_LOG_LEVEL"] = "5"

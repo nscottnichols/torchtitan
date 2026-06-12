@@ -20,6 +20,183 @@ was required in ezpz.
 
 ---
 
+## 2026-06-12 — 54th sync (3 commits, `1c02a5cee..96ab7487d`)
+
+Merged clean (no conflicts). No replays needed — all three commits
+either don't touch surfaces ezpz overrides, or fix bugs in code paths
+ezpz doesn't exercise.
+
+### Upstream commits
+
+| Commit | Title | ezpz impact |
+|---|---|---|
+| `88030eec1` | `[rl] Fix batch invariant logprob calculation by forcing vllm use trainer's function (#3629)` | None — touches `experiments/rl/actors/generator.py`. ezpz/rl has its own `train_grpo.py` / `train_sft.py` that don't import from `experiments/rl/actors/`. |
+| `5ba439938` | `[Bug] Fix MoE SP token combine indices (#3604)` | **Inherited (no-op in practice)** — fixes a `B > 1` × `sp_size > 1` bug in `common/token_dispatcher.py`. ezpz/moe re-imports the dispatcher unchanged, so the fix flows automatically. Our MoE configs (`moe_2b_ep`, `moe_10b_2b_sdpa_ep`) run with `sp_size == 1`, so the buggy code path was never live for us. |
+| `96ab7487d` | `chore(ci): migrate ROCm matrix from 7.1 to 7.2 (#3267)` | None — CI matrix + ROCm loss reference files only. ezpz doesn't run on ROCm or hit these CI configs. |
+
+### Verification
+
+Static: `import torchtitan.experiments.ezpz.{train, optimizer.containers, moe}` all succeed.
+
+Dynamic:
+
+1. **agpt_2b_chunkedce bitwise check** (job `12468696`, 2N,
+   `bitwise_sync_check.sh` comparing `434cfe5d1` pre-merge vs
+   `f8be3bcd1` post-merge with `--debug.seed=42 --debug.deterministic`)
+   — **VERDICT: IDENTICAL** (loss + grad_norm match bit-for-bit
+   across all 20 steps; head step 20 = pre step 20 = 10.66272 /
+   18.1259).
+2. **moe_10b_2b_sdpa_ep 10-step smoke** (job `12468697`, 2N) —
+   **passed** (loss 12.89 → 8.87 over 10 steps; grad_norm stayed
+   bounded; ~80 GiB peak). EP=2, SP=1, so the `5ba439938` SP fix
+   doesn't enter our code path — this just confirms no regression
+   in the EP forward/backward.
+
+---
+
+## 2026-06-12 — 53rd sync (2 commits, `1cc10d1ed..1c02a5cee`)
+
+Merged clean (no conflicts). No replays needed.
+
+### Upstream commits
+
+| Commit | Title | ezpz impact |
+|---|---|---|
+| `772dd1b6c` | `[Checkpointer] Remove the dependencies on PyTorch distributed state_dict APIs (#3623)` | None — refactors `components/checkpoint.py` internals + adds `components/checkpoint_utils.py`. ezpz imports `CheckpointManager` + `ModelWrapper` by name; both still exported. Verified imports cleanly. |
+| `1c02a5cee` | `Revert "Add deterministic topk for MoE routing" (#3647)` | Reverts PR #3600 from the 52nd sync. ezpz/moe re-imports `TokenChoiceTopKRouter` from `common/moe.py`, so the change flows through automatically — no ezpz-side replay needed (same as the original add). |
+
+### Verification
+
+Static: `import torchtitan.experiments.ezpz.{train, optimizer.containers, moe}` all succeed.
+Dynamic smoke: deferred — 52nd-sync's `agpt_2b_chunkedce` bitwise
+IDENTICAL already covers the checkpoint/optimizer code paths this
+sync touches, and the topk revert is a no-op for ezpz.
+
+---
+
+## 2026-06-12 — 52nd sync (18 commits, `a97767611..1cc10d1ed`)
+
+Merged clean (no conflicts). Two small replays required: PR #3643
+(`spmd.R` → `spmd.I` for non-SP attn_x_layout) onto `agpt/sharding.py`,
+and PR #3626 (rename MoE expert weight FQNs `w{1,2,3}` → `w{1,2,3}_E[F]D`)
+onto `moe/state_dict_adapter.py`. Big-ticket items in the range:
+PR #3619 virtual padding for SP token dispatcher (touches the same
+`common/token_dispatcher.py` PR #14 already forked + extended), PR
+#3600 deterministic topk for MoE routing (adds `torchtitan/ops/topk.py`),
+PR #3641/3643/3468 SPMD types reorg, PR #3371 qwen3_vl → qwen3_5
+rename.
+
+### Upstream commits
+
+| Commit | Title | ezpz impact |
+|---|---|---|
+| `fd712e814` | `[qwen3_5] evolve qwen3_vl to qwen3_5 (#3371)` | None — qwen3_vl was deleted/renamed; ezpz doesn't import it |
+| `7f0749e64` | `Add a router for multiple generators (#3583)` | None — experiments/rl, separate from ezpz/rl |
+| **`db0a72345`** | **`Using "virtual padding" to calculate number_local_tokens per SP rank, and fix combine() shape mismatch #3595 (#3619)`** | **Inherited** — touches `common/token_dispatcher.py` which moe re-imports. ezpz/moe's own dispatcher fork (post-PR #14) needs awareness; see "Inherited" below |
+| `67ca69023` | `[graph_trainer] Add view replay for CPU activation offloading (#3522)` | None — graph_trainer experiment |
+| `831e36e8a` | `Pass original size/stride as explicit args to ao.reload (#3598)` | None — torchao reload path, not used by ezpz |
+| `19258f64a` | `[RL] Enable regional_inductor in FlexAttention (#3563)` | None — experiments/rl |
+| `f59f47ec4` | `[graph_trainer] Fix GraphTrainer CI for the cu130 nightly; quarantine upstream-blocked H100 tests (#3588)` | None — CI only |
+| **`2816b97c2`** | **`[MoE] fix MoE state dict convert fqn names (#3626)`** | **Replay required** — see below |
+| `07828a431` | `[graph_trainer] Replace stable_topological_sort with _move_overlap_nodes (#3419)` | None — graph_trainer |
+| `34c6f5b0a` | `Memory snapshot: python-only stacks for fast dumps + configurable max_entries (#3628)` | None — `tools/profiler.py`; ezpz uses default profiler config |
+| `7c5ea5143` | `Make GraphTrainer overlap scheduling work with current nightlies (#3635)` | None — graph_trainer |
+| `2f1ca1d6b` | `[graph_trainer] Match Eager FSDP bucket order (#3590)` | None — graph_trainer |
+| `3975b85b1` | `[GraphTrainer] Fix test_deterministic: update model hash and calling update_from_config (#3605)` | None — graph_trainer test |
+| `1d9af9ad0` | `Add deterministic topk for MoE routing (#3600)` | New `torchtitan/ops/topk.py`; ezpz/moe doesn't import it (uses `common/moe.py`'s router directly). No replay. |
+| `a0c831c49` | `[spmd_types] spmd infra (#3641)` | None — additive infra |
+| `bb453e0ca` | `[rl] continuous-batching generator + multi-turn rollouts (#3593)` | None — experiments/rl |
+| **`eecdf5096`** | **`[spmd_types] decoder sharding in spmd.* (#3643)`** | **Replay required** — see below |
+| `1cc10d1ed` | `[spmd_types] embedding vocab parallel (#3468)` | None — opt-in via new `models/common/embedding.py`; ezpz models don't import it yet |
+
+### Replay: rename MoE expert weight FQNs (commit `2816b97c2`)
+
+Upstream renamed the HF→torchtitan mapping for routed expert weights
+in `deepseek_v3/state_dict_adapter.py`:
+
+| HF | old torchtitan FQN | new torchtitan FQN |
+|---|---|---|
+| `model.layers.{}.mlp.experts.{}.gate_proj.weight` | `layers.{}.moe.experts.w1` | `layers.{}.moe.experts.w1_EFD` |
+| `model.layers.{}.mlp.experts.{}.up_proj.weight`   | `layers.{}.moe.experts.w3` | `layers.{}.moe.experts.w3_EFD` |
+| `model.layers.{}.mlp.experts.{}.down_proj.weight` | `layers.{}.moe.experts.w2` | `layers.{}.moe.experts.w2_EDF` |
+
+The new names match the Shazeer shape-suffix style that upstream
+already adopted for the actual `GroupedExperts` param names back
+in the 41st sync (PR #3425). The state-dict adapter was the last
+holdout still using the un-suffixed names. ezpz/moe's own
+`state_dict_adapter.py` mirrored the old surface, so we replay the
+exact same 3-key rename onto our adapter.
+
+### Replay: `spmd.R` → `spmd.I` for non-SP attn_x_layout (commit `eecdf5096`)
+
+PR #3643 reorganized decoder sharding into the `spmd.*` namespace.
+The mechanical change touching llama3 is one line in
+`llama3/sharding.py`: when sequence-parallelism is OFF, the attention
+output layout switches from `dense_activation_placement(tp=spmd.R)`
+(Replicate) to `dense_activation_placement(tp=spmd.I)` (Identity).
+`R` would force a redundant all-reduce that's a no-op in the eager
+case but trips up the new spmd type-checking. `I` correctly says "the
+tensor is already in the right shape, no reshard needed".
+
+ezpz/agpt mirrors the same `attn_x_layout` construction in
+`agpt/sharding.py` — same one-line replay.
+
+### Inherited: PR #3619 virtual padding for SP token dispatcher
+
+Upstream fixed a `combine()` shape-mismatch bug in
+`common/token_dispatcher.py` by switching from per-rank-actual to
+virtual-padded `number_local_tokens` calculation under SP. This is
+exactly the area PR #14 forked into `ezpz/moe/token_dispatcher.py`,
+so the inheritance story matters:
+
+- ezpz/moe's `LocalTokenDispatcher` still imports `common/moe.py`
+  helpers, so the upstream `common/token_dispatcher.py` changes
+  flow through cleanly when our fork doesn't override the relevant
+  call.
+- The specific helpers PR #3619 touches (`_compute_input_splits`
+  and `combine`'s shape derivation under SP) live in
+  `common/token_dispatcher.py`. ezpz/moe's fork redefines
+  `LocalTokenDispatcher.dispatch` + `combine`, so the upstream fix
+  doesn't auto-propagate. We currently don't run SP on MoE
+  (SP > 1 is untested for ezpz/moe), so this is a future concern
+  rather than an immediate breakage.
+- **Action:** revisit if/when we enable SP for ezpz/moe — port the
+  virtual-padding logic into our forked dispatcher.
+
+### Verification
+
+Three smoke runs total. Net result: merge-ready.
+
+1. **`agpt_2b_chunkedce` 20-step bitwise sync** (job `12468664`, 2N,
+   `--debug.deterministic`, post-merge HEAD `3738b6dfb` vs pre-merge
+   `1b43fb152`) — **IDENTICAL**. Loss + grad_norm match bit-for-bit
+   across all 20 steps. ~3 min wall.
+
+2. **`moe_10b_2b_sdpa_ep` 10-step drift check** (job `12468666`, 2N,
+   seed-only no determ) — **drift ≤4e-4 nats / ≤0.03 grad_norm**
+   through step 10. Step 1 bit-identical (12.92541 / 2.2413 on both
+   sides), subsequent drift follows the same FP-summation noise
+   pattern we already characterized in the PR #14 A/B work
+   (non-deterministic XCCL reduction order). Both head and pre
+   completed cleanly; no infra issues.
+
+3. **`moe_debugmodel_ep` 10-step `--debug.deterministic`** (jobs
+   `12468665` + `12468667`, both attempts) — **infrastructure
+   failure, unrelated to sync**. oneCCL bails with
+   `comm.cpp:661 get_scaleout_device_buf: EXCEPTION: malloc
+   scaleout_device_buf failed` during the first `reduce_scatter_tensor`
+   on both attempts on different node sets. The determinism flag
+   forces XCCL to use larger workspace pools; this path is broken
+   on the current oneCCL build regardless of the sync. Filed as
+   pre-existing infra, not a 52nd-sync regression.
+
+The trainer fix (PR #3641 keyword-only `get_train_context`) was a
+post-merge replay required to even boot the training entry point —
+discovered by the head phase of job `12468663`'s first attempt.
+Committed at `3738b6dfb`.
+
+---
+
 ## 2026-06-10 — 51st sync (9 commits, `842d354f9..a97767611`)
 
 Merged clean (no conflicts). One replay required: PR #3571 dropped

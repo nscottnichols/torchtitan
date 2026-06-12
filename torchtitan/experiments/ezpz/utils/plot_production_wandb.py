@@ -39,11 +39,10 @@ import matplotlib.dates as mdates  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 
-# ambivalent is required — silent fallback hides style regressions.
-# Install with: uv pip install --no-deps "git+https://github.com/saforem2/ambivalent"
-import ambivalent  # noqa: F401
+# Shared ambivalent + Iosevka style helper.
+from torchtitan.experiments.ezpz.utils.plot_style import apply_style
 
-plt.style.use(ambivalent.STYLES["ambivalent"])
+apply_style()
 
 import wandb  # noqa: E402
 

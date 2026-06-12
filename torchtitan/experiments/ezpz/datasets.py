@@ -116,8 +116,9 @@ def _make_local_loader(
     data_dir: str,
     split: str = "train",
     streaming: bool = True,
+    format: str = "parquet",
 ) -> Callable:
-    """Build a loader for local parquet/arrow files."""
+    """Build a loader for local parquet/arrow/json files."""
 
     def _load(dataset_path: str) -> Any:
         # Local files don't hit HF Hub rate limits but we still funnel
@@ -125,7 +126,7 @@ def _make_local_loader(
         # consistent file listing (avoids any rank-vs-rank disagreement
         # about which parquet shards exist).
         return _rank0_prefetch_then_barrier(
-            "parquet",
+            format,
             data_dir=data_dir,
             split=split,
             streaming=streaming,
@@ -141,22 +142,26 @@ def register_local_dataset(
     split: str = "train",
     text_column: str = "text",
     streaming: bool = True,
+    format: str = "parquet",
 ) -> DatasetConfig:
-    """Register a local dataset (parquet/arrow files) for use with torchtitan.
+    """Register a local dataset for use with torchtitan.
 
     Args:
         name: Registry key (used as --dataloader.dataset <name>).
-        data_dir: Local directory containing parquet/arrow files.
+        data_dir: Local directory containing the dataset files.
         split: Dataset split (default "train").
         text_column: Column containing the text to train on.
         streaming: Use streaming mode (default True).
+        format: One of "parquet", "json", "arrow", "csv", "text" (default "parquet").
 
     Returns:
         The registered DatasetConfig.
     """
     config = DatasetConfig(
         path=data_dir,
-        loader=_make_local_loader(data_dir=data_dir, split=split, streaming=streaming),
+        loader=_make_local_loader(
+            data_dir=data_dir, split=split, streaming=streaming, format=format
+        ),
         sample_processor=_make_text_processor(text_column),
     )
     DATASETS[name] = config
@@ -342,4 +347,10 @@ register_hf_dataset(
 register_local_dataset(
     "fineweb_edu_local",
     "/lus/tegu/projects/datasets/datasets/fineweb-edu-100BT/sample/100BT/",
+)
+
+register_local_dataset(
+    "olmo_mix_wiki_local",
+    "/lus/tegu/projects/datasets/hf_cache/hub/datasets--allenai--olmo-mix-1124/snapshots/99ee6aaace88779d1ef099d36251b91101c1679b/data/wiki/",
+    format="json",
 )

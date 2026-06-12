@@ -2,7 +2,7 @@
 
 > **Living document** — updated as jobs complete and new runs are submitted.
 >
-> Last updated: 2026-06-08
+> Last updated: 2026-06-12
 
 ## Scaling Performance
 
@@ -47,9 +47,9 @@ python3 -m torchtitan.experiments.ezpz.utils.plot_production_combined
 
 | Model | Nodes | Cumulative steps | Loss | Tokens | Latest job | Status |
 |-------|------:|-----------------:|-----:|-------:|------------|--------|
-| 2B  | 512 | **30,500** (persisted) | **2.71** | **3.07T** (65.7%) | [`8521631`](agpt/2b/n512/README.md) Q (sync-mode) | **Q+H for 10 days — Aurora `small` queue contention.** Last R was 8521627 (cont9) on 2026-06-07 21:12, died 8 min in when 1 of 522 nodes failed yeet-env rsync (the failure mode fixed by [ezpz PR #160](https://github.com/saforem2/ezpz/pull/160) but not yet deployed to v2 prod venv pending review). Cont10 (8521631) Q for next 512N slot. |
-| 20B | 512 | **4,400** (persisted) | **3.46** | **442.9B** (9.5%) | [`8521628`](agpt/20b/n512/README.md) Q (sync-mode) | **Q+H for 10 days — same Aurora `small` queue contention.** step-4500 was an empty placeholder from a mid-save kill (renamed `.bak-empty-20260606-170503`); next continuation resumes from step-4400 (244 GB, complete). Cont (8521628) Q for next 512N slot. |
-| 80B | 4 | **10** (smoke) | **12.03** | smoke | [`int-r7`](agpt/80b/n4/README.md) ✅ end-to-end validated | **2026-06-08: 80B production stack validated end-to-end at 4N on Aurora.** Loss 12.93 → 12.03 over 10 steps, ~17.9% MFU, sync ckpt fired at step-10 + landed cleanly (904 GB, 48 distcp shards) — matches Sunspot 12468197 reference. 5-bug stack documented in journal: repo-behind, venv-symlink, blendcorpus barrier deadlock (found via py-spy), missing FLAT, env block. 256N attempt 8530891 trained but **loss NaN'd at step 2** — open hypotheses on bf16 / TP=2 loss-reduction / fp32 second-moment. LR=1e-7 retry (8531721) Q for slot. |
+| 2B  | 512 | **30,500** (persisted) | **2.71** | **3.07T** (65.7%) | [`8521631`](agpt/2b/n512/README.md) Q (sync-mode) | **Q+H for 14 days — Aurora `small` queue contention.** Last R was 8521627 (cont9) on 2026-06-07 21:12, died 8 min in when 1 of 522 nodes failed yeet-env rsync (the failure mode fixed by [ezpz PR #160](https://github.com/saforem2/ezpz/pull/160) but not yet deployed to v2 prod venv pending review). Cont10 (8521631) Q for next 512N slot. |
+| 20B | 512 | **4,500** (persisted) | **3.46** | **452.9B** (9.7%) | [`8521632`](agpt/20b/n512/README.md) Q (sync-mode) | **Q+H — Aurora `small` queue contention.** 8521628 ran 2026-06-10, advanced step-4400 → step-4500 cleanly + persisted DCP, then crashed at the next `set_determinism` init step (std::bad_alloc, same failure mode as 8466848). Cont (8521632) Q for next 512N slot — resumes from step-4500. |
+| 80B | 4 | **10** (smoke) | **12.03** | smoke | [`int-r7`](agpt/80b/n4/README.md) ✅ end-to-end validated; **256N blocked on NaN** | **2026-06-12 evening: determinism fix refuted at n=64.** [`8540102`](../experiments/agpt/aurora/20260611-80b-n32-nan-diagnosis.md) (n=64, GBS=384, `--debug.seed=42 --debug.deterministic`, overprovisioned select=68) trained 8 clean steps then grad_norm=inf step 3, recovered, grad_norm=nan step 9 → loss=nan step 10. Clean exit (no node failure). The earlier n=32 success was lucky, not causal. **Only remaining clean-training candidate is `--training.mixed-precision-param=float32` at TP=4 (validated at GBS=96, untested at GBS=384, ~75% throughput cost).** See [80b-n32-nan-diagnosis.md](../experiments/agpt/aurora/20260611-80b-n32-nan-diagnosis.md) — section "🚨🚨 Counter-evidence". |
 
 > **Failover wrapper production-validated 2026-05-23**: [`8505298`](agpt/2b/n256/README.md) (2B 8N smoke) caught a real silent hang at step 37, watchdog tripped, blind-swapped the bad node, attempt-2 recovered cleanly + persisted DCP checkpoints. **First end-to-end real-world validation of the swap-and-retry path on a true silent-hang failure.** See [incident report](../experiments/agpt/aurora/20260523-failover-silent-hang-recovery-8505298.md).
 
@@ -57,7 +57,7 @@ python3 -m torchtitan.experiments.ezpz.utils.plot_production_combined
 
 | Model | Nodes | Cumulative steps | Loss | Tokens | Latest job | Status |
 |-------|------:|-----------------:|-----:|-------:|------------|--------|
-| 2B  | 256 | **69,900** (persisted) | **2.67** | **3.52T** (75.4%) | [`8521626`](agpt/2b/n256/README.md) Q | Async-mode chain advanced 55,026 → 69,900 (+14,874 across 8 dispatches since 2026-05-28). Last dispatch 8519833 walltime-finished cleanly at step-69900 on 2026-06-06. Step-66K / 68K / 69.9K evals show plateau: HSn ~0.555, ARC-E ~0.59, ARC-C ~0.33, **Wino 0.5627 (best yet at step-69900)**. Cont6 (8521626) Q for next 256N slot. |
+| 2B  | 256 | **74,300** (persisted) | **2.66** | **3.74T** (80.1%) | [`8521630`](agpt/2b/n256/README.md) R since 2026-06-12 14:42 | Async-mode chain advanced 55,026 → 74,300 (+19,274 across 9 dispatches since 2026-05-28). 8521626 walltime-finished cleanly at step-72,500 on 2026-06-08; **8521630 (cont10) transitioned Q→R 2026-06-12 14:42** after 9d queue-wait. Step-66K / 68K / 69.9K / 72.5K evals show plateau: HSn ~0.555, ARC-E ~0.59, ARC-C ~0.33, **Wino 0.5627 (best yet at step-69900)**. Cont11 (8534293) H behind 8521630. |
 | 20B | 256 | **1,125** (persisted) | **3.28** | **113B** (2.4%) | [`8505255`](agpt/20b/n256/README.md) F (12h walltime) | Sync-mode 12h dispatch reached step 1,125 cleanly. No continuation queued (256N is per-token comparator; canonical chain is 512N). |
 
 ### Other jobs

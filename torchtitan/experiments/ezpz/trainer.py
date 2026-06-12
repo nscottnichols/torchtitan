@@ -15,7 +15,6 @@ import ezpz
 
 import torch
 from torch.distributed.elastic.multiprocessing.errors import record
-from torch.distributed.tensor import DTensor
 
 from torchtitan.components.dataloader import DataloaderExhaustedError
 from torchtitan.components.loss import ChunkedCELoss, IGNORE_INDEX
@@ -428,7 +427,15 @@ class FaultTolerantTrainer(Trainer):
         loss_parallel_enabled = (
             parallel_dims.tp_enabled and not config.parallelism.disable_loss_parallel
         )
-        self.train_context = dist_utils.get_train_context(loss_parallel_enabled)
+        # 52nd sync: PR #3641 changed get_train_context to keyword-only
+        # signature (`enable_loss_parallel`, plus optional `parallel_dims`
+        # and `spmd_typechecking` for the new spmd_types backend). ezpz
+        # doesn't use the spmd_types backend, so just forward the loss
+        # parallel flag.
+        self.train_context = dist_utils.get_train_context(
+            enable_loss_parallel=loss_parallel_enabled,
+            parallel_dims=parallel_dims,
+        )
 
         # Build validator if validation is configured
         if config.validator.enable:
@@ -583,16 +590,6 @@ class FaultTolerantTrainer(Trainer):
 
         if parallel_dims.dp_cp_enabled:
             loss = loss.detach()
-            # When TP > 1, loss comes back as a Replicated DTensor on the TP
-            # mesh. Upstream `_dist_reduce` short-circuits DTensor inputs and
-            # skips the requested mesh all-reduce (it assumes the DTensor's
-            # mesh equals the reduction mesh, which is not true here — we
-            # want to reduce across batch_mesh, not TP). Convert to a plain
-            # tensor here so the regular all-reduce path runs and we get the
-            # correct sum across batch ranks. See
-            # docs/guides/known-bugs/loss-reporting-tp-dist-reduce.md.
-            if isinstance(loss, DTensor):
-                loss = loss.full_tensor()
             # FT addition: use ft_manager.loss_sync_pg for extra process group
             ft_pg = self.ft_manager.loss_sync_pg
             loss_mesh = parallel_dims.get_optional_mesh("loss")
