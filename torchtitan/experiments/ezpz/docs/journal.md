@@ -4,6 +4,28 @@ Running log of what's happening, session by session. Most recent first.
 
 ---
 
+## 2026-06-12 (sunspot eve) — 55th upstream sync (3 commits, no replays)
+
+Three more upstream commits landed since the 54th sync earlier today
+(`96ab7487d..0a73d82a4`):
+
+- `3b8e060853` `Remove unused MetricsProcessor.lr_schedulers (#3644)` —
+  pure cleanup of an attribute nothing reads. Our local `metrics.py`
+  fork was already removed in PR #14, so we consume upstream directly.
+- `14fb67575` `qwen3.5 tok_embeddings LocalMap region (#3648)` —
+  qwen3_5-only sharding fix. ezpz doesn't use qwen3_5.
+- `0a73d82a4` `avoid GradAccumulator init in ChunkedCELoss no_grad path (#3652)` —
+  internal optimization in `components/loss.py`; ezpz uses
+  `ChunkedCELoss` via direct import.
+
+Merge `439ccf220` was clean — no conflicts, no replays. Sync entry
+added to [`docs/upstream-sync.md`](upstream-sync.md). Skipping the
+dynamic smoke this time — last sync's bitwise IDENTICAL already
+covered the `ChunkedCELoss` path, and the other two commits don't
+touch ezpz-reachable code.
+
+---
+
 ## 2026-06-12 (sunspot pm) — 54th upstream sync (3 commits, no replays)
 
 Three new upstream commits since the 53rd sync (`1c02a5cee..96ab7487d`):

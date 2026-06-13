@@ -20,6 +20,29 @@ was required in ezpz.
 
 ---
 
+## 2026-06-12 — 55th sync (3 commits, `96ab7487d..0a73d82a4`)
+
+Merged clean (no conflicts) as `439ccf220`. No replays needed — all
+three commits land in upstream code paths that ezpz consumes via
+import-only (no forks, no overrides):
+
+### Upstream commits
+
+| Commit | Title | ezpz impact |
+|---|---|---|
+| `3b8e060853` | `Remove unused MetricsProcessor.lr_schedulers (#3644)` | None — ezpz's local `metrics.py` fork was removed earlier (PR #14 commit `8fbd896e5`); we now consume upstream `MetricsProcessor` directly. The deleted attribute was never read anywhere in ezpz. |
+| `14fb67575` | `qwen3.5 tok_embeddings LocalMap region (#3648)` | None — `models/qwen3_5/sharding.py` only. ezpz doesn't use qwen3_5. |
+| `0a73d82a4` | `avoid GradAccumulator init in ChunkedCELoss no_grad path (#3652)` | None — `components/loss.py` internal fix; ezpz uses the upstream `ChunkedCELoss` symbol unchanged (the ezpz `loss.py` fork was removed in PR #14 commit `8fbd896e5`). |
+
+### Verification
+
+Static: ezpz consumes all three upstream modules via direct import; no
+override surface touched. Dynamic smoke deferred — last sync's
+agpt_2b_chunkedce bitwise IDENTICAL (job `12468696`) already covered
+the `ChunkedCELoss` code path this sync touches.
+
+---
+
 ## 2026-06-12 — 54th sync (3 commits, `1c02a5cee..96ab7487d`)
 
 Merged clean (no conflicts). No replays needed — all three commits
